@@ -1,0 +1,31 @@
+# Firstmate flow board for Herdr: four workflow columns projected from
+# fm-bearings-snapshot.sh (Charted Next, Underway, Captain's Call, Landed). Captain's Call tickets open a decision dialog that feeds
+# firstmate's one keyed-answer intake; everything else stays read-only.
+#
+# Upstream: https://github.com/deimantasnork/captains-deck
+# Local dev:
+#   herdr plugin link /path/to/herdr-firstmate-flow
+id = "herdr-firstmate-flow"
+name = "Captain's Deck"
+version = "0.24.9"
+description = "Optional terminal flow board for Firstmate: fleet and crew views, activity, delivery history, and guarded answers to recorded questions."
+min_herdr_version = "0.9.0"
+platforms = ["linux", "macos"]
+
+[[panes]]
+id = "flow"
+title = "Flow"
+placement = "overlay"
+command = ["bash", "scripts/kanban-view.sh"]
+
+[[actions]]
+id = "open-flow"
+title = "Open flow board"
+description = "Open the read-only Firstmate flow kanban overlay (focus/toggle if already open)."
+command = ["bash", "scripts/open-flow.sh"]
+
+[[actions]]
+id = "open-captain-deck"
+title = "Open captain's deck"
+description = "Full-pane flow board in a dedicated captain's deck workspace (creates the space if missing)."
+command = ["bash", "scripts/open-captain-deck.sh"]

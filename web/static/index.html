@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f4f6fa">
+<title data-i18n="Captain’s Deck · Your crew">Captain’s Deck · Your crew</title>
+<script src="theme.js"></script>
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="deck.css">
+<script src="i18n.js" defer></script>
+<script src="deck-motion.js" defer></script>
+<script src="deck-relations.js" defer></script>
+<script src="deck-ui.js" defer></script>
+<script src="app.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#workspace" data-i18n="Skip to board">Skip to board</a>
+<div class="shell app">
+<header class="topbar top">
+  <a class="brand" href="./" aria-label="Captain’s Deck, main page" data-i18n-aria-label="Captain’s Deck, main page"><span class="brand-mark" aria-hidden="true">⚓</span><span>Deck</span></a>
+  <nav class="tabs" role="tablist" aria-label="Views" data-i18n-aria-label="Views"><button id="board-view" role="tab" aria-controls="board-view-panel" tabindex="0" aria-selected="true" data-i18n="Board">Board</button><button id="projects-view" role="tab" aria-controls="projects-panel" tabindex="-1" aria-selected="false" data-i18n="Projects">Projects</button><button id="history-tab" role="tab" aria-controls="history-panel" tabindex="-1" aria-selected="false" data-i18n="History">History</button></nav>
+  <p class="overview"><span id="overview" class="overview-counts"></span><span id="connection" role="status" data-i18n="Connecting…">Connecting…</span></p>
+  <label class="crew-label" hidden><span class="sr-only" data-i18n="Coordinating space">Coordinating space</span><select id="crew" aria-label="Coordinating space" data-i18n-aria-label="Coordinating space"><option value="" data-i18n="All">All</option></select></label>
+  <div class="top-r"><div id="appearance" class="modes"><button data-mode="light" data-i18n="Light">Light</button><button data-mode="dark" data-i18n="Dark">Dark</button><button data-mode="system" data-i18n="Auto">Auto</button></div><label class="tema"><span class="sr-only" data-i18n="Theme">Theme</span><select id="palette"><option value="grafito" data-i18n="Graphite">Graphite</option><option value="papel" data-i18n="Paper">Paper</option><option value="oceano" data-i18n="Ocean">Ocean</option></select></label><label class="switch"><input id="focus-effects" type="checkbox" checked><span class="sw"></span><span data-i18n="Focus">Focus</span></label><label class="focus-delay" title="Time with the pointer still before changing focus" data-i18n-title="Time with the pointer still before changing focus"><span data-i18n="Focus after">Focus after</span> <input id="focus-delay" name="focus-delay" type="number" min="0" max="10" step="0.1" value="1" aria-label="Focus delay in seconds" data-i18n-aria-label="Focus delay in seconds"> <span data-i18n="seconds short">s</span></label><span id="focus-status" class="sr-only" role="status"></span><button id="changes-toggle" class="tool" hidden data-i18n="Changes">Changes</button></div>
+  <input id="board-search" class="board-search" aria-label="Search board" data-i18n-aria-label="Search board" type="search" placeholder="Search…" data-i18n-placeholder="Search…" autocomplete="off">
+
+  <button id="history-view" class="tool" type="button" aria-pressed="false" title="History" data-i18n-title="History"><svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.4 1.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="tool-label" data-i18n="History">History</span></button>
+  <button id="refresh" class="tool" type="button" aria-label="Refresh" data-i18n-aria-label="Refresh" title="Refresh" data-i18n-title="Refresh"><span aria-hidden="true">↻</span></button>
+</header>
+<main id="workspace">
+  <div id="notice" class="notice" role="status" hidden></div>
+  <div class="workspace">
+    <div class="views">
+      <section id="board-view-panel" aria-label="Board" data-i18n-aria-label="Board">
+        <header class="hero row-hero"><div><h1 id="deck-lead"></h1><p id="deck-next"></p></div></header>
+        <section id="deck-diagnostics" class="notice" aria-live="polite" hidden></section>
+        <nav id="columns-nav" class="columns-nav" aria-label="Work states" data-i18n-aria-label="Work states"></nav>
+        <button id="projects-toggle" class="mix-toggle" aria-expanded="false" data-i18n="Projects and priorities">Projects and priorities</button>
+        <div class="deck"><nav id="project-mixer" class="mixer" aria-label="Projects and subprojects" data-i18n-aria-label="Projects and subprojects"></nav><div class="main"><p id="connector-key" class="arrow-key" hidden></p><div id="board" class="board"><p class="placeholder" data-i18n="Loading board…">Loading board…</p></div></div></div>
+      </section>
+      <section id="projects-panel" hidden><header class="hero"><h1 data-i18n="Your projects">Your projects</h1><p data-i18n="Open a project to see its subprojects and tasks.">Open a project to see its subprojects and tasks.</p></header><div id="project-tree"></div></section>
+      <section id="history-panel" aria-labelledby="history-heading" hidden>
+        <div class="history-intro"><h2 id="history-heading" data-i18n="History">History</h2><p id="history-status" class="muted" role="status"></p><input id="history-search" type="search" aria-label="Search deliveries" data-i18n-aria-label="Search deliveries" placeholder="Search deliveries…" data-i18n-placeholder="Search deliveries…" autocomplete="off"></div>
+        <div id="history-results" class="history-results"></div>
+        <details class="source-details"><summary data-i18n="Where history comes from">Where history comes from</summary><div id="history-sources"></div></details>
+      </section>
+    </div>
+    <aside id="detail-panel" class="detail-panel" aria-label="Details" data-i18n-aria-label="Details">
+      <p id="detail-empty" class="detail-empty" data-i18n="Pick a card to see it here. The board stays put.">Pick a card to see it here. The board stays put.</p>
+      <section id="detail" class="detail" aria-labelledby="detail-title" hidden>
+        <div class="detail-head"><div class="dialog-top"><span id="detail-kicker" class="eyebrow" data-i18n="DETAILS">DETAILS</span><button id="detail-close" class="close" type="button" aria-label="Close details" data-i18n-aria-label="Close details">✕</button></div>
+        <h2 id="detail-title" tabindex="-1"></h2></div><div id="detail-meta" class="muted"></div>
+        <div id="detail-content"></div>
+      </section>
+    </aside>
+  </div>
+  <details id="change-log" class="source-details" hidden><summary data-i18n="Changes">Changes</summary><div id="change-results"></div></details>
+  <section class="supervision" aria-labelledby="supervision-heading"><div class="supervision-heading"><span class="compass" aria-hidden="true">◎</span><div><h2 id="supervision-heading" data-i18n="From Firstmate">From Firstmate</h2><p data-i18n="What Firstmate says it’s doing, and how fresh that is.">What Firstmate says it’s doing, and how fresh that is.</p></div></div><div id="supervisors"><p class="muted" data-i18n="Waiting for the first read.">Waiting for the first read.</p></div></section>
+  <details id="receipts-panel" class="source-details" hidden><summary data-i18n="Your answers">Your answers</summary><p data-i18n="What happened to each answer you sent.">What happened to each answer you sent.</p><div id="receipts"></div></details>
+</main>
+<footer><span class="private-mark">●</span><span data-i18n="Private view. Firstmate keeps your tasks and answers.">Private view. Firstmate keeps your tasks and answers.</span><span id="timezone"></span><label class="theme-label"><span data-i18n="Theme">Theme</span><select id="theme"><option value="system" data-i18n="System">System</option><option value="light" data-i18n="Light">Light</option><option value="dark" data-i18n="Dark">Dark</option></select></label></footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,10 @@
+harness=claude
+account=/tmp/example/.claude-account-b
+model=opus
+effort=xhigh
+mode=direct-PR
+branch=fm/oauth-retry
+spawn_gen=s1790289017.63852.23519
+herdr_pane_id=w1:p1
+herdr_workspace_id=w1
+herdr_tab_id=w1:t1

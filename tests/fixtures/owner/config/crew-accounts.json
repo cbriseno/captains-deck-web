@@ -1,0 +1,12 @@
+{
+  "accounts": [
+    {
+      "name": "claude-a",
+      "claude_config_dir": "/tmp/example/.claude-account-b"
+    },
+    {
+      "name": "codex-a",
+      "codex_home": "/tmp/example/.codex-account-a"
+    }
+  ]
+}

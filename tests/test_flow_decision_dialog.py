@@ -1,0 +1,858 @@
+#!/usr/bin/env python3
+"""Focused checks for the Captain's Call decision dialog in flow_tui.py.
+
+Covers the pure card lookup / normalization / keyed-line contract and a render
+smoke check, without touching a live firstmate home or any intake.
+
+Run: python3 tests/test_flow_decision_dialog.py
+"""
+from __future__ import annotations
+
+import contextlib
+import importlib.util
+import io
+import json
+import os
+import re
+import tempfile
+import time
+from typing import Any
+from unittest import mock
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_spec = importlib.util.spec_from_file_location(
+    "flow_tui", os.path.join(ROOT, "scripts", "flow_tui.py")
+)
+assert _spec is not None and _spec.loader is not None
+flow = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(flow)
+
+ANSI = re.compile(r"\x1b\[[0-9;?]*[a-zA-Z]")
+FAILURES: list[str] = []
+
+
+@contextlib.contextmanager
+def english_installation():
+    with tempfile.TemporaryDirectory() as config, mock.patch.dict(os.environ):
+        os.environ["HERDR_PLUGIN_CONFIG_DIR"] = config
+        os.environ.pop("CD_WEB_LANGUAGE", None)
+        with mock.patch.object(flow, "_LOCALIZATION", None):
+            yield
+
+
+def check(cond: bool, msg: str) -> None:
+    if cond:
+        print(f"ok - {msg}")
+    else:
+        FAILURES.append(msg)
+        print(f"NOT OK - {msg}")
+
+
+BOARD_CARD = {
+    "key": "demo-issue-29",
+    "type": "decision",
+    "repo": "demo-repo",
+    "title": "Draft the release checklist for #29",
+    "about": "Needs a maintainer to run the flow by hand",
+    "decide": "Keep it parked, or drop that half of #29",
+    "options": [
+        {
+            "value": "hold",
+            "label": "Hold it",
+            "hint": "Leave it parked until someone can pick it up",
+        },
+        {
+            "value": "drop",
+            "label": "Drop the extra work",
+            "hint": "#29 then stands on its existing evidence alone",
+        },
+    ],
+    "recommend_value": "hold",
+    "allow_freeform": True,
+    "freeform_hint": "Or describe a different way to proceed",
+}
+
+
+def make_home(root: str, name: str, label: str | None = None) -> Any:
+    path = os.path.join(root, name)
+    for sub in ("bin", ".lavish", "data"):
+        os.makedirs(os.path.join(path, sub), exist_ok=True)
+    open(os.path.join(path, "bin", "fm-bearings-snapshot.sh"), "w").close()
+    return flow.Home(label or name, path, "secondmate")
+
+
+def write_board(home: Any, cards: list[dict]) -> None:
+    data = {"schema": "fm-bearings-board.v1", "captains_call": cards}
+    html = (
+        "<html><body><script id=\"bearings-data\" type=\"application/json\">"
+        + json.dumps(data)
+        + "</script></body></html>"
+    )
+    with open(os.path.join(home.path, ".lavish", "bearings-board.html"), "w") as fh:
+        fh.write(html)
+
+
+def write_payload(home: Any, cards: list[dict], name: str = "2026-01-01") -> None:
+    data = {"schema": "fm-bearings-board.v1", "captains_call": cards}
+    with open(os.path.join(home.path, "data", f"bearings-board-payload-{name}.json"), "w") as fh:
+        json.dump(data, fh)
+
+
+def make_card(task: str = "demo-issue-29", owner: str = "(main)", title: str = "summary", doing: str = "captain-hold") -> Any:
+    card = flow.Card()
+    card.id = task
+    card.task = task
+    card.bucket = "captains_call"
+    card.title = title
+    card.badge = "\u2691 captain"
+    card.badge_color = flow.C_DECIDE
+    card.doing = doing
+    card.agent = card.model = card.effort = ""
+    card.kind = card.mode = card.checkout_path = card.branch = ""
+    card.pane_key = card.workspace_id = card.tab_id = ""
+    card.artifact = card.blocked_by = ""
+    card.live_status = card.status_text = ""
+    card.owner = owner
+    card.home_path = ""
+    return card
+
+
+@english_installation()
+def test_reconcile_intake_owns_wake() -> None:
+    """Drive actual run_submit; the fake intake records one observable send."""
+    with tempfile.TemporaryDirectory() as root:
+        mate = make_home(root, "mate")
+        log = os.path.join(root, "send.log")
+        intake = os.path.join(mate.path, "bin", "fm-captain-hold.sh")
+        with open(intake, "w") as fh:
+            fh.write("#!/usr/bin/env bash\nwake_reconcile_owner() {\n"
+                     f"  printf 'intake wake\\n' >> '{log}'\n"
+                     "}\ncase \"$1\" in\n  binding) echo '(any)' ;;\n"
+                     "  reconcile-requests) wake_reconcile_owner; echo 'reconcile saved' ;;\nesac\n")
+        os.chmod(intake, 0o755)
+        content = flow.decision_card_content(make_card(), [mate], mate)
+        content["home_path"] = mate.path
+        dialog = flow.DecisionDialog(content)
+        dialog.selected = next(i for i, x in enumerate(dialog.options) if x["value"] == "reconcile")
+        old = flow.wake_owner
+        try:
+            flow.wake_owner = lambda d: (_ for _ in ()).throw(AssertionError("duplicate Deck steer"))
+            ok, _ = flow.run_submit(dialog)
+        finally:
+            flow.wake_owner = old
+        check(ok and open(log).read().splitlines() == ["intake wake"],
+              "Reconcile with intake capability notifies once without a Deck steer")
+        # An old intake still needs the established secondmate lane fallback.
+        with open(intake, "w") as fh:
+            fh.write("#!/usr/bin/env bash\ncase \"$1\" in\n binding) echo '(any)' ;;\n reconcile-requests) echo saved ;;\nesac\n")
+        calls = []
+        try:
+            flow.wake_owner = lambda d: calls.append(d.key) or ""
+            os.environ["FM_FLOW_WAKE"] = "1"
+            ok, _ = flow.run_submit(dialog)
+        finally:
+            flow.wake_owner = old
+            os.environ.pop("FM_FLOW_WAKE", None)
+        check(ok and calls == [dialog.key], "old intake preserves the Deck wake fallback")
+
+
+@english_installation()
+def test_submit_wake_compatibility() -> None:
+    """Observe submits and rendered consent against executable temporary intakes."""
+    with tempfile.TemporaryDirectory() as root, mock.patch.dict(os.environ, {"FM_FLOW_WAKE": "1"}):
+        captain = make_home(root, "captain")
+        mate = make_home(root, "mate", label="2ndmate-demo-lane")
+        os.makedirs(os.path.join(captain.path, "state"))
+        open(os.path.join(captain.path, "state", "demo-lane.meta"), "w").close()
+        log = os.path.join(root, "wake.log")
+        sender = os.path.join(captain.path, "bin", "fm-send.sh")
+        with open(sender, "w") as fh:
+            fh.write(f"#!/usr/bin/env bash\nprintf 'deck:%s\\n' \"$1\" >> '{log}'\n")
+        os.chmod(sender, 0o755)
+        intake = os.path.join(mate.path, "bin", "fm-captain-hold.sh")
+        card = make_card(task="wake-case", owner="demo-lane")
+        write_board(mate, [{**BOARD_CARD, "key": card.task}])
+
+        def write_intake(answer_wake: bool, reconcile_wake: bool) -> None:
+            with open(intake, "w") as fh:
+                fh.write("#!/usr/bin/env bash\n")
+                for action, enabled in (("answer", answer_wake), ("reconcile", reconcile_wake)):
+                    if enabled:
+                        fh.write(f"wake_{action}_owner() {{\n  printf 'intake:{action}\\n' >> '{log}'\n}}\n")
+                fh.write('case "$1" in\n binding) echo bound ;;\n answers)\n')
+                if answer_wake:
+                    fh.write("wake_answer_owner\n")
+                fh.write("echo saved ;;\n reconcile-requests)\n")
+                if reconcile_wake:
+                    fh.write("wake_reconcile_owner\n")
+                fh.write("echo saved ;;\nesac\n")
+            os.chmod(intake, 0o755)
+
+        for answer_wake, reconcile_wake in ((False, False), (True, False), (False, True), (True, True)):
+            write_intake(answer_wake, reconcile_wake)
+            for reconcile, owns_wake in ((False, answer_wake), (True, reconcile_wake)):
+                for enabled in (True, False):
+                    os.environ["FM_FLOW_WAKE"] = "1" if enabled else "0"
+                    open(log, "w").close()
+                    content = flow.decision_card_content(card, [captain, mate], captain)
+                    dialog = flow.DecisionDialog(content)
+                    dialog.selected = next(i for i, option in enumerate(dialog.options)
+                                           if (option["value"] == "reconcile") == reconcile)
+                    action = "reconcile" if reconcile else "answer"
+                    label = f"{action}, capabilities={answer_wake}/{reconcile_wake}, Deck wake={enabled}"
+                    ok, _ = flow.run_submit(dialog)
+                    with open(log) as fh:
+                        sends = fh.read().splitlines()
+                    expected = [f"intake:{action}"] if owns_wake else (["deck:demo-lane"] if enabled else [])
+                    check(ok and sends == expected, f"submit uses only the selected action's wake: {label}")
+                    if reconcile:
+                        ui = flow.UI()
+                        ui.dialog = dialog
+                        lines = [" " * 120 for _ in range(40)]
+                        ui.render_dialog(lines, 120, 40)
+                        rendered = ANSI.sub("", "\n".join(lines))
+                        check(("wakes the task’s agent" in rendered) == owns_wake
+                              and ("steers demo-lane" in rendered) == (enabled and not owns_wake),
+                              f"rendered Reconcile footer matches the wake: {label}")
+
+        # Submit re-reads capabilities after the dialog opens, in both directions.
+        os.environ["FM_FLOW_WAKE"] = "1"
+        for before, after in ((False, True), (True, False)):
+            write_intake(False, before)
+            dialog = flow.DecisionDialog(flow.decision_card_content(card, [captain, mate], captain))
+            dialog.selected = next(i for i, option in enumerate(dialog.options) if option["value"] == "reconcile")
+            write_intake(False, after)
+            open(log, "w").close()
+            ok, _ = flow.run_submit(dialog)
+            with open(log) as fh:
+                sends = fh.read().splitlines()
+            check(ok and sends == (["intake:reconcile"] if after else ["deck:demo-lane"]),
+                  f"submit re-reads Reconcile capability after opening: {before} -> {after}")
+
+        # A source read failure must preserve the old caller's lane fallback.
+        write_intake(False, False)
+        original_open = open
+
+        def unreadable(path, *args, **kwargs):
+            if os.fspath(path) == intake:
+                raise PermissionError("fixture intake source unreadable")
+            return original_open(path, *args, **kwargs)
+
+        for reconcile in (False, True):
+            open(log, "w").close()
+            with mock.patch("builtins.open", side_effect=unreadable):
+                dialog = flow.DecisionDialog(flow.decision_card_content(card, [captain, mate], captain))
+                dialog.selected = next(i for i, option in enumerate(dialog.options)
+                                       if (option["value"] == "reconcile") == reconcile)
+                ok, _ = flow.run_submit(dialog)
+            with open(log) as fh:
+                sends = fh.read().splitlines()
+            check(ok and sends == ["deck:demo-lane"],
+                  f"unreadable intake preserves the lane fallback, reconcile={reconcile}")
+
+
+@english_installation()
+def main() -> int:
+    test_reconcile_intake_owns_wake()
+    test_submit_wake_compatibility()
+    with tempfile.TemporaryDirectory() as root:
+        main_home = make_home(root, "captain", label="captain")
+        mate_home = make_home(root, "mate", label="2ndmate-demo-lane")
+        write_board(mate_home, [BOARD_CARD])
+        write_payload(mate_home, [{**BOARD_CARD, "title": "payload copy"}])
+        write_payload(mate_home, [{"key": "payload-only-task", "type": "decision",
+                                   "title": "Payload only", "options": [
+                                       {"value": "go", "label": "Go"}],
+                                   "allow_freeform": True}])
+
+        # board file wins over the payload history
+        found = flow.decision_card_for(BOARD_CARD["key"], mate_home)
+        check(found.get("title") == "Draft the release checklist for #29",
+              "live board card wins over the payload file")
+
+        # payload fallback when the board does not carry the key
+        found = flow.decision_card_for("payload-only-task", mate_home)
+        check(found.get("title") == "Payload only", "payload file is the fallback source")
+
+        # owner home wins over the board on screen
+        write_board(main_home, [{**BOARD_CARD, "title": "active board copy"}])
+        card = make_card(owner="demo-lane")
+        content = flow.decision_card_content(card, [main_home, mate_home], main_home)
+        check(content["title"] == "Draft the release checklist for #29",
+              "the owning home's card wins over the active board")
+        check(content["home_path"] == mate_home.path,
+              "the dialog routes answers to the owning home")
+
+        # fleet board on captain home while the mate crew tab is active
+        mate_only_board = make_home(root, "mate-tab", label="2ndmate-demo-lane")
+        write_board(main_home, [BOARD_CARD])
+        mate_tab_card = make_card(owner="demo-lane")
+        homes = [main_home, mate_only_board]
+        evidence = {flow.delivery_home_identity(main_home): ({
+            "decisions_open": [{"id": BOARD_CARD["key"], "owner": "demo-lane"}]
+        }, time.time())}
+        with mock.patch.object(flow, "bearings_snapshot", side_effect=AssertionError("unexpected snapshot walk")):
+            mate_tab_content = flow.decision_card_content(mate_tab_card, homes, mate_only_board, bearings=evidence)
+        check(
+            mate_tab_content["title"] == "Draft the release checklist for #29",
+            "captain fleet board is found when a mate crew tab is active",
+        )
+        check(
+            [o["value"] for o in mate_tab_content["options"]]
+            == ["hold", "drop", "reconcile"],
+            "authored options survive when only the mate tab is on screen",
+        )
+        for owners in (["(main)"], ["(main)", "demo-lane"], ["vanished-mate"]):
+            evidence = {flow.delivery_home_identity(main_home): ({
+                "decisions_open": [{"id": BOARD_CARD["key"], "owner": owner} for owner in owners]
+            }, time.time())}
+            with mock.patch.object(flow, "bearings_snapshot", side_effect=AssertionError("unexpected snapshot walk")):
+                unowned = flow.decision_card_content(mate_tab_card, homes, mate_only_board, bearings=evidence)
+            check(unowned["title"] == "summary" and unowned["home_path"] == mate_only_board.path,
+                  f"a parent card needs unambiguous ownership: {owners}")
+
+        # main-home rows route to the active home
+        main_card = make_card(owner="(main)")
+        main_content = flow.decision_card_content(main_card, [main_home, mate_home], main_home)
+        check(main_content["home_path"] == main_home.path, "(main) rows route to the active home")
+
+        # fleet All tab: (main) must not erase the snapshot home stamped on the card
+        all_home = flow.Home(flow.ALL_CREW_LABEL, "", "all")
+        fleet_card = make_card(owner="(main)")
+        fleet_card.home_path = mate_home.path
+        fleet_content = flow.decision_card_content(
+            fleet_card, flow.inject_all_crew([main_home, mate_home]), all_home
+        )
+        check(
+            fleet_content["home_path"] == mate_home.path,
+            "All tab falls back to the card's snapshot home for (main) rows",
+        )
+
+        # an unresolved mate owner refuses rather than guessing a home
+        lost = make_card(owner="vanished-mate")
+        lost_content = flow.decision_card_content(lost, [main_home, mate_home], main_home)
+        check(lost_content["home_path"] == "", "an unresolvable owner carries no answering home")
+
+        # the durable store is authoritative: a raise-time card written where the
+        # call was raised must not be shadowed by an older board copy, and the
+        # payload history stays the last fallback
+        store_dir = os.path.join(mate_home.path, "state", "decision-cards")
+        os.makedirs(store_dir, exist_ok=True)
+        with open(os.path.join(store_dir, "payload-only-task.json"), "w") as fh:
+            json.dump(
+                {
+                    "schema": "fm-decision-card.v1",
+                    "generated": "2026-01-01T00:00:00Z",
+                    "card": {**BOARD_CARD, "key": "payload-only-task", "title": "Durable store copy"},
+                },
+                fh,
+            )
+        with open(os.path.join(store_dir, "demo-issue-29.json"), "w") as fh:
+            json.dump(
+                {
+                    "schema": "fm-decision-card.v1",
+                    "generated": "2026-01-01T00:00:00Z",
+                    "card": {**BOARD_CARD, "title": "Store copy wins over the board"},
+                },
+                fh,
+            )
+        check(
+            flow.decision_card_for("payload-only-task", mate_home).get("title") == "Durable store copy",
+            "the durable store beats the payload history",
+        )
+        check(
+            flow.decision_card_for("demo-issue-29", mate_home).get("title")
+            == "Store copy wins over the board",
+            "the durable store beats a board copy that may be older",
+        )
+
+        # a real hold reason becomes the about line when no card is composed
+        reason_card = make_card(
+            task="no-composed-card-3",
+            title="Short issue title",
+            doing="The hold reason sentence.",
+        )
+        reason_content = flow.decision_card_content(reason_card, [main_home, mate_home], main_home)
+        check(reason_content["title"] == "Short issue title",
+              "a card-less ticket keeps its durable short title")
+        check(reason_content["about"] == "The hold reason sentence.",
+              "a card-less ticket turns its hold reason into the about line")
+        check(reason_content["decide"] != "",
+              "a card-less ticket still says what the captain has to do")
+
+        # normalization: reconcile injected once, recommendation kept, freeform
+        values = [o["value"] for o in content["options"]]
+        check(values == ["hold", "drop", "reconcile"],
+              "the standard reconcile choice is injected last")
+        check(content["recommend"] == "hold", "the recommendation is carried")
+        check(content["freeform"] is True and content["close"] == "",
+              "freeform and close mode are carried")
+
+        # a board that already carries reconcile is not duplicated
+        with_reconcile = {
+            **BOARD_CARD,
+            "options": BOARD_CARD["options"] + [dict(flow.RECONCILE_OPTION)],
+        }
+        write_board(mate_home, [with_reconcile])
+        with open(os.path.join(store_dir, f"{BOARD_CARD['key']}.json"), "w") as fh:
+            json.dump(
+                {
+                    "schema": "fm-decision-card.v1",
+                    "generated": "2026-01-02T00:00:00Z",
+                    "card": with_reconcile,
+                },
+                fh,
+            )
+        dup = flow.decision_card_for(BOARD_CARD["key"], mate_home)
+        check([o["value"] for o in dup["options"]].count("reconcile") == 1,
+              "an already-injected reconcile is kept single")
+
+        # keyed lines: recommended preselected, note appended, close mode last
+        dialog = flow.DecisionDialog(content)
+        check(dialog.selected == 0, "the recommended option starts selected")
+        check(dialog.display_answer() == "hold", "selection is the answer")
+        check(dialog.keyed_line() == "demo-issue-29\thold\t"
+              "Draft the release checklist for #29 -> hold",
+              "the keyed answer line is key, answer, label")
+        dialog.note = "ask the reviewer first"
+        check(dialog.keyed_line() == "demo-issue-29\thold - ask the reviewer first\t"
+              "Draft the release checklist for #29 -> hold - ask the reviewer first",
+              "a note rides the answer after the selection")
+
+        # reconcile keeps the note as request provenance and is never an answer
+        dialog.selected = 2
+        dialog.note = "already moot?"
+        check(dialog.selected_option()["value"] == "reconcile", "reconcile is selectable")
+        check(dialog.reconcile_line() == "demo-issue-29\talready moot?",
+              "reconcile carries the note as provenance")
+
+        # CR/LF/TAB can never split one keyed line into extra intake rows
+        hostile = dict(content)
+        hostile["title"] = "Line one\nother-task\tinjected"
+        hostile["options"] = [{"value": "hold\ttab", "label": "Hold", "hint": ""}]
+        hostile["recommend"] = ""
+        hostile_dialog = flow.DecisionDialog(hostile)
+        hostile_dialog.selected = 0
+        hostile_dialog.note = "note\rwith break"
+        hostile_line = hostile_dialog.keyed_line()
+        check("\n" not in hostile_line and "\r" not in hostile_line,
+              "the keyed line carries no line breaks")
+        check(len(hostile_line.split("\t")) == 3,
+              "the keyed line stays one row of its three fields")
+        hostile_release = dict(hostile)
+        hostile_release["close"] = "release"
+        hostile_release_dialog = flow.DecisionDialog(hostile_release)
+        hostile_release_dialog.selected = 0
+        hostile_release_dialog.note = "note\rwith break"
+        check(len(hostile_release_dialog.keyed_line().split("\t")) == 4,
+              "a declared close mode adds exactly one field, never a row")
+        hostile_fields = hostile_line.split("\t")
+        check(hostile_fields[1] == "hold tab - note with break",
+              "newlines and tabs are flattened out of the answer")
+        check("other-task injected" in hostile_fields[2],
+              "newlines and tabs are flattened out of the label")
+        hostile_dialog.note = "a\nb"
+        check(hostile_dialog.reconcile_line() == "demo-issue-29\ta b",
+              "reconcile provenance is flattened too")
+
+        # no composed card: the summary is the title and only reconcile is listed
+        bare = make_card(task="no-composed-card", title="Run #29's release checklist")
+        bare_content = flow.decision_card_content(bare, [main_home, mate_home], main_home)
+        check(bare_content["title"] == "Run #29's release checklist",
+              "a card-less ticket keeps its summary as the title")
+        check([o["value"] for o in bare_content["options"]] == ["reconcile"],
+              "a card-less ticket still offers reconcile and freeform answer")
+
+        # the snapshot summary "<title>: <reason>" splits into title + about
+        split = make_card(
+            task="no-composed-card-2",
+            title="Run #29's release checklist: Waits on the captain: five s\u2026",
+        )
+        split_content = flow.decision_card_content(split, [main_home, mate_home], main_home)
+        check(split_content["title"] == "Run #29's release checklist",
+              "a card-less summary keeps the issue title")
+        check(split_content["about"] == "Waits on the captain: five s\u2026",
+              "a card-less summary turns its reason into the about line")
+
+        # ---- render smoke: the modal and the cleaned-up header ----
+        snap = flow.Snapshot()
+        mate_count_zero = make_home(root, "mate-zero", label="2ndmate-scout")
+        snap.homes = [main_home, mate_count_zero]
+        snap.home = main_home
+        snap.cols = {key: [] for key, _ in flow.COLUMNS}
+        snap.cols["captains_call"] = [card]
+        snap.totals = {"captains_call": 1}
+        snap.activity = {}
+        snap.counts = {main_home.label: 1, mate_count_zero.label: 0}
+        snap.collected_at = time.time()
+        snap.loading = False
+        snap.error = ""
+
+        ui = flow.UI()
+        ui.dialog = flow.DecisionDialog(content)
+        ui.dialog.note = "typed note"
+        frame = io.StringIO()
+        with contextlib.redirect_stdout(frame):
+            ui.render(snap)
+        text = ANSI.sub("", frame.getvalue())
+        for needle in ("DECISION", "demo-repo", "Draft the release checklist for #29",
+                       "ABOUT", "DECIDE", "Hold it", "REC", "Check again first",
+                       "Queue answer", "typed note", "esc close"):
+            check(needle in text, f"dialog renders {needle!r}")
+
+        long_note = "sadasdasdsds " + "asdasdasdasd" * 12
+        ui_long = flow.UI()
+        ui_long.dialog = flow.DecisionDialog(content)
+        ui_long.dialog.note = long_note
+        ui_long.dialog.focus = "note"
+        ui_long._dialog_scroll_follow = True
+        frame_long = io.StringIO()
+        old_size = flow.shutil.get_terminal_size
+
+        def _short_terminal(_fallback=(120, 40)):
+            return os.terminal_size((120, 24))
+
+        flow.shutil.get_terminal_size = _short_terminal
+        try:
+            with contextlib.redirect_stdout(frame_long):
+                ui_long.render(snap)
+        finally:
+            flow.shutil.get_terminal_size = old_size
+        long_text = ANSI.sub("", frame_long.getvalue())
+        check("sadasdasdsds" in long_text, "a long note shows wrapped text instead of one-line ellipsis")
+        check(long_text.count("asdasdasdasd") >= 2,
+              "a long note wraps across multiple card rows")
+        check(ui_long._dialog_scroll_max > 0, "a tall dialog enables vertical scroll")
+        check("pgup/pgdn or wheel scroll" in long_text and "lines " in long_text,
+              "a scrollable dialog shows range and scroll keys")
+        check(text.count("\u256d") >= 5,
+              "each option and the note row render as their own bordered card")
+        check("2ndmate-scout (0)" in text, "a visited empty crew shows (0)")
+        check("(1)" in text, "a count is shown when known")
+        check("updated" not in text and "bearings 20s" not in text and "live 2s" not in text,
+              "the header freshness diagnostics are hidden")
+        check("\u25b2" not in text and "\u25bc" not in text,
+              "column headers carry no scroll arrows")
+        check(text.count("DECISION") == 1, "the type badge is shown once, on the card's own header")
+        check("Hold it \u00b7 hold" in text,
+              "an option shows the value it submits when label and value differ")
+        check("\u2192 demo-issue-29 \u00b7 closes task" in text,
+              "the dialog says the submit sends a keyed answer that closes the task")
+        release_content = dict(content)
+        release_content["close"] = "release"
+        ui_release = flow.UI()
+        ui_release.dialog = flow.DecisionDialog(release_content)
+        frame_release = io.StringIO()
+        with contextlib.redirect_stdout(frame_release):
+            ui_release.render(snap)
+        release_text = ANSI.sub("", frame_release.getvalue())
+        check("Queue answer \u00b7 releases hold" in release_text,
+              "the submit button names the release close mode")
+        check("releases hold" in release_text,
+              "the release close mode is visible before submitting")
+        check(ui.dialog_hit, "option/action rows register click regions")
+
+        # ---- input routing ----
+        nav = flow.UI()
+        nav.dialog = flow.DecisionDialog(content)
+        flow.parse_input(b"\x1b[B", nav)
+        check(nav.dialog.cursor == 1, "down arrow moves the option cursor")
+        flow.parse_input(b" ", nav)
+        check(nav.dialog.selected == 1, "space picks the cursor option")
+        flow.parse_input(b"x", nav)
+        check(nav.dialog.note == "x" and nav.dialog.focus == "note",
+              "a printable key edits the note")
+        flow.parse_input("\u00e9".encode("utf-8"), nav)
+        check(nav.dialog.note == "x\u00e9", "a multibyte character reaches the note whole")
+        flow.parse_input(b" ", nav)
+        check(nav.dialog.note == "x\u00e9 ", "a space types into a focused note")
+        flow.parse_input(b"\x7f", nav)
+        check(nav.dialog.note == "x\u00e9", "backspace edits the note")
+        flow.parse_input(b"\x1b", nav)
+        check(nav.dialog is None, "esc closes the dialog")
+
+        # submit with no owning home refuses visibly instead of crashing
+        dead = flow.UI()
+        dead.dialog = flow.DecisionDialog(bare_content)
+        dead.dialog_submit()
+        for _ in range(50):
+            if dead.dialog.error:
+                break
+            time.sleep(0.02)
+        check(bool(dead.dialog.error), "a submit with no owning home reports a refusal")
+
+        # a malformed key is refused before anything is sent
+        bad_key = dict(content)
+        bad_key["key"] = "demo-issue-29\nother-task"
+        bad_dialog = flow.DecisionDialog(bad_key)
+        bad_dialog.home_path = mate_home.path
+        bad_ok, bad_detail = flow.run_submit(bad_dialog)
+        check(not bad_ok and "This task id looks wrong" in bad_detail,
+              "a key with a line break in it is refused visibly")
+
+        # a lane owner outside the slug charset never becomes a wake target
+        check(flow.resolve_owner_lane([main_home], "../escape") == (None, ""),
+              "a traversal-shaped lane owner resolves to no wake target")
+        check(flow.resolve_owner_lane([main_home], "demo-lane") == (None, ""),
+              "an unrecorded lane resolves to no wake target")
+
+        # the exact intake calls: keyed answer, card-declared release, and the
+        # bound reconcile-request path that never touches `answers`
+        calls: list[tuple[str, list[str], str]] = []
+        original_run = getattr(flow, "_run_captain_hold")
+        original_bind = getattr(flow, "ensure_decision_binding")
+        try:
+            setattr(
+                flow,
+                "_run_captain_hold",
+                lambda home, args, stdin_text: (
+                    calls.append((home, list(args), stdin_text)) or (True, "")
+                ),
+            )
+            setattr(
+                flow,
+                "ensure_decision_binding",
+                lambda home: (
+                    calls.append((home, ["binding-and-bind"], "")) or (True, "")
+                ),
+            )
+            answer_dialog = flow.DecisionDialog(content)
+            answer_dialog.home_path = mate_home.path
+            flow.run_submit(answer_dialog)
+            check(
+                calls[-1][1] == ["answers", "--source", "herdr-firstmate-flow captain's deck"],
+                "a normal choice feeds the one keyed-answer intake",
+            )
+            check(
+                calls[-1][2] == "demo-issue-29\thold\t"
+                "Draft the release checklist for #29 -> hold\n",
+                "the keyed line is stdin, exactly once",
+            )
+            release_content = dict(content)
+            release_content["close"] = "release"
+            release_dialog = flow.DecisionDialog(release_content)
+            release_dialog.home_path = mate_home.path
+            flow.run_submit(release_dialog)
+            check(
+                calls[-1][2].rstrip("\n").split("\t")[-1] == "release",
+                "a captain-gated work card declares its release close mode",
+            )
+            reconcile_dialog = flow.DecisionDialog(content)
+            reconcile_dialog.home_path = mate_home.path
+            reconcile_dialog.selected = 2
+            reconcile_dialog.note = "premise may be stale"
+            flow.run_submit(reconcile_dialog)
+            check(
+                calls[-2][1] == ["binding-and-bind"],
+                "reconcile binds the source before requesting",
+            )
+            check(
+                calls[-1][1][:2] == ["reconcile-requests", "--source-id"]
+                and flow.DECISION_SOURCE_ID in calls[-1][1],
+                "reconcile goes to the reconcile-request intake",
+            )
+            check(
+                calls[-1][2] == "demo-issue-29\tpremise may be stale\n",
+                "reconcile sends the key and the note as provenance",
+            )
+        finally:
+            setattr(flow, "_run_captain_hold", original_run)
+            setattr(flow, "ensure_decision_binding", original_bind)
+
+        # an intake without its own answer wake (an older Firstmate) leaves the
+        # owner to the Deck: a mate-owned call wakes its lane through the parent
+        # home's fm-send
+        check(not flow.intake_wakes_owner(mate_home.path),
+              "a home with no settling intake relies on the Deck's steer")
+        wake_log = os.path.join(root, "wake.log")
+        os.makedirs(os.path.join(main_home.path, "state"), exist_ok=True)
+        open(os.path.join(main_home.path, "state", "demo-lane.meta"), "w").close()
+        send_stub = os.path.join(main_home.path, "bin", "fm-send.sh")
+        with open(send_stub, "w") as fh:
+            fh.write(f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" >> "{wake_log}"\n')
+        os.chmod(send_stub, 0o755)
+        wake_card = make_card(owner="demo-lane")
+        wake_content = flow.decision_card_content(wake_card, [main_home, mate_home], main_home)
+        check(
+            wake_content["wake_home"] == main_home.path and wake_content["wake_lane"] == "demo-lane",
+            "a mate-owned call resolves its parent lane for the wake",
+        )
+        wake_dialog = flow.DecisionDialog(wake_content)
+        wake_dialog.home_path = mate_home.path
+        original_run2 = getattr(flow, "_run_captain_hold")
+        try:
+            setattr(flow, "_run_captain_hold", lambda home, args, stdin_text: (True, ""))
+            ok, detail = flow.run_submit(wake_dialog)
+        finally:
+            setattr(flow, "_run_captain_hold", original_run2)
+        check(ok and detail == "", "a delivered wake leaves no warning beside the queued state")
+        recorded = open(wake_log).read().splitlines() if os.path.exists(wake_log) else []
+        check(
+            recorded[:2] == ["demo-lane", "--fire-and-forget"] and len(recorded[2]) == 16,
+            "the wake steers the lane with an idempotent delivery id",
+        )
+        check(
+            "captain's deck answer for demo-issue-29" in (recorded[3] if len(recorded) > 3 else ""),
+            "the wake carries the captain's answer",
+        )
+
+        # FM_FLOW_WAKE=0 keeps the submit to the intake alone
+        wake_off_log = os.path.join(root, "wake-off.log")
+        with open(send_stub, "w") as fh:
+            fh.write(f'#!/usr/bin/env bash\nprintf "%s\\n" "$@" >> "{wake_off_log}"\n')
+        os.chmod(send_stub, 0o755)
+        off_content = flow.decision_card_content(wake_card, [main_home, mate_home], main_home)
+        check(off_content["wake_enabled"] is True,
+              "the dialog captures the wake setting when the card opens")
+        off_dialog = flow.DecisionDialog(off_content)
+        off_dialog.home_path = mate_home.path
+        os.environ["FM_FLOW_WAKE"] = "0"
+        original_run3 = getattr(flow, "_run_captain_hold")
+        try:
+            setattr(flow, "_run_captain_hold", lambda home, args, stdin_text: (True, ""))
+            off_ok, off_detail = flow.run_submit(off_dialog)
+        finally:
+            setattr(flow, "_run_captain_hold", original_run3)
+            os.environ.pop("FM_FLOW_WAKE", None)
+        check(off_ok and off_detail == "", "an opted-out submit still records the answer")
+        check(not os.path.exists(wake_off_log), "FM_FLOW_WAKE=0 skips the owner wake")
+
+        # An intake that settles answers wakes the owner itself, so one answer
+        # is one notification: the Deck adds no steer of its own. The stub
+        # intake wakes through the same lane sender, one log line per send.
+        one_log = os.path.join(root, "one-wake.log")
+        with open(send_stub, "w") as fh:
+            fh.write(f'#!/usr/bin/env bash\nprintf "%s\\n" "$*" >> "{one_log}"\n')
+        os.chmod(send_stub, 0o755)
+        hold_stub = os.path.join(mate_home.path, "bin", "fm-captain-hold.sh")
+        with open(hold_stub, "w") as fh:
+            fh.write(
+                "#!/usr/bin/env bash\n"
+                "wake_answer_owner() {\n"
+                f'  "{send_stub}" demo-lane --fire-and-forget intake-delivery "intake wake for $1"\n'
+                "}\n"
+                'case "$1" in\n'
+                "  answers) IFS=$'\\t' read -r key _; wake_answer_owner \"$key\";"
+                ' echo "closed: $key" ;;\n'
+                '  binding) echo "captured-source=herdr-firstmate-flow" ;;\n'
+                '  reconcile-requests) read -r key _; echo "reconcile: $key" ;;\n'
+                "esac\n"
+            )
+        os.chmod(hold_stub, 0o755)
+        check(flow.intake_wakes_owner(mate_home.path),
+              "an intake that defines its own answer wake is detected")
+        one_content = flow.decision_card_content(wake_card, [main_home, mate_home], main_home)
+        check(one_content["home_path"] == mate_home.path and one_content["intake_wakes"] is True,
+              "the dialog captures the owning home's intake wake when the card opens")
+        one_ok, one_detail = flow.run_submit(flow.DecisionDialog(one_content))
+        sends = open(one_log).read().splitlines() if os.path.exists(one_log) else []
+        check(one_ok and one_detail == "closed: demo-issue-29",
+              "the settling intake records the answer")
+        check(sends == ["demo-lane --fire-and-forget intake-delivery intake wake for demo-issue-29"],
+              "one answer is one notification: the intake's wake, no Deck steer")
+        release_one = dict(one_content)
+        release_one["close"] = "release"
+        os.remove(one_log)
+        flow.run_submit(flow.DecisionDialog(release_one))
+        sends = open(one_log).read().splitlines() if os.path.exists(one_log) else []
+        check(len(sends) == 1 and "intake wake" in sends[0],
+              "a released hold is one notification too")
+
+        # the reconcile-request intake wakes nobody, so the Deck still steers it
+        os.remove(one_log)
+        reconcile_one = flow.DecisionDialog(one_content)
+        reconcile_one.selected = next(
+            i for i, o in enumerate(reconcile_one.options) if o["value"] == "reconcile"
+        )
+        rec_ok, _ = flow.run_submit(reconcile_one)
+        sends = open(one_log).read().splitlines() if os.path.exists(one_log) else []
+        check(rec_ok and len(sends) == 1
+              and "captain's deck reconcile request for demo-issue-29" in sends[0],
+              "a reconcile request keeps exactly one wake: the Deck's")
+
+        # FM_FLOW_WAKE=0 only skips the Deck's steer; the intake still wakes,
+        # and the consent line says the lane is steered
+        os.remove(one_log)
+        os.environ["FM_FLOW_WAKE"] = "0"
+        try:
+            quiet_content = flow.decision_card_content(
+                wake_card, [main_home, mate_home], main_home
+            )
+            flow.run_submit(flow.DecisionDialog(quiet_content))
+            quiet_ui = flow.UI()
+            quiet_ui.dialog = flow.DecisionDialog(quiet_content)
+            quiet_frame = io.StringIO()
+            with contextlib.redirect_stdout(quiet_frame):
+                quiet_ui.render(snap)
+        finally:
+            os.environ.pop("FM_FLOW_WAKE", None)
+        sends = open(one_log).read().splitlines() if os.path.exists(one_log) else []
+        check(len(sends) == 1 and "intake wake" in sends[0],
+              "FM_FLOW_WAKE=0 leaves the intake's own wake in place")
+        check("steers demo-lane" in ANSI.sub("", quiet_frame.getvalue()),
+              "the consent line names the lane the intake steers")
+
+        cols = {key: [] for key, _ in flow.COLUMNS}
+        cols["charted"] = [object()]
+        cols["underway"] = [object(), object()]
+        cols["landed"] = [object()] * 6
+        totals = {"charted": 1, "underway": 2, "landed": 6}
+        total, landed = flow.board_ticket_count(cols, totals)
+        check(total == 9 and landed == 6, "board_ticket_count sums every column")
+
+        snap = flow.Snapshot()
+        snap.counts = {"crew-a": 9}
+        snap.landed_counts = {"crew-a": 6}
+        ui = flow.UI()
+        ui.show_landed = False
+        check(ui.crew_tab_count(snap, "crew-a") == 3, "hidden Landed is omitted from crew tab totals")
+        ui.show_landed = True
+        check(ui.crew_tab_count(snap, "crew-a") == 9, "visible Landed is included in crew tab totals")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = os.path.join(tmp, "plugins", "config", "herdr-firstmate-flow")
+            os.makedirs(cfg)
+            open(os.path.join(cfg, "show_landed"), "w").write("0\n")
+            old_plugin_cfg = os.environ.get("HERDR_PLUGIN_CONFIG_DIR")
+            os.environ["HERDR_PLUGIN_CONFIG_DIR"] = cfg
+            try:
+                check(flow._plugin_config_dir() == cfg,
+                      "HERDR_PLUGIN_CONFIG_DIR wins, as it does for kanban-view.sh")
+            finally:
+                if old_plugin_cfg is None:
+                    os.environ.pop("HERDR_PLUGIN_CONFIG_DIR", None)
+                else:
+                    os.environ["HERDR_PLUGIN_CONFIG_DIR"] = old_plugin_cfg
+
+            old_only = os.environ.get("FM_FLOW_HOMES_ONLY")
+            os.environ["FM_FLOW_HOMES_ONLY"] = "1"
+            try:
+                check(flow.homes_only_default() is True,
+                      "FM_FLOW_HOMES_ONLY=1 enables explicit-only discovery")
+                os.environ["FM_FLOW_HOMES_ONLY"] = "off"
+                check(flow.homes_only_default() is False,
+                      "FM_FLOW_HOMES_ONLY=off restores the scan")
+            finally:
+                if old_only is None:
+                    os.environ.pop("FM_FLOW_HOMES_ONLY", None)
+                else:
+                    os.environ["FM_FLOW_HOMES_ONLY"] = old_only
+
+            with mock.patch.dict(os.environ, {"HERDR_CONFIG_DIR": tmp}):
+                os.environ.pop("HERDR_PLUGIN_CONFIG_DIR", None)
+                ui2 = flow.UI()
+                check(not ui2.show_landed, "show_landed file 0 hides Landed on startup")
+                flow.parse_input(b"L", ui2)
+                check(ui2.show_landed, "Shift+L toggles Landed on")
+                with open(os.path.join(cfg, "show_landed")) as fh:
+                    check(fh.read().strip() == "1", "L toggle persists show_landed=1")
+
+    if FAILURES:
+        print(f"\n{len(FAILURES)} check(s) failed")
+        return 1
+    print("\nall checks passed")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

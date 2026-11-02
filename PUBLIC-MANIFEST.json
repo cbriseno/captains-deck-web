@@ -1,0 +1,570 @@
+{
+  "files": [
+    {
+      "mode": "100644",
+      "path": ".gitignore",
+      "sha256": "e15578afbc27cb763975678e6861cd936bf8eea77134a5584ecf58f73f0d3d07"
+    },
+    {
+      "mode": "100644",
+      "path": "CONTRIBUTING.md",
+      "sha256": "0abe8494ad407f78c50665622be9e81f23794808f297cbb155b88e5decb38bde"
+    },
+    {
+      "mode": "100644",
+      "path": "LICENSE",
+      "sha256": "86921b6f41061e63356432c98ee043558bf6a0a9557766a1e0eda3d6d95ea1f4"
+    },
+    {
+      "mode": "100644",
+      "path": "README.md",
+      "sha256": "2cc8037f8c032bbbfb565af2cf2fcc9ddeedefa49c9d1fa091b683fe7d2e6a19"
+    },
+    {
+      "mode": "100644",
+      "path": "docs/portability.md",
+      "sha256": "2d7bc35d2e0b705be00030f07606cb1d0735821866568cc8ba4b6b4f901689ad"
+    },
+    {
+      "mode": "100644",
+      "path": "fm_home.example",
+      "sha256": "dd0140b13ecb44a66bf16d8eccc5e0e3c63f7f86a72240284a80788bda1fb4d9"
+    },
+    {
+      "mode": "100644",
+      "path": "herdr-plugin.toml",
+      "sha256": "e3eeda4fbc459bc40d7e6ce1f330696cd2c1c2fa285f699ebf4e7e01f9038df3"
+    },
+    {
+      "mode": "100644",
+      "path": "scripts/deck_platform.py",
+      "sha256": "f37cf781902c8a357b5b34df177571557fc90e893650e4ad20d286672ab02ef6"
+    },
+    {
+      "mode": "100644",
+      "path": "scripts/flow_tui.py",
+      "sha256": "3a815e2aa048710147ffb2e116251204ae6007fe5242ee3acd6d34e489c753eb"
+    },
+    {
+      "mode": "100755",
+      "path": "scripts/fm-contract-check.sh",
+      "sha256": "a96f5a013454fa5a18909c11f1f4d49aebb17a2c8c36c28cd94f5181eacf5c85"
+    },
+    {
+      "mode": "100644",
+      "path": "scripts/fm-pane-record.sh",
+      "sha256": "1c5a518c8fe9f4de278078e48c585e72fc79354cd016ce5c542a6925860ce5a8"
+    },
+    {
+      "mode": "100755",
+      "path": "scripts/fm_contract_check.py",
+      "sha256": "d3165f72d9e0866e5fa52661e6daa24516fc37e36861baec8ff81e590af3e5e4"
+    },
+    {
+      "mode": "100755",
+      "path": "scripts/kanban-view.sh",
+      "sha256": "429c17d84cf85b83d039c1fc3a5359b7023f34da8f9f555a43b485e64b2fcb86"
+    },
+    {
+      "mode": "100755",
+      "path": "scripts/open-captain-deck.sh",
+      "sha256": "b92ddaafb58887c1718c00df1c002b1be8f34ee100e5b7b1b16a8f9345f7c719"
+    },
+    {
+      "mode": "100755",
+      "path": "scripts/open-flow.sh",
+      "sha256": "f003b5177c5b750809a018c2ec61b84a7db7faa69a9f9e6b2557514e0019691e"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/check_fixture.py",
+      "sha256": "8575096c4c3bec1a5d54e46395758642f4c4fb026cb42c3b460d7c6f04f10b25"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/fixture_owner.py",
+      "sha256": "811230693273202c23a247a16a26277d4c009c1dfda8732f02b5245e800424ed"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/fixtures/bearings_snapshot.json",
+      "sha256": "fd67f497a931f575963e27d310e988ea03125ea5a1e7858f67184337be4434c7"
+    },
+    {
+      "mode": "100755",
+      "path": "tests/fixtures/owner/bin/fm-bearings-snapshot.sh",
+      "sha256": "e3241fe9b45c1ab6809656a4563f4765b44219327ca9d435155c763a4fc5abbe"
+    },
+    {
+      "mode": "100755",
+      "path": "tests/fixtures/owner/bin/fm-captain-hold.sh",
+      "sha256": "1b12bda4cf177f76c709827f7d496790267017ffbe635c2d0a01c9d1307182ff"
+    },
+    {
+      "mode": "100755",
+      "path": "tests/fixtures/owner/bin/fm-send.sh",
+      "sha256": "c630fd1b2b54e49e1f00556437c514c5a2ed73a1e0a4b37dee5d7b7beee8fbf4"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/fixtures/owner/config/crew-accounts.json",
+      "sha256": "4cedbbd2dd441af81eee2c03861bc2f1d5d496c6f151d4363e69c185477aad89"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/fixtures/owner/records/decision-cards/decision-1.json",
+      "sha256": "d8f7f868ba33a4f9af98f0753863915b56fab4317220e1a03b4ec302b23f5e76"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/fixtures/owner/records/done-2.meta",
+      "sha256": "6561d4f0be23c8f9aeb5e0db14a311c0c58fae0bf440cc85c11e2e0ba1af9255"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/fixtures/owner/records/done-2.status",
+      "sha256": "eaf0b4b02b0818ea01d8993f0d66ed43ad8d5111b86d381ec8c470a03ce41b41"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/fixtures/owner/records/work-1.meta",
+      "sha256": "920a8e8841a614f93f2e04e99e667309dedb1e6182cddbce08e3c4a0b2663d2b"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/fixtures/owner/records/work-1.status",
+      "sha256": "b9fb0458c4917eadb8e5435ce6a2b440f8f8eef0ca1e8a3c3563c36c79a1d334"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/package-lock.json",
+      "sha256": "716e8a73f6f15910c78f3d5666e3631f9cc1818e3d789ef22670f72b96420447"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/package.json",
+      "sha256": "3cc82d66bead931b500e2ff957b524ea8901518c661e498132ba7f29ee55b6df"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_delivery_pty.py",
+      "sha256": "82daadacd34b8da9a167d5bbe78ce876af7f5c8284bd77d590daae7bd57c24a9"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_fixture_board.py",
+      "sha256": "82bdcb2f5bcc9e0d82e9a0a38537fc9bfd2340fe73c62eae9e375699d0611846"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_activity_provenance.py",
+      "sha256": "186c49e1e7ea814e87993da00823aa78e4446dfb57d1345450c3e3fb1c68a116"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_all_crew.py",
+      "sha256": "f68794c4845f339ec988bb1d0758df5b522cba6cf7a4343dbabe59e94ace6351"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_answered_calls.py",
+      "sha256": "5a040dc59e458a5e9d6894924bb08305249637ff1239205391d36ab5a87d7393"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_bearings_bounds.py",
+      "sha256": "7c55ff2784407c39314a6d341a6997c51a89011b36c1bc19244a29534a7f474c"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_blocked_details.py",
+      "sha256": "6ce948b44c8ed3e9eafc957a868e5981bfb3e38cee25d8ff189acc01150d65f2"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_card_account.py",
+      "sha256": "c009112ce5b012c9646c7b5b6c2466af748e6d49f6f032d71f653dacf5554a7c"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_card_time.py",
+      "sha256": "9879147bc9822a214961aca0c24c16b1b6d774f7a98e91dbf3b2be28c08d431d"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_clarity.py",
+      "sha256": "8b83bd627e42f00aa77d24106c08a67b59b38ea267387b8247a6c62b49b98a5a"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_decision_dialog.py",
+      "sha256": "3d19b9be5262a9f844f9aef6dc746121a2cff0a766e754845fb586cef4a67359"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_deliveries.py",
+      "sha256": "e417a1ef495eb44f12b7ca7f5bb046421e328e74daa3ecfda825ae9813418760"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_durable_reports.py",
+      "sha256": "60091629ac6630cc7120a06e8de776ab47cd19ad75eb2dc4291cb7b6abf51daa"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_first_paint.py",
+      "sha256": "d7ef1461d6e368e0a32d21e727ed28bc571be406d6eaa761b0412adb05ce4161"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_help.py",
+      "sha256": "f9af29c4eef02a63e2c51b9eb809b4e579f0b7d42cb147052b95e8ac7ac90fce"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_homes.py",
+      "sha256": "289db7abe61ce9201643d40f1d686aebd5ed0e8b2137d3849a4b86cea8fb8bbb"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_landed_outcomes.py",
+      "sha256": "6734dba88caa0f3930a7448232352010251eb6f2b8023f4d731f95e54658683b"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_language.py",
+      "sha256": "8f66cf4597cc4cee701d5c1247143c1f08207a553a2a9a9ef6bdb0f27405b0bd"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_message_firstmate.py",
+      "sha256": "b42e1a1ac66377bd93f3cad42f9e76fb8bf53dd14277b5927236cc95327a17d2"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_other_agents.py",
+      "sha256": "b28a98c6e7fbf989c296e662d138f742cb3114d4e3d970fe04b53dee66107508"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_remote_homes.py",
+      "sha256": "931148371a58848985faeb41fa17a97fe470e9c6d008dddbce7157c63ad0224d"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_run_stats.py",
+      "sha256": "1c5b074d62c5531bdc620df830b818e7e8eae91500a79a2ff7725db4289f3445"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_status_followup.py",
+      "sha256": "ce374e618eba38ccaf7b98f37bdbe1e97c600a33cc262d5c4817a10365ed6699"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_flow_structured_call.py",
+      "sha256": "897c5d61a34f7087b516858eea5ed4d80d1352048308bed77daf3000bf7bf4cf"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_fm_contract_check.py",
+      "sha256": "9e9db3e044f5faab9dbadb513283ccad812dc06e65e5856d7c0d0f7cd613b960"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_landed_outcomes_pty.py",
+      "sha256": "cf5590a2bfa5d2058eb5275b92a084de7a1788af6034ca0de160aa5814a2d0c0"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_open_scripts.py",
+      "sha256": "eadeae98542c0d98f76579a4bb9ebdd9cec6f9d9625dec8f9856031b2c5aa8a9"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_plugin_manifest.py",
+      "sha256": "2bcd0ca5911091d25ce4cdfab713499f3f5cc683bc63c22b1210110a1b96e09d"
+    },
+    {
+      "mode": "100644",
+      "path": "tests/test_py_compat.py",
+      "sha256": "bbf3d69665256e2e02398ce5c125e4b24e1e401b43240709c39d1fdb5dcfd188"
+    },
+    {
+      "mode": "100644",
+      "path": "web/README.md",
+      "sha256": "7e5025cf222561de937b94cde7a46f0c56db25e512efa5be610e1b7797c808e4"
+    },
+    {
+      "mode": "100644",
+      "path": "web/bridge.py",
+      "sha256": "4519e11978ae9f0f7e6cb91aebbfed887bc03d765f99079b68c407d388128add"
+    },
+    {
+      "mode": "100644",
+      "path": "web/deck_control.py",
+      "sha256": "9e5da5ef087fe71da339018901b1c5d3264b3c2917bf533aba30520edc3afc8c"
+    },
+    {
+      "mode": "100644",
+      "path": "web/launch.py",
+      "sha256": "14f4627f019669a4bf7f4d5feae6457f92f69fb2c5088a6fc37e0f60d6fb557e"
+    },
+    {
+      "mode": "100644",
+      "path": "web/locales/en.json",
+      "sha256": "60ce34fea0351be3277004574d9503aa2f7fb61fcad4da2fc2a9ca545dc14467"
+    },
+    {
+      "mode": "100644",
+      "path": "web/locales/es.json",
+      "sha256": "ac4011171789975249cda8ef1c52ceedad19f14fcb789c42723d953efd0a2134"
+    },
+    {
+      "mode": "100644",
+      "path": "web/localization.py",
+      "sha256": "b34ce840a6747078458fa39c8e6a0a6f4c6e33883d91fa3750527c229bc2b5fc"
+    },
+    {
+      "mode": "100644",
+      "path": "web/presentation.py",
+      "sha256": "98cdc7d5db12f051e8e652b450d98620636a43ff2c1309887460f78fc039905c"
+    },
+    {
+      "mode": "100755",
+      "path": "web/run-managed.sh",
+      "sha256": "50b3adb6964c85489ad216f49ebf51c9948f316c723ceda71e0a7de73d1676a2"
+    },
+    {
+      "mode": "100755",
+      "path": "web/run.sh",
+      "sha256": "a4b83b848f5858f119b5dc0813d4f29c0a8e655be6222df44ea28b5cfcfec422"
+    },
+    {
+      "mode": "100644",
+      "path": "web/static/app.js",
+      "sha256": "13b071d80e23da7511131398861634a6c3a5bd0dd74d53ed83aacdfe79a60e74"
+    },
+    {
+      "mode": "100644",
+      "path": "web/static/deck-motion.js",
+      "sha256": "72c6eae3c4c2b8d716ec27d7103da5e62b3b4bfc9c0e15b1453420f319ee01a9"
+    },
+    {
+      "mode": "100644",
+      "path": "web/static/deck-relations.js",
+      "sha256": "9ab0c9c38edb6f5a47a82a678b40d37d3009f13ba4804d5cf7c51b73a4c644c5"
+    },
+    {
+      "mode": "100644",
+      "path": "web/static/deck-ui.js",
+      "sha256": "8c35f00fb9cc7ad6d4c2ab8f33a8b5ee3947ec7cbfb51847fabfcd407dad425f"
+    },
+    {
+      "mode": "100644",
+      "path": "web/static/deck.css",
+      "sha256": "493bf7f71a11623dd1dca54ad30a175741034242f14f1f86c0ebafe120bf0453"
+    },
+    {
+      "mode": "100644",
+      "path": "web/static/i18n.js",
+      "sha256": "615c20a6208addec63ab7a94770480e8cca1be155393a436dca7172786b8fe25"
+    },
+    {
+      "mode": "100644",
+      "path": "web/static/index.html",
+      "sha256": "e156109781308e3ed5e567214f12c2316168425bba472e1cce335d00f626f257"
+    },
+    {
+      "mode": "100644",
+      "path": "web/static/styles.css",
+      "sha256": "4f51c1662a67a1fd6a5014493da3f605658d3c491f2543fb7c78b26eb79454ba"
+    },
+    {
+      "mode": "100644",
+      "path": "web/static/sw.js",
+      "sha256": "9f6f6918dfdc6bc58ffdcb5bf1030d7a229effe27cc51f46fa7b1b03f16c5e89"
+    },
+    {
+      "mode": "100644",
+      "path": "web/static/theme.js",
+      "sha256": "530f48c58704bd8d3c5f2f3efb1bfd354dd602758f2b79191dfe2f23929fbc9a"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/action_required.browser.cjs",
+      "sha256": "3a402752b1d73d59e9de9cca654b54f284ff9a405d5dcff4f0cec214c6f503df"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/activity_fleet.py",
+      "sha256": "f3666491255303e4c41d48d5109e4b8691df739cee8ecab1689e79c99c344b31"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/approved_board.browser.cjs",
+      "sha256": "4bd8f67c7ec34c6ccd32110aa93b6fac44642237269e2bca999904b9a39b3869"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/approved_fixture.py",
+      "sha256": "8495742c49a4d62f3e762604117f5dbf0142e0389b95fb8003258021f590ce0c"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/board_dom.test.cjs",
+      "sha256": "bb691653ffd8ee94e4bc3f4b603ce681cf99f13ee08a960318ec84b18225035a"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/board_layout.browser.cjs",
+      "sha256": "2d93dfdcacb4a57e1dd69595b65e355dd1dbd42950b76a7e708a5b24469accd9"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/board_ordering.browser.cjs",
+      "sha256": "0d2ccd8596aba5ce0b554d367cb84e8c128dd3d187a1e40ca2ab5a7a0c909cec"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/creation_age.test.cjs",
+      "sha256": "0d4d49bea216628bc2e66723236ebc1e79de1fce2c00f67fcfafb681e4b5d424"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/deck_motion_module.test.cjs",
+      "sha256": "0066cdc16cc37dd9b9f3ffa32e61bee7f6c6b7b6a5834e9d18214f7a33eec7b9"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/deck_relations_module.test.cjs",
+      "sha256": "d9330b6f7c0281d599e0f0a1afb3e82782837f05b9e2d80d5457aad97cded986"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/fixture_work_owner.py",
+      "sha256": "219520ad3228512ed3f30a788f68ccde6930d040b0eb4c7969671f6d736a86a5"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/fixtures.py",
+      "sha256": "c787ff5d270cc8e2a933bd83998b1ffdf144a02ca9c4971873e4173b6ed7aa42"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/group_activity.browser.cjs",
+      "sha256": "66697ec29d5238a05e921c027c8be9cd2a8b6b9a3db5bd7a17408e0ca7401077"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/layout_fixture.py",
+      "sha256": "0b741d955fdb12242d016f169faeb34e40fc5178706d1895c6b3ca6101b264e4"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/localization.test.cjs",
+      "sha256": "d5abf7cc854073f7d665b3828f046526e4baae68415059b79264a5c1be18e5ba"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/native_details.test.cjs",
+      "sha256": "99d5246d313616f4e5c797e9c093ab3bb76d2f54ed42127c47d50fc08682d972"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/ordered_board_fixture.py",
+      "sha256": "1fb7c899adb4ea330e42d499cecb3960d3766837eaabbd3266a61a29aabb5321"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/pause_controls.browser.cjs",
+      "sha256": "6d604e5bfd1c2e9b3460760fa0be6bdb0442b2c3f6b35dcba4baa7639fd7a6ac"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/preview.py",
+      "sha256": "89621f891214917fdd00794a210803d09056fe86c784715797ad9eef973ed528"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/progress_evidence.browser.cjs",
+      "sha256": "3a448e8e24faa040b7b740c206c2cc30c262e3e61e63b062b13b0d48fec0629f"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/question_cards.browser.cjs",
+      "sha256": "8be889d02f2fce8ff8e8fba8c24ffdcf09dc7bceb9dda75652160a60aefb20ef"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/removal_consultation.browser.cjs",
+      "sha256": "91a0be457b90b4fd56737374bb7a2f8724bbf73a4c64aa1a96c3d7ad569db668"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/state_observation.browser.cjs",
+      "sha256": "ac1bb4da7001223d305a28b705c32bf2a8df5c714aa67cd14693a2942fc5fb73"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_action_cards.py",
+      "sha256": "ee42b1b9e7ee0a5fb847018fdd05cde5726df080b7dd95953005436a7fd4f1d0"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_activity.py",
+      "sha256": "86753aa228f486f8218a41e9205f7ea82721845239058722259bb5b1c9c07c57"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_bridge.py",
+      "sha256": "2a10f7eb98e2f9b776e5ff4b5c554cfba0fea42db97d5fe504b2f2ea347b8910"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_deck_control.py",
+      "sha256": "03b98647a6d5d0bf95e6b3913976c8b9dc41e22e7ec1cc97b79419358674a57b"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_localization.py",
+      "sha256": "1f774d4f22ba8b7ee109dbc42a4e6edb85bbff54c2cd9895f752c1cc7e018145"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_portable.py",
+      "sha256": "c748007adcd0fe158b1de9917d924765db39c0717388baf3a4f6b3c2c7284b31"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_presentation.py",
+      "sha256": "f5c71500d4e8f8b5e928dc826d2be77aa05df92a6ae8878d4c2d077beaca1b9e"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_proxy_auth.py",
+      "sha256": "303820f6bffdfe08d38079418b02debd0af8d3d9e524ba2229860189dd518cbd"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_saved_questions.py",
+      "sha256": "497b75ed22b0eb7c46de71148fc33e9642b71906957dc03b73ba2311eccbd0c5"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_standalone.py",
+      "sha256": "c76ffe13cd414268174de2323a913d373638b3fa2e8111f3f9728344d0f1d38c"
+    },
+    {
+      "mode": "100644",
+      "path": "web/tests/test_startup.py",
+      "sha256": "378ef37cf2ca069b5adc8db8e28843d8a4841893602f51eba7eec892c3562215"
+    }
+  ],
+  "schema": "captains-deck.public-tree.v1",
+  "upstream": {
+    "base_commit": "3628cda7f75e2ddf2a65d91a360045c27067ed4b",
+    "license": "MIT; LICENSE retained unchanged",
+    "url": "https://github.com/deimantasnork/captains-deck"
+  }
+}

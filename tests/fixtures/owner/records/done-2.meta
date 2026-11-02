@@ -1,0 +1,10 @@
+harness=pi
+account=/tmp/example/.pi/agent
+account_provider=deepseek
+account_claude=claude-a
+claude_config_dir=/tmp/example/.claude-account-b
+codex_home=/tmp/example/.codex-account-a
+model=sonnet
+effort=medium
+mode=local-only
+spawn_gen=s1790289100.10000.1000

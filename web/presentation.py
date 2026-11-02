@@ -1,0 +1,169 @@
+"""Human-facing projection; original producer evidence stays in technical details.
+
+This does not classify workflow from prose or translate authored task content.
+Known stock producer instructions are not authored next actions.
+"""
+import re
+from pathlib import Path
+
+
+STOCK_ACTIONS = {
+    'El worker continúa el encargo.',
+    'Firstmate revisa las dependencias antes de continuar esta etapa.',
+    'Firstmate presenta o reconcilia la decisión pendiente.',
+    'Firstmate verifica la entrega y aplica la autoridad de integración configurada.',
+    'Firstmate comprueba el bloqueo o la pausa; el texto declarado no demuestra que haya desaparecido.',
+    'Firstmate puede despachar cuando corresponda.',
+    'Firstmate necesita una observación actual; la última declaración se conserva como contexto.',
+    'Firstmate revisa la condición declarada y coordina el siguiente paso.',
+    'Firstmate revisa el resultado y los pendientes del encargo.',
+    'Firstmate debe confirmar el estado de la tarea.',
+    'Firstmate reviews the declared condition and coordinates the next step.',
+    'Firstmate reviews the result and outstanding work.',
+    'Firstmate must confirm the task’s state.',
+}
+STOCK_WAITS = {
+    'revisión de la condición técnica declarada',
+    'verificación e integración de Firstmate',
+}
+STOCK_REASONS = {'Motivo no registrado', 'No specific reason was recorded.',
+                 'No se registró un motivo concreto.'}
+# Conventional roots plus the configured installation root, resolved at runtime.
+USER_PATH_STARTS = '|'.join(re.escape('/' + part + '/') for part in ('home', 'Users', 'tmp'))
+USER_PATH_STARTS += '|' + re.escape(chr(126) + '/') + '|' + re.escape(str(Path.home()) + '/')
+TECHNICAL = re.compile(
+    r'harness state unavailable|\b[0-9a-f]{24,}\b|\b[0-9A-HJKMNP-TV-Z]{26}\b|\brun:\s*\S+|'
+    r'\b(?:spawn_gen|endpoint_task_id)\b|(?-i:\bHEAD\b)|'
+    rf'(?:{USER_PATH_STARTS})\S+|'
+    # The agent's liveness line ("harness busy (claude-hook)") says nothing
+    # about the work; neither does a shell command or a Firstmate data path.
+    r'\bharness (?:busy|idle|working|waiting|stopped|exited)\b|\(\w+-hook\)|'
+    r'\bsudo\s+\S|\|\s*(?:grep|tail|head|sed|awk|jq|sort)\b|'
+    r'(?<![\w/.-])(?:data|state|bin)/[\w.-]+/\S*', re.I)
+# A web address, without the punctuation that usually follows one in prose.
+URL_RE = re.compile(r'https?://[^\s<>()\[\]]*[^\s<>()\[\].,;:!?\'"»]')
+# A short commit hash in parentheses: "(af422196)".
+SHORT_HASH = re.compile(r'\s*\((?=[0-9a-f]*[0-9])(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\)')
+CARD_LIMITS = {'card_title': 80, 'card_status': 120}
+RECORD = re.compile(
+    r'(?=.*?\b(?:schema|head)"?\s*:)\{?\s*"?[\w.-]+"?\s*:\s*[^\s,{}]+'
+    r'(?:(?:,\s*|\s+)"?[\w.-]+"?\s*:\s*[^\s,{}]+)*\s*\}?', re.I)
+FILE_ONLY = re.compile(r'\S+\.(?:md|json|jsonl)[.,;:!?)]*(?:\s+\S+\.(?:md|json|jsonl)[.,;:!?)]*)*', re.I)
+
+
+def drop_links(text):
+    """Text without its web addresses or short hashes; Details keep the original."""
+    text = SHORT_HASH.sub('', str(text or ''))
+    text, cut = re.subn(r'(?:\b(?:PR|pull request)\s*:?\s*)?' + URL_RE.pattern, '', text, flags=re.I)
+    if cut:
+        # Tidy what the address leaves behind: "(… )", "word .", "Done: , ok".
+        text = re.sub(r'\(\s*\)|\[\s*\]', '', text)
+        text = re.sub(r'[ \t]+([.,;:!?])', r'\1', text)
+        text = re.sub(r'[:;,]([.,;:!?])', r'\1', text)
+        text = re.sub(r'[ \t]{2,}', ' ', text)
+    return text
+
+
+def plain_part(sentence):
+    """The plain lead of "Plain words: technical detail" (or "; detail"), or ''."""
+    head = re.split(r'[:;]\s', sentence, maxsplit=1)[0]
+    found = TECHNICAL.search(sentence)
+    # Only when every technical part comes after the colon.
+    if (head == sentence or not found or found.start() <= len(head)
+            or len(re.findall(r'[^\W\d_]{2,}', head)) < 3):
+        return ''
+    return head.strip() + '.'
+
+
+def excerpt(value, limit=280):
+    """Keep a readable opening, without rewriting or silently translating it."""
+    text = str(value or '').strip()
+    if not text or text in STOCK_REASONS:
+        return ''
+    text = re.sub(r'^#{1,6}\s+', '', drop_links(text).split('\n\n')[0])
+    text = re.sub(r'\s+', ' ', text).strip()
+    if FILE_ONLY.fullmatch(text) or RECORD.fullmatch(text):
+        return ''
+    if TECHNICAL.search(text) or len(text) > limit:
+        text = re.split(r'(?<=[.!?])\s+', text)[0]
+        if FILE_ONLY.fullmatch(text) or RECORD.fullmatch(text):
+            return ''
+        if TECHNICAL.search(text):
+            return plain_part(text)
+    if len(text) <= limit:
+        return text
+    return text[:limit - 1].rsplit(' ', 1)[0] + '…'
+
+
+def card_field(value, name):
+    """One of Firstmate's one-line card fields, or '' when it isn't usable."""
+    if not isinstance(value, str):
+        return ''
+    text = ' '.join(drop_links(value).split()).strip(' ·–—-:,;')
+    if not text or len(text) > CARD_LIMITS[name] or '\n' in value.strip() or TECHNICAL.search(text):
+        return ''
+    return text
+
+
+def listed_dependencies(flow):
+    """Whether the flow's wait is only Firstmate's fallback: the recorded
+    titles of its unresolved dependencies, joined. The board names those
+    dependencies itself, by their card titles; the original stays in Details."""
+    wait = flow.get('waiting_for')
+    deps = [d for d in flow.get('dependencies') or [] if isinstance(d, dict) and d.get('unresolved')]
+    return (isinstance(wait, str) and bool(deps)
+            and ' '.join(wait.split()) == ', '.join(' '.join(str(d.get('title') or '').split()) for d in deps))
+
+
+def project(card, context):
+    flow = getattr(card, 'flow', {}) or {}
+    # Optional producer-authored presentation is distinct from a raw run report.
+    human = flow.get('presentation')
+    human = human if isinstance(human, dict) else {}
+    def first_excerpt(candidates, stock):
+        for value in candidates:
+            text = excerpt(value) if isinstance(value, str) else ''
+            if text and text not in stock:
+                return text
+        return ''
+    # Firstmate's short card fields, written for the captain (fm-card-fields).
+    card_fields = {name: card_field(human.get(name), name) for name in CARD_LIMITS}
+    reason = flow.get('reason')
+    run = re.fullmatch(r'validating \((running|fixing|passed|failed)\)(?: · run: \S+)?', reason if isinstance(reason, str) else '')
+    return {
+        'card_title': card_fields['card_title'],
+        'status': card_fields['card_status'],
+        'summary': first_excerpt([human.get('summary'), reason, context.get('reason')], STOCK_REASONS),
+        'next_action': first_excerpt([human.get('next_action'), flow.get('next_action')], STOCK_ACTIONS),
+        'waiting_for': first_excerpt([human.get('waiting_for'),
+                                      None if listed_dependencies(flow) else flow.get('waiting_for')], STOCK_WAITS),
+        'executor': {'harness': getattr(card, 'agent', '') or ''},
+        'run_step': {'phase': 'validation', 'state': run[1]} if run else None,
+    }
+
+
+# A report that opens on a shipping receipt: the branch, its head, where it
+# came from. Firstmate's own receipt lines read like these.
+RECEIPT_LINE = re.compile(r'^\s*(?:[-*]\s+)?\**(?:ready in branch|(?:para|for) (?:root|firstmate)\b|owner application status|'
+                          r'head|commit|rama|branch|origen|origin|método|method)\b', re.I)
+HASH = re.compile(r'\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b')
+
+
+def report_parts(text):
+    """A report's readable body, and the technical lead it opened with.
+
+    The top heading repeats the delivery title. Paragraphs before the first
+    section that read as a receipt (a branch, a commit, a path) move out of
+    the opening, so the report starts on what changed. Nothing is dropped or
+    rewritten, and a report that is all receipt stays as it is.
+    """
+    text = re.sub(r'\A\s*#\s[^\n]*\n+', '', str(text or '')).strip()
+    blocks = re.split(r'\n[ \t]*\n', text)
+    first = next((i for i, block in enumerate(blocks) if re.match(r'#{1,6}\s', block)), len(blocks))
+    technical = lambda block: bool(TECHNICAL.search(block) or HASH.search(block)
+                                   or any(RECEIPT_LINE.match(line) for line in block.splitlines()))
+    lead = [block for block in blocks[:first] if technical(block)]
+    body = [block for block in blocks[:first] if not technical(block)] + blocks[first:]
+    if not lead or not any(block.strip() for block in body):
+        return text, ''
+    return '\n\n'.join(body), '\n\n'.join(lead)
