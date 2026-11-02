@@ -83,6 +83,7 @@ Every child process still receives the owning `FM_HOME`.
 | `CD_WEB_USERS` | empty | Comma-separated authenticated proxy identities, required with an external origin |
 | `CD_WEB_IDENTITY_HEADER` | empty (disabled) | Dedicated X- prefixed header set only by the authenticating proxy; required with origin and users |
 | `CD_WEB_HERDR_ORIGIN` | empty | Optional supported Herdr Web HTTPS origin |
+| `CD_WEB_EXTENSIONS_ROOT` | unset | Absolute extensions checkout exposing `bin/fm-extension settings` |
 | `CD_WEB_DATA` | user config directory | Private deduplication receipts; no new task queue |
 | `CD_WEB_RUNTIME` | user state directory | Managed instance control record, lifetime lock and log |
 | `FM_ROOT_OVERRIDE` | empty | Optional Firstmate code root fallback |
@@ -344,3 +345,9 @@ A replaced occurrence opens an explicit old-notification context, with separate 
 Missing or unverifiable historical evidence stays explicit; it never becomes a new answer form for an old notice.
 The current delivery history cannot correlate arbitrary notification item/artifact IDs, so a delivery link with such an item labels that correlation as unverified while showing the retained summary for the exact home/task.
 `GET /api/resolve?home=…&task=…&view=…&item=…` is the read-only entry resolver.
+
+## Relay and planning settings
+
+The optional Relay settings panel uses the Firstmate extensions CLI. Set `CD_WEB_EXTENSIONS_ROOT` to a checkout exposing `bin/fm-extension settings`. Without a compatible extension or Firstmate endpoint, and for remote spaces, settings are unavailable and cannot be changed. Automatic relay is off by default; viewing the panel does not enable it. Changes are validated by the extension, use revision-bound requests and provide explicit confirmation for automatic relay. Deck does not install extensions or run a relay engine.
+
+Set `CD_TEST_EXTENSIONS_ROOT` to an extensions checkout to include real-CLI settings tests. Those tests use isolated temporary state and never enable automatic relay.

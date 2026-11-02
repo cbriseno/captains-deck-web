@@ -81,12 +81,8 @@ window.createDeckUI = function (host) {
         const retained = !source.available;
         nodes.push({...x, id, owner_id:x.id, parent:x.parent ? keyOf(source.home,x.parent) : '', home:source.home, card,
           kind:x.kind === 'sub' ? 'subproject' : x.kind, title:x.title || x.label, source,
-          state:retained && ['active','stopping'].includes(x.state) ? 'unknown' : x.state || 'unknown',
-          reason:retained && ['active','stopping'].includes(x.state) ? t('State not confirmed')+' · '+t('Working when last seen') : x.reason,
-          // A retained owner read cannot renew its progress checkpoint.
-          progress:retained ? null : x.progress,
-          progress_evidence:retained ? {freshness:'unknown',current:false} : x.progress_evidence,
-          declared_progress:retained ? x.declared_progress || x.progress : x.declared_progress});
+          // Keep the last observation visible; uncertainty never renews it.
+          observation_uncertain_since:x.observation_uncertain_since || (retained ? source.retained_at : null)});
       }
       for (const e of snap.edges || []) edges.push({...e,from:keyOf(source.home,e.from),to:keyOf(source.home,e.to)});
     }
@@ -130,9 +126,9 @@ window.createDeckUI = function (host) {
     wrap.title = x.priority === 'P4' || x.priority_reported && x.priority === null ? t('NA: Firstmate handles this when no higher priority work is ready.') : !x.priority ? t('Priority not reported; no scheduling rank is assumed.') : t('Priority');
     return wrap;
   }
-  function can(x, action) { if((action==='pause'&&x.pause?.can_pause===false)||(action==='resume'&&x.pause?.can_resume!==true))return false;return !!x.owner_id && !!x.rev && !!x.source?.available && (x.source.capabilities?.actions || []).includes(action) && app.online; }
+  function can(x, action) { if((action==='pause'&&x.pause?.can_pause===false)||(action==='resume'&&x.pause?.can_resume!==true))return false;return !!x.owner_id && !!x.rev && !x.observation_uncertain_since && !!x.source?.available && (x.source.capabilities?.actions || []).includes(action) && app.online; }
   let pauseDescriptionId=0;
-  const pauseReading=x=>JSON.stringify([x.state,x.pause,x.rev,x.kind==='task'?null:tasksOf(x).map(y=>[y.id,y.state,y.pause?.can_pause]),x.source?.available,x.source?.capabilities?.actions,app.online]);
+  const pauseReading=x=>JSON.stringify([x.state,x.pause,x.rev,x.observation_uncertain_since,x.kind==='task'?null:tasksOf(x).map(y=>[y.id,y.state,y.pause?.can_pause]),x.source?.available,x.source?.capabilities?.actions,app.online]);
   function pauseButton(x) {
     const own=ownPause(x),stopping=isStopping(x),action=own?'resume':'pause',inherited=x.pause?.inherited||[];
     const sources=inherited.map(id=>id==='freeze'?t('the fleet freeze'):label(byId.get(keyOf(x.home,id))||byId.get(id))).join(', ');
@@ -183,9 +179,10 @@ window.createDeckUI = function (host) {
       if(restore)(next.tabIndex===0?next:next.querySelector('button')).focus({preventScroll:true});
     }
   }
-  const progressReading=x=>JSON.stringify([x.progress,x.progress_evidence,x.declared_progress,x.phase]);
+  const progressReading=x=>JSON.stringify([x.progress,x.progress_evidence,x.declared_progress,x.phase,x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30]);
   function progress(x, detail=false) {
     const box=n('div','prog'),p=x.progress,e=x.progress_evidence;
+    const observationStale=x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since >= 30;
     if(x.kind!=='task'&&!p&&!e)return box;
     if(detail&&x.kind==='task'){box.dataset.progressNode=x.id;box.progressReading=progressReading(x);}
     const known=['current','stale','missing','unknown','invalid'];
@@ -195,7 +192,7 @@ window.createDeckUI = function (host) {
     const current=freshness==='current'&&e?.current===true;
     if(freshness==='current'&&!current)freshness='unknown';
     else if(current&&!measured)freshness=!p||total===0?'unmeasured':'invalid';
-    box.dataset.freshness=freshness;
+    box.dataset.freshness=observationStale?'stale':freshness;
     if(current&&measured){
       const pct=Math.round(completed/total*100),bar=n('span','prog-bar'),fill=n('i');fill.style.width=pct+'%';bar.append(fill);
       bar.setAttribute('role','progressbar');bar.setAttribute('aria-valuenow',pct);bar.setAttribute('aria-valuemin','0');bar.setAttribute('aria-valuemax','100');bar.setAttribute('aria-label',t('Reported progress'));box.append(bar,n('span','prog-txt',`${pct}% · ${completed}/${total} ${t('steps')}`));
@@ -203,6 +200,7 @@ window.createDeckUI = function (host) {
       const messages={stale:'Progress needs an update.',missing:'No progress declared yet.',unknown:'Progress is not confirmed.',invalid:'The progress declaration is invalid.',unmeasured:'No measured steps yet.'};
       box.append(n('span','prog-txt',t(messages[freshness])));
     }
+    if(observationStale)box.append(n('span','prog-txt',t('Out of date')));
     const phases={investigation:'Investigation',implementation:'Implementation',rebase:'Rebasing',validation:'Validation','branch-ready':'Ready for integration',integration:'Integration',activation:'Activation',complete:'Completion stage'};
     if(Object.hasOwn(phases,x.phase))box.append(n('span','prog-phase',t('Phase: {name}',{name:t(phases[x.phase])})));
     const steps=(record,historical)=>{
@@ -238,6 +236,8 @@ window.createDeckUI = function (host) {
     if(activity?.needs)parts.push(activity.needs===1?t('1 needs you'):t('{count} need you',{count:activity.needs}));
     if(c.stopping)parts.push(t('{count} stopping',{count:c.stopping}));
     if(activity?.now)parts.push(t('{count} in Now',{count:activity.now}));
+    if(activity?.queued)parts.push(t('{count} queued',{count:activity.queued}));
+    if(activity?.unconfirmed)parts.push(t('{count} unconfirmed',{count:activity.unconfirmed}));
     if(activity?.waiting)parts.push(t('{count} waiting',{count:activity.waiting}));
     if(c.unknown)parts.push(t('State not confirmed'));
     const text=[ts.length===1?t('1 task'):t('{count} tasks',{count:ts.length}),...(parts.length?parts:[c.paused?t(c.paused===ts.length&&ts.every(ownPause)?'Own pauses':'Paused'):t('No running work')])].join(' · ');
@@ -264,7 +264,9 @@ window.createDeckUI = function (host) {
     const entries=new Map(),groups=new Map();
     // Highest attention wins for an identity present in more than one list.
     for(const task of lanes.tasks.filter(x=>colOf(x)==='waiting'))entries.set(task.id,[task,'waiting']);
-    for(const task of [...lanes.run,...lanes.stopping,...lanes.ready,...lanes.unconfirmed])entries.set(task.id,[task,'now']);
+    for(const task of lanes.ready)entries.set(task.id,[task,'queued']);
+    for(const task of lanes.unconfirmed)entries.set(task.id,[task,'unconfirmed']);
+    for(const task of [...lanes.run,...lanes.stopping])entries.set(task.id,[task,'now']);
     for(const card of [...lanes.asks,...lanes.act]){
       const own=byId.get(taskNodeId(card.home,card.task));
       let task=questionNode(card)||own;
@@ -281,7 +283,7 @@ window.createDeckUI = function (host) {
       const chain=ancestors(task);
       if(task.state==='paused'||(!isStopping(task)&&chain.some(groupPaused)))continue;
       for(const group of chain.filter(x=>x.kind==='project'||x.kind==='subproject')){
-        if(!groups.has(group.id))groups.set(group.id,{needs:0,now:0,waiting:0});
+        if(!groups.has(group.id))groups.set(group.id,{needs:0,now:0,waiting:0,queued:0,unconfirmed:0});
         groups.get(group.id)[lane]++;
       }
     }
@@ -290,7 +292,7 @@ window.createDeckUI = function (host) {
   function groupRow(x, tree=false, depth=0) {
     const row=setColor(n('div','mix'),x);row.dataset.node=x.id;row.dataset.kind=x.kind==='subproject'?'sub':x.kind;row.dataset.paused=String(ownPause(x));row.dataset.on=String(ui.pin===x.id);row.dataset.filtered=String(ui.scope===x.id);row.style.setProperty('--d',depth);
     const activity=groupActivities.get(x.id);
-    row.dataset.activity=activity?.needs?'needs':activity?.now?'now':activity?.waiting?'waiting':'none';
+    row.dataset.activity=activity?.needs?'needs':activity?.now?'now':(activity?.waiting||activity?.queued||activity?.unconfirmed)?'waiting':'none';
     if(row.dataset.activity!=='none'){
       const signal=n('span','group-activity');signal.setAttribute('aria-hidden','true');signal.append(n('i'));row.append(signal);
     }
@@ -366,7 +368,7 @@ window.createDeckUI = function (host) {
   function render(force=false,mode='state') {
     if(!app.board)return;
     const cardSignature=app.board.columns.map(c=>[c.id,c.cards.map(x=>[x.key,x.title,x.question,x.question_summary,x.attention_kind,x.action,x.answered,x.project,host.cardLine(x),host.phaseText(x),x.dependencies,x.time?.epoch,x.time?.date])]);
-    const workSignature=app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.sigue]);
+    const workSignature=app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.sigue,s.retained_at && Date.now()/1000-s.retained_at>=30,s.snapshot?.nodes?.map(x=>x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30)]);
     const signature=JSON.stringify([cardSignature,workSignature,app.board.diagnostics,app.historyRows,app.query,ui.scope,ui.view,ui.column,ui.done,ui.pausedOpen,ui.mixer,[...ui.closed],[...ui.stacks],[...ui.tree],app.online]);
     if(!force&&signature===ui.signature){refreshAges();highlight();return;}ui.signature=signature;
     // A refresh may rebuild rows for unrelated detail/focus changes. Preserve
@@ -399,7 +401,7 @@ window.createDeckUI = function (host) {
     $('deck-lead').textContent=ui.scope?label(byId.get(ui.scope))+': '+lead:lead;$('deck-next').textContent=ready[0]?t('Next is {name}',{name:label(ready[0])}):t('Nothing is ready to follow.');
     $('overview').textContent='';
     const diagnostics=$('deck-diagnostics');diagnostics.replaceChildren(...(app.board.diagnostics||[]).map(d=>add(n('div','deck-diagnostic'),n('strong','',t('Inventory needs attention')),n('p','',d.owner+' · '+d.message))));diagnostics.hidden=!diagnostics.children.length;
-    const counts={needs:asks.length+act.length,now:run.length+stopping.length+ready.length+unconfirmed.length,waiting:sorted('waiting').length,paused:sorted('paused').length,done:done.length};
+    const counts={needs:asks.length+act.length,now:run.length+stopping.length,waiting:sorted('waiting').length,paused:sorted('paused').length,done:done.length};
     const columns=[['needs',t('Needs you')],['now',t('Now')],['waiting',t('Waiting')],['paused',t('Paused')],['done',t('Finished')]];
     $('columns-nav').className='mtabs';$('columns-nav').setAttribute('role','tablist');$('columns-nav').replaceChildren(...columns.map(([id,title])=>{const btn=b('',()=>{ui.column=id;render(true,'filter');});btn.setAttribute('role','tab');btn.id='state-tab-'+id;btn.tabIndex=ui.column===id?0:-1;btn.setAttribute('aria-controls','state-column-'+id);btn.dataset.kind=id;btn.setAttribute('aria-selected',String(ui.column===id));add(btn,n('b','',String(counts[id])),title);return btn;}));
     const detail=$('detail'),wasOpen=detailOpen();parkDetail();

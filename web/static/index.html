@@ -12,6 +12,7 @@
 <script src="deck-motion.js" defer></script>
 <script src="deck-relations.js" defer></script>
 <script src="deck-ui.js" defer></script>
+<script src="relay-settings.js" defer></script>
 <script src="app.js" defer></script>
 </head>
 <body>
@@ -26,6 +27,7 @@
   <input id="board-search" class="board-search" aria-label="Search board" data-i18n-aria-label="Search board" type="search" placeholder="Search…" data-i18n-placeholder="Search…" autocomplete="off">
 
   <button id="history-view" class="tool" type="button" aria-pressed="false" title="History" data-i18n-title="History"><svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.4 1.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="tool-label" data-i18n="History">History</span></button>
+  <button id="relay-settings-open" class="tool" type="button" data-i18n="Relay settings">Relay settings</button>
   <button id="refresh" class="tool" type="button" aria-label="Refresh" data-i18n-aria-label="Refresh" title="Refresh" data-i18n-title="Refresh"><span aria-hidden="true">↻</span></button>
 </header>
 <main id="workspace">
@@ -61,5 +63,18 @@
 </main>
 <footer><span class="private-mark">●</span><span data-i18n="Private view. Firstmate keeps your tasks and answers.">Private view. Firstmate keeps your tasks and answers.</span><span id="timezone"></span><label class="theme-label"><span data-i18n="Theme">Theme</span><select id="theme"><option value="system" data-i18n="System">System</option><option value="light" data-i18n="Light">Light</option><option value="dark" data-i18n="Dark">Dark</option></select></label></footer>
 </div>
+<dialog id="relay-settings-dialog" class="relay-settings" aria-labelledby="relay-settings-heading">
+  <div class="dialog-top"><h2 id="relay-settings-heading" data-i18n="Relay settings">Relay settings</h2><button id="relay-settings-close" class="close" type="button" aria-label="Close settings" data-i18n-aria-label="Close settings">✕</button></div>
+  <label class="settings-field"><span data-i18n="Coordinating space">Coordinating space</span><select id="relay-settings-home"></select></label>
+  <div id="relay-settings-content" aria-live="polite"></div>
+  <div id="relay-settings-result" role="status" aria-live="polite"></div>
+</dialog>
+<dialog id="relay-confirm-dialog" class="relay-settings" aria-labelledby="relay-confirm-heading">
+  <h2 id="relay-confirm-heading" data-i18n="Confirm relay mode">Confirm relay mode</h2>
+  <div id="relay-confirm-disclosure"></div>
+  <label class="settings-field"><span data-i18n="Confirm in your own words">Confirm in your own words</span><textarea id="relay-confirm-words" rows="3" maxlength="4000"></textarea></label>
+  <p class="muted" data-i18n="Your confirmation is saved exactly as written.">Your confirmation is saved exactly as written.</p>
+  <div class="settings-actions"><button id="relay-confirm-apply" type="button" disabled></button><button id="relay-confirm-cancel" type="button" data-i18n="Cancel">Cancel</button></div>
+</dialog>
 </body>
 </html>

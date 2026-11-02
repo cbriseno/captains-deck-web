@@ -429,3 +429,15 @@ footer{margin:0;padding:10px 24px 18px;font-size:11px}footer .theme-label{displa
 .action-card{border-inline-start:3px solid var(--amber)}
 .action-card .where{color:var(--amber)}
 .action-instruction{display:block;color:var(--ink);white-space:normal;font-weight:600;line-height:1.5}
+/* Relay preferences use the same surfaces and type as the work controls. */
+.relay-settings{color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:16px;width:min(620px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:24px;overflow:auto;box-sizing:border-box}
+.relay-settings::backdrop{background:rgb(0 0 0 / .35)}
+.relay-settings h2{margin:0;font-size:1.25rem}
+.relay-settings h3{margin:24px 0 8px;font-size:1rem}
+.relay-settings h4{margin:16px 0 6px}
+.relay-settings p{overflow-wrap:anywhere}
+.relay-settings .dialog-top{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.settings-field{display:flex;flex-direction:column;gap:6px;margin:12px 0}
+.settings-field input,.settings-field select,.relay-settings textarea{font:inherit;color:var(--ink);background:var(--canvas);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0;width:100%;box-sizing:border-box}
+.relay-settings button{font:inherit;white-space:normal}
+.relay-settings button:disabled{opacity:.6;cursor:default}

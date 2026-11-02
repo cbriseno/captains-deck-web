@@ -183,8 +183,10 @@ function sourceStatus() {
   syncSubmit();
 }
 let deckUI;
+let relaySettings;
 function renderBoard() {
   if (!S.board) return;
+  if (!relaySettings) relaySettings = window.createRelaySettings({t,node,button,api,state:S});
   if (!deckUI) deckUI = window.createDeckUI({t,node,button,append,api,ago,creationAge,exactTime,openCard,showDetail,closeDetail,detailOpen,parkDetail,state:S,
     hashOf,cardLine,phaseText,refreshTimes,sourceStatus,poll,setView,placeDetail,openDelivery,reportLink,showAnswers:async()=>{await loadReceipts();$('receipts-panel').open=true;closeDetail(false);$('receipts-panel').scrollIntoView({block:'start'});}});
   deckUI.render();

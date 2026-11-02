@@ -95,6 +95,7 @@ async function mountBoard(initial, clock = Date.UTC(2026, 0, 15, 12), tickets = 
   context.window = context;
   context.addEventListener = () => {};
   context.DeckAppearance = {apply() {},set() {}};
+  context.createRelaySettings = () => ({});
   // Isolate the retained question/report renderer. Real board behavior is
   // exercised separately through Chrome, rather than simulated by this DOM.
   context.createDeckUI = (host) => ({render() {

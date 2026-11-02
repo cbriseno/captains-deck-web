@@ -5073,14 +5073,14 @@ class UI:
 
     # -- captain's call dialog ---------------------------------------------
     def open_decision(self, card: Card) -> None:
-        if (getattr(card, 'call', None) or {}).get('kind') == 'action':
-            self.say(tr('Action required in chat: {instruction}', instruction=card.call.get('instruction', '')))
-            return
         snap = self.collector.snapshot()
         if is_remote_home(snap.home):
             # Remote homes stay read-only on the board: answering a call runs
             # the local home's intake and steer, which cannot reach that home.
             self.say(tr("remote crew · read-only on the board"))
+            return
+        if (getattr(card, 'call', None) or {}).get('kind') == 'action':
+            self.say(tr('Action required in chat: {instruction}', instruction=card.call.get('instruction', '')))
             return
         content = decision_card_content(card, snap.homes, snap.home, bearings=snap.bearings)
         self.dialog = DecisionDialog(content)

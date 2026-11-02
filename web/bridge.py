@@ -35,6 +35,7 @@ import flow_tui as fm  # noqa: E402
 from deck_platform import LOOPBACK, local_origin, endpoint_path, private_directory, safe_file_reads, shell_command
 
 from deck_control import DeckControls, ControlError
+from relay_settings import RelaySettings
 
 STATIC = HERE / 'static'
 # What needs the captain leads; the board reads left to right toward done.
@@ -344,6 +345,9 @@ class Board:
         self.data_dir = Path(data_dir).expanduser().absolute()
         self.herdr_origin = herdr_origin
         self.deck_controls = DeckControls(self.child_env)
+        self.relay_settings = RelaySettings(self.child_env, os.environ.get('CD_WEB_EXTENSIONS_ROOT', ''),
+            nodes=lambda home: self.deck_controls.source(home).get('snapshot', {}).get('nodes', []),
+            proof_dir=self.data_dir / 'settings')
         self.mutation_lock = threading.Lock()
         self.history_lock = threading.Lock()
         self.history_cache = {}
@@ -1352,6 +1356,17 @@ class Handler(BaseHTTPRequestHandler):
                 data['csrf'] = csrf
             elif not unsafe and path == '/api/history':
                 data = board.history(value('home'), value('q')[:300])
+            elif len(parts) == 3 and parts[:2] == ['api', 'settings'] and not unsafe:
+                owner = board.home(parts[2])
+                data = {'available': False, 'actions': []} if fm.is_remote_home(owner) else board.relay_settings.source(owner, value('selection'))
+            elif len(parts) == 4 and parts[:2] == ['api', 'settings']:
+                owner = board.home(parts[2])
+                if fm.is_remote_home(owner):
+                    raise Refusal('Controls require a local owner.', 403)
+                if unsafe and parts[3] in ('preview', 'apply'):
+                    data = board.relay_settings.request(owner, parts[3], body)
+                else:
+                    raise Refusal('Route unavailable.', 404)
             elif len(parts) == 4 and parts[:2] == ['api', 'control']:
                 owner = board.home(parts[2])
                 if fm.is_remote_home(owner):

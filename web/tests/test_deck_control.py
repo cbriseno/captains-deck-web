@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import test_bridge as existing
 from fixtures import fixture, bridge
-from deck_control import ControlError, project_snapshot
+from deck_control import ControlError, project_snapshot, retain_unconfirmed
 
 OWNER = '''import json,os,sys
 from pathlib import Path
@@ -37,6 +37,34 @@ def owner(home):
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_unconfirmed_observation_retains_progress_until_confirmed_transition(self):
+        def snapshot(state, progress=None):
+            return project_snapshot({'projects': [], 'subprojects': [], 'sigue': [], 'tasks': [
+                {'key': 'task:t', 'state': state, 'progress': progress,
+                 'progress_evidence': {'freshness': 'current', 'current': True} if progress else None}]})
+        initial = snapshot('running', {'done': 1, 'total': 5})
+        first = retain_unconfirmed(snapshot('unknown'), initial, 100)
+        second = retain_unconfirmed(snapshot('unknown'), first, 150)
+        self.assertEqual(second['nodes'][0]['state'], 'active')
+        self.assertEqual(second['nodes'][0]['progress']['completed'], 1)
+        self.assertEqual(second['nodes'][0]['observation_uncertain_since'], 100)
+        waiting = retain_unconfirmed(snapshot('waiting_dep'), second, 160)
+        self.assertEqual(waiting['nodes'][0]['state'], 'waiting')
+        self.assertIsNone(waiting['nodes'][0]['progress'])
+        recovered = retain_unconfirmed(snapshot('running', {'done': 2, 'total': 5}), second, 170)
+        self.assertNotIn('observation_uncertain_since', recovered['nodes'][0])
+        self.assertEqual(recovered['nodes'][0]['progress']['completed'], 2)
+
+    def test_creation_receipt_never_follows_an_earlier_update(self):
+        created = {'value': '2026-11-01T14:00:00Z', 'precision': 'instant', 'source': 'task.creation-receipt'}
+        updated = {'value': '2026-11-01T03:00:00Z', 'precision': 'instant', 'source': 'work.control'}
+        raw = {'projects': [], 'subprojects': [], 'sigue': [], 'tasks': [
+            {'key': 'task:t', 'created': created, 'updated': updated}]}
+        row = project_snapshot(raw)['nodes'][0]
+        self.assertEqual(row['created_at']['value'], updated['value'])
+        self.assertEqual(row['updated_at'], updated)
+        self.assertEqual(created['value'], '2026-11-01T14:00:00Z')
+
     def test_pending_pause_classifies_task_and_scope_consistently(self):
         raw = {'projects': [{'key': 'project:p'}],
                'subprojects': [{'key': 'subproject:s', 'parent': 'project:p'}],

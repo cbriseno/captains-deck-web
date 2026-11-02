@@ -4,6 +4,7 @@ No scheduling engine, task queue or direct backlog writes live here. The adapter
 projects versioned owner snapshots and invokes only fm-tasks-axi.sh work verbs.
 """
 import json
+from datetime import datetime
 from pathlib import Path
 import re
 import subprocess
@@ -24,6 +25,34 @@ class ControlError(Exception):
     def __init__(self, message, status=409, code='owner_failed', details=None):
         super().__init__(message)
         self.status, self.code, self.details = status, code, details or {}
+
+
+def consistent_creation(created, updated):
+    # Receipts can be written after older work-control updates. Only compare
+    # instants: date-only values do not establish an ordering within a day.
+    try:
+        if created.get('precision') == updated.get('precision') == 'instant':
+            c = datetime.fromisoformat(created['value'].replace('Z', '+00:00'))
+            u = datetime.fromisoformat(updated['value'].replace('Z', '+00:00'))
+            if c > u:
+                return dict(updated, source='work.control (creation upper bound)')
+    except (AttributeError, KeyError, TypeError, ValueError):
+        pass
+    return created
+
+
+def retain_unconfirmed(snapshot, previous, now):
+    """Keep the last confirmed running observation across uncertain reads."""
+    old = {n['id']: n for n in (previous or {}).get('nodes', [])}
+    for node in snapshot['nodes']:
+        prior = old.get(node['id'])
+        if node['kind'] != 'task' or node['state'] != 'unknown' or not prior or prior['state'] != 'active':
+            continue
+        node.update(state='active', progress=prior.get('progress'),
+                    progress_evidence=prior.get('progress_evidence'),
+                    declared_progress=prior.get('declared_progress'), phase=prior.get('phase'),
+                    observation_uncertain_since=prior.get('observation_uncertain_since') or now)
+    return snapshot
 
 
 def project_snapshot(raw):
@@ -64,7 +93,7 @@ def project_snapshot(raw):
                     'rev': row.get('rev'), 'turn': turns.get(key),
                     'role': None if kind == 'subproject' else 'public-fork' if row.get('visibility') == 'public' else 'installed-private' if row.get('visibility') == 'private' and key in installed else row.get('visibility'),
                     'installs': row.get('installs'),
-                    'created_at': row.get('created'), 'updated_at': row.get('updated'), 'completed_at': row.get('completed'),
+                    'created_at': consistent_creation(row.get('created'), row.get('updated')) if kind == 'task' else row.get('created'), 'updated_at': row.get('updated'), 'completed_at': row.get('completed'),
                     'pause': {'own': user_pause, 'can_resume': user_pause, 'can_pause': not foreign_hold or structured_pause and 'condition' in pause,
                               'condition': (pause.get('condition') if structured_pause else None) or (own_pause if foreign_hold else None), 'inherited': [inherited['from']] if isinstance(inherited, dict) and inherited.get('from') else [],
                               'state': pause.get('safe_point') if isinstance(pause, dict) else None,
@@ -186,11 +215,9 @@ class DeckControls:
                     raise ControlError('Firstmate snapshot is incomplete.', 503, 'invalid-response')
                 # Unsupported operations disable their controls individually.
                 actions = [action for action, op in ACTION_OP.items() if op in capabilities['ops']]
-                data = {'available': True, 'capabilities': dict(capabilities, actions=actions), 'snapshot': project_snapshot(raw)}
-            except (KeyError, TypeError, ValueError) as exc:
-                data = {'available': False, 'error': 'Firstmate snapshot is incomplete.', 'code': 'invalid-response'}
-            except ControlError as exc:
-                data = {'available': False, 'error': str(exc), 'code': exc.code}
+                data = {'available': True, 'capabilities': dict(capabilities, actions=actions), 'snapshot': retain_unconfirmed(project_snapshot(raw), (data or {}).get('snapshot'), time.time())}
+            except (KeyError, TypeError, ValueError, ControlError) as exc:
+                data = {'available': False, 'error': str(exc) if isinstance(exc, ControlError) else 'Firstmate snapshot is incomplete.', 'code': exc.code if isinstance(exc, ControlError) else 'invalid-response'}
                 previous = self.cache.get(home.path, (0, {}))[1]
                 if previous.get('snapshot'):
                     data['snapshot'] = previous['snapshot']
