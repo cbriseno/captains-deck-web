@@ -5,6 +5,33 @@ This is a derivative of [deimantasnork/captains-deck](https://github.com/deimant
 Compared with upstream, this distribution adds a standalone web entry point, guarded work controls, delivery history, explicit localization and generic trusted-proxy authentication.
 It contains no image assets, bundled fonts or installation-specific data.
 
+## Required versus optional tools
+
+The standalone board requires an already approved Python 3.11+ with its standard
+library. A modern browser is needed to use the UI; Safari is normally supplied
+by macOS but its minimum version is unknown. Python of the required version is
+not assured on a managed Mac. Firstmate supplies live data and controls; Herdr
+and the relay extension are optional integrations. Node and pytest are only
+needed for the development checks below, which also use existing locked Node test
+dependencies. Exact lower versions are unknown unless stated below.
+
+Run the read-only inventory from the source root:
+
+```sh
+python3 -B scripts/check_tools.py
+```
+
+If `python3` is absent, the shell reports that before the check can run. READY
+covers the standalone runtime only; optional integrations require their own checks.
+
+## macOS
+
+Linux is verified. macOS is supported by design but is not accepted until the
+inventory and documented tests run on the target Mac. Use already approved tools;
+no root or new dependencies are required for standalone operation. Temporary
+files use the standard temporary directory and respect a writable `TMPDIR`.
+Native integration, permissions and producer behavior still need Mac validation.
+
 ## Install and run
 
 Production requires Python 3.11 or newer; it uses only the standard library and requires no Node packages or build step.
@@ -49,11 +76,9 @@ The optional terminal plugin declares Herdr 0.9.0 or newer, Bash and Python 3.11
 Its source and manifest are included; live plugin activation is outside the web distribution’s acceptance tests.
 It uses the same plugin ID as upstream, so install only one variant.
 
-Install the locked Node test dependencies:
-
-```sh
-npm ci --prefix tests --ignore-scripts --no-audit --no-fund
-```
+The full development suite requires pytest and the locked Node test dependencies
+to be already available and approved. Do not install packages on a managed image.
+If they are absent, record the affected checks as unavailable.
 
 The recorded producer inputs are materialized into temporary runtime directories for contract checks; generated runtime files never enter the source tree.
 The Python suite also needs pytest 9.0.2 in your chosen development environment.
@@ -72,6 +97,6 @@ python3 tests/check_fixture.py
 ```
 
 Linux is the verified environment.
-macOS and Windows/WSL are portability targets, not validated platforms for this distribution.
+macOS and Windows/WSL are not yet validated platforms for this distribution.
 Native Windows can host an empty web UI; Firstmate integration and the terminal plugin require a POSIX environment.
 Relay settings are available through an optional Firstmate extensions checkout; automatic relay remains off by default. This distribution contains no relay engine, push-notification sender or installable PWA.
