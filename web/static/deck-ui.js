@@ -317,7 +317,7 @@ window.createDeckUI = function (host) {
     add(row,name,priority(x),pauseButton(x),detail);row.setAttribute('data-group-action','');row.title=t('Keep the pointer still to focus. Click to filter tasks.');row.addEventListener('click',e=>{if(e.target.closest('button,input,select,a,summary,details,#detail'))return;filterAction();});wireEvents(row,x.id);return row;
   }
   function mixer() {
-    const root=$('project-mixer'),projects=model.nodes.filter(x=>x.kind==='project'&&tasksOf(x).some(t=>t.state!=='done')),allExpanded=projects.every(p=>!ui.closed.has(p.id));
+    const root=$('project-mixer'),projects=model.nodes.filter(x=>x.kind==='project'),allExpanded=projects.every(p=>!ui.closed.has(p.id));
     const toggle=b(allExpanded?t('Collapse groups'):t('Expand groups'),()=>{for(const p of projects)allExpanded?ui.closed.add(p.id):ui.closed.delete(p.id);save('deck-closed',[...ui.closed]);render(true,'filter');},'more');toggle.dataset.control='all-groups';toggle.setAttribute('aria-expanded',String(allExpanded));
     const tools=add(n('div','mix-tools'),n('span','',t('Projects')),toggle);const groups=projects.map(project=>{const group=n('div','mix-group');group.append(groupRow(project));if(!ui.closed.has(project.id))for(const sub of model.nodes.filter(x=>x.kind==='subproject'&&x.parent===project.id))group.append(groupRow(sub));return group;});
     root.replaceChildren(tools,...groups);root.dataset.open=String(ui.mixer);
