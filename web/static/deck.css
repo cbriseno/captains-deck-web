@@ -113,11 +113,11 @@ svg.links path.freed{stroke:var(--teal)}
 .page.wide{max-width:1400px;padding:0 24px 24px}
 .page.wide{max-width:1560px}
 .top,.foot{max-width:1560px;padding-left:24px;padding-right:24px}
-.row-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:20px 0 14px}
+.row-hero{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;padding:20px 0 14px}.row-hero>div{min-width:0;max-width:100%}#deck-lead,#deck-next{overflow-wrap:anywhere}
 .scope{min-height:36px;max-width:260px;border:1px solid var(--line);border-radius:9px;background:var(--surface);padding:4px 8px;flex:none;min-width:0}
 .scope-bar{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;margin-bottom:12px;padding:8px 12px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
 .scope-bar .meta{flex:1}
-.deck{display:grid;grid-template-columns:300px minmax(0,1fr);gap:48px;align-items:start}
+.deck{display:grid;grid-template-columns:300px minmax(0,1fr);gap:48px;align-items:start}.main{min-width:0}
 .mixer{display:grid;gap:10px;min-width:0}
 .plabel{position:relative;display:inline-flex;align-items:center;gap:3px;flex:none;font-size:12px;font-weight:700;color:var(--muted);padding:3px 7px;border-radius:7px;cursor:pointer;min-height:28px}
 .plabel:hover{background:var(--neutral)}
@@ -148,6 +148,7 @@ html[data-deck-hidden=true] .mix>.group-activity>i{animation-play-state:paused}
 .mix-label{font-size:12.5px;line-height:15px;font-weight:550;overflow-wrap:anywhere}
 .mix[data-kind=project] .mix-label{font-size:13.5px;font-weight:750}
 .mix-wait{font-size:11px;color:var(--amber);line-height:13px}
+.mix-visibility{font-size:11px;color:var(--muted);line-height:13px;overflow-wrap:anywhere}
 .minibar{display:flex;gap:1px;height:4px;border-radius:2px;overflow:hidden;background:var(--neutral);width:100%;max-width:130px}
 .minibar i{display:block}
 .minibar [data-k=active]{background:var(--teal)}.minibar [data-k=stopping]{background:var(--amber)}.minibar [data-k=ready]{background:var(--blue)}.minibar [data-k=waiting]{background:var(--wait)}.minibar [data-k=paused]{background:var(--pause)}
@@ -236,7 +237,7 @@ html[data-deck-hidden=true] .mix>.group-activity>i{animation-play-state:paused}
 .mix-pause{width:28px;height:26px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--muted);font-size:9px;padding:0;flex:none}
 .mix-pause[aria-pressed=true]{background:var(--pause);border-color:var(--pause);color:var(--surface)}
 .board{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:18px;align-items:start;min-width:0}
-.dates{font-size:10.5px;line-height:14px;color:var(--muted);font-variant-numeric:tabular-nums}
+.dates{min-width:0;font-size:10.5px;line-height:14px;color:var(--muted);font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
 .modes{display:flex;gap:1px;padding:2px;border-radius:9px;background:var(--neutral);flex:none}
 .modes button{border:0;background:transparent;border-radius:7px;font-size:12px;font-weight:650;color:var(--muted);padding:3px 8px;min-height:28px}
 .modes button[aria-pressed=true]{background:var(--surface);color:var(--ink)}
@@ -259,9 +260,9 @@ html[data-deck-hidden=true] .mix>.group-activity>i{animation-play-state:paused}
 .card .deps li{flex-wrap:wrap;gap:2px 8px}
 .card .link{flex-basis:100%}
 .col{min-width:0}
-.col-h{display:flex;align-items:center;gap:8px;padding:0 4px 10px}
-.col-h h2{font-size:13px;font-weight:750}
-.col-h .n{margin-left:auto;font-size:12px;color:var(--muted)}
+.col-h{display:flex;align-items:center;gap:8px;min-height:38px;padding:0 4px 10px}
+.col-h h2{min-width:0;font-size:13px;font-weight:750;overflow-wrap:anywhere}
+.col-h .n{margin-left:auto;font-size:12px;color:var(--muted);flex:none}
 .sdot[data-k=now],.sdot[data-k=active]{background:var(--teal)}.sdot[data-k=waiting]{background:var(--wait)}.sdot[data-k=paused]{background:var(--pause)}
 .cards{display:grid;gap:8px}
 .card{position:relative;background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:0;transition:opacity .15s;box-shadow:inset 3px 0 var(--pc,transparent)}
@@ -272,6 +273,7 @@ html[data-deck-hidden=true] .mix>.group-activity>i{animation-play-state:paused}
 .card[data-dim]{opacity:.28}
 .card[data-state=paused]{background:transparent}
 .card-open{display:grid;gap:3px;width:100%;border:0;background:transparent;text-align:left;padding:10px 12px 12px;border-radius:12px;min-width:0}
+.card-open>*{min-width:0}
 .card-top{display:flex;align-items:center;gap:6px;min-height:18px;padding-right:62px;min-width:0}
 .card[draggable=true]:hover .card-top{padding-right:128px}
 .card-top .where{overflow:visible;text-overflow:clip;white-space:normal;display:block;min-width:0}

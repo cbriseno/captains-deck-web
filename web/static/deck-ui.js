@@ -32,12 +32,19 @@ window.createDeckUI = function (host) {
   const keyOf = (home, id) => home + ':' + id;
   const taskNodeId = (home,task) => model.nodes.find(x=>x.home===home&&x.kind==='task'&&x.task===task)?.id || keyOf(home,task);
   const label = x => x?.card?.title || x?.title || x?.label || t('Not recorded.');
-  const objectId=x=>x?.alias||x?.raw?.alias||x?.card?.alias||'';
+  const objectId=x=>window.DeckState.identity(x);
   const idBadge=x=>n('span','node-id',objectId(x)?'ID: '+objectId(x):t('ID pending'));
   const ancestors = x => { const out = [], seen = new Set(); for (let p = x; p && !seen.has(p.id); p = byId.get(p.parent)) {out.unshift(p);seen.add(p.id);} return out; };
   const tasksOf = x => model.nodes.filter(y => y.kind === 'task' && ancestors(y).some(z => z.id === x.id));
   const projectOf = x => ancestors(x).find(y => y.kind === 'project');
   const pathOf = x => ancestors(x).filter(y => y.id !== x.id).map(label).join(' · ');
+  function projectLabel(x) {
+    const declared=x.card?.project||x.card?.flow?.project||x.flow?.project||x.raw?.project;
+    const rawId=typeof declared==='string'?declared:declared?.id;
+    const id=rawId?(String(rawId).startsWith('project:')?String(rawId):'project:'+rawId):'';
+    const group=id?(byId.get(keyOf(x.home,id))||byId.get(id)):null;
+    return (group&&label(group))||(typeof declared==='object'&&declared?.label)||'';
+  }
   // Unknown observation is not an explicit dependency/hold. It has its own
   // subgroup and never contributes to the confirmed work count.
   const isStopping = x => x.kind === 'task' && x.state === 'stopping';
@@ -87,6 +94,7 @@ window.createDeckUI = function (host) {
       }
       for (const e of snap.edges || []) edges.push({...e,from:keyOf(source.home,e.from),to:keyOf(source.home,e.to)});
     }
+    window.DeckState.reconcileProjects(nodes,keyOf);
     const existing = new Set(nodes.filter(x => x.kind === 'task').map(x => keyOf(x.home,x.task || x.owner_id)));
     for (const c of cards) {
       if (existing.has(keyOf(c.home,c.task))) continue;
@@ -196,7 +204,9 @@ window.createDeckUI = function (host) {
     box.dataset.freshness=observationStale?'stale':freshness;
     if(current&&measured){
       const pct=Math.round(completed/total*100),bar=n('span','prog-bar'),fill=n('i');fill.style.width=pct+'%';bar.append(fill);
-      bar.setAttribute('role','progressbar');bar.setAttribute('aria-valuenow',pct);bar.setAttribute('aria-valuemin','0');bar.setAttribute('aria-valuemax','100');bar.setAttribute('aria-label',t('Reported progress'));box.append(bar,structural(n('span','prog-txt',`${pct}% · ${completed}/${total} ${t('steps')}`)));
+      bar.setAttribute('role','progressbar');bar.setAttribute('aria-valuenow',pct);bar.setAttribute('aria-valuemin','0');bar.setAttribute('aria-valuemax','100');bar.setAttribute('aria-label',t('Reported progress'));
+      const completionNote=window.DeckState.completionNote(pct,x.state)?` · ${t('all declared steps; task not finished')}`:'';
+      box.append(bar,structural(n('span','prog-txt',`${pct}% · ${completed}/${total} ${t('steps')}${completionNote}`)));
     }else{
       const messages={stale:'Progress needs an update.',missing:'No progress declared yet.',unknown:'Progress is not confirmed.',invalid:'The progress declaration is invalid.',unmeasured:'No measured steps yet.'};
       box.append(n('span','prog-txt',t(messages[freshness])));
@@ -301,7 +311,7 @@ window.createDeckUI = function (host) {
     if(tree || x.kind==='project'){const fold=b(closed?'▸':'▾',()=>{const set=tree?ui.tree:ui.closed;if(set.has(x.id))set.delete(x.id);else set.add(x.id);save('deck-closed',[...ui.closed]);render(true,'filter');},'fold-btn');fold.setAttribute('aria-label',t(closed?'Expand {name}':'Collapse {name}',{name:label(x)}));fold.setAttribute('aria-expanded',String(!closed));fold.dataset.control='fold:'+(tree?'tree:':'mixer:')+x.id;row.append(fold);}
     const filterAction=()=>{ui.scope=ui.scope===x.id?'':x.id;ui.pin=ui.focus?x.id:'';ui.selected='';ui.hover='';closeDetail(false);render(true,'filter');announceFocus(ui.pin,label(x));};
     const name=b('',()=>{if(tree)openNode(x,name);else filterAction();},'mix-name');name.setAttribute('aria-pressed',String(ui.scope===x.id));name.title=t('Click to filter tasks. Keep the pointer still to focus.');add(name,n('span','mix-label',label(x)),idBadge(x),summary(x),dates(x));
-    if(x.role)name.append(n('span','mix-wait',x.role==='public-fork'?t('Public fork'):x.role==='installed-private'?t('Installed private project'):x.role==='private'?t('Private project'):x.role==='unknown'?t('Visibility not reported'):x.role));
+    if(x.kind==='project'){const role=x.role||'unknown',known=role!=='unknown';name.append(n('span',known?'mix-wait':'mix-visibility',role==='public-fork'?t('Public fork'):role==='installed-private'?t('Installed private project'):role==='private'?t('Private project'):role==='unknown'?t('Visibility unknown'):role));}
     const deps=model.edges.filter(e=>e.from===x.id&&!e.completed);if(deps.length)name.append(n('span','mix-wait',t('Waits for {name}',{name:deps.map(e=>label(byId.get(e.to))).join(', ')})));
     const detail=b('⋯',()=>openNode(x,detail),'mix-pause');detail.setAttribute('aria-label',t('Details of {name}',{name:label(x)}));
     add(row,name,priority(x),pauseButton(x),detail);row.setAttribute('data-group-action','');row.title=t('Keep the pointer still to focus. Click to filter tasks.');row.addEventListener('click',e=>{if(e.target.closest('button,input,select,a,summary,details,#detail'))return;filterAction();});wireEvents(row,x.id);return row;
@@ -321,7 +331,7 @@ window.createDeckUI = function (host) {
   function taskCard(x, turn, list=[]) {
     const card=setColor(n('article','task-card card'+(x.state==='done'?' done-card':'')),x);card.dataset.node=x.id;card.dataset.key=x.card?.key || x.id;card.dataset.state=x.state;card.dataset.open=String(ui.selected===x.id);
     const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}openNode(x,face);},'card-open');face.dataset.key=card.dataset.key;face.setAttribute('aria-expanded',String(ui.selected===x.id));face.setAttribute('aria-controls','detail');
-    const top=add(n('span','card-top'),turn !== undefined?structural(n('span','turn',String(x.turn || turn+1))):null,n('span','where',pathOf(x)||x.card?.project?.label||t('Project not reported')));
+    const top=add(n('span','card-top'),turn !== undefined?structural(n('span','turn',String(x.turn || turn+1))):null,n('span','where',pathOf(x)||projectLabel(x)||t('Project not reported')));
     add(face,top,n('span','title',label(x)),idBadge(x));
     if(x.state==='done'){face.append(time('Completed',x.completed_at));const pending=questions().filter(c=>{const own=byId.get(taskNodeId(c.home,c.task));return own?.question?.origin_task===x.owner_id;});if(pending.length)face.append(structural(n('span','deck-origin',t('Origin delivered · {count} open decisions',{count:pending.length}))));}else{const reason=pauseText(x)||waitingText(x);if(reason){const line=n('span','meta card-line',reason);if(x.reason_time&&reason===x.reason)structural(line,'time');face.append(line);}if(questions().some(c=>questionNode(c)?.id===x.id))face.append(n('span','has-q',t('Has a question for you')));add(face,progress(x),dates(x));}
     const more=add(n('div','card-more'),n('div','card-more-inner'));add(card,face,more);

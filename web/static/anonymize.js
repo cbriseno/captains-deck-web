@@ -6,7 +6,7 @@ window.DeckAnonymize = (() => {
   const words = {en: ['amber', 'cloud', 'orbit', 'tile', 'wave', 'echo'], es: ['ámbar', 'nube', 'órbita', 'pieza', 'onda', 'eco']};
   const provenance = new WeakMap(), records = new Map(), generated = new WeakSet(), roots = new Set();
   const times = new Set(), selectWidths = new WeakMap();
-  const candidateWidths = new Map(), candidates = new Map(), context = document.createElement('canvas').getContext('2d');
+  const candidateWidths = new Map(), context = document.createElement('canvas').getContext('2d');
   let active = false, started = false, internal = false, language = 'en', known = new Set(), templates = [];
   let revision = 0, processing = false, savedVisibility = '', metrics = {};
   const pending = new Set(), frame = () => new Promise(resolve => requestAnimationFrame(resolve));
@@ -52,10 +52,10 @@ window.DeckAnonymize = (() => {
     return [{text, safe: false}];
   }
   function fake(text) {
-    return text.replace(/[^\s\-\u00ad/]+/gu, token => {
-      const length = Math.min([...token].length, 64), index = hash(token) % words[language].length, key = language + ':' + length + ':' + index;
-      if (!candidates.has(key)) candidates.set(key, [...words[language][index].repeat(length)].slice(0, length).join(''));
-      let replacement = candidates.get(key); if (replacement === token) replacement = language === 'es' ? 'nube' : 'tile';
+    return text.replace(/[\p{L}\p{N}]+/gu, token => {
+      const index = hash(token) % words[language].length;
+      let replacement = words[language][index];
+      if (replacement === token) replacement = words[language][(index + 1) % words[language].length];
       return replacement;
     });
   }
@@ -79,34 +79,48 @@ window.DeckAnonymize = (() => {
     if (parsed.every(p => p.safe)) return null;
     const css = getComputedStyle(parent), range = document.createRange(); range.selectNodeContents(node);
     const rects = [...range.getClientRects()].filter(r => r.width && r.height);
-    return {node, parent, source, parsed, font: css.font, spacing: parseFloat(css.letterSpacing) || 0,
-      width: rects.length === 1 ? rects[0].width : null, available: parent.clientWidth, wrap: css.overflowWrap, wordBreak: css.wordBreak, svgWidth: parent.getComputedTextLength?.(),
+    let block = parent;
+    while (block && !/^(block|flow-root|flex|grid|list-item|table-cell)$/.test(getComputedStyle(block).display)) block = block.parentElement;
+    const blockRect = block?.getBoundingClientRect();
+    return {node, parent, source, parsed, font: css.font, spacing: parseFloat(css.letterSpacing) || 0, textTransform: css.textTransform,
+      block, blockWidth: blockRect?.width, blockHeight: blockRect?.height, available: parent.clientWidth, wrap: css.overflowWrap, wordBreak: css.wordBreak, svgWidth: parent.getComputedTextLength?.(),
       simple: parent.namespaceURI === 'http://www.w3.org/2000/svg' || !!parent.closest('option,textarea')};
   }
-  // CALCULATE: canvas metrics and detached fragments; no attached DOM writes.
+  // CALCULATE: measure original words from live text ranges before any mutation.
   function calculate(job) {
     const {parent, source, parsed, font, spacing} = job;
     if (job.simple) return {...job, replacement: parsed.map(p => p.safe ? p.text : fake(p.text)).join('')};
     context.font = font;
     const fragment = document.createDocumentFragment(), nodes = [];
-    const reserve = (source, replacement, width) => {
-      const key = JSON.stringify([language, font, spacing, replacement.length, replacement]);
-      let replacementWidth = candidateWidths.get(key);
-      if (replacementWidth === undefined) { replacementWidth = context.measureText(replacement).width + [...replacement].length * spacing; if (replacement.length < 512) { if (candidateWidths.size >= 1024) candidateWidths.delete(candidateWidths.keys().next().value); candidateWidths.set(key, replacementWidth); } }
-      const outer = document.createElement('span'), inner = document.createElement('span');
-      outer.dataset.anonWord = ''; outer.style.width = width + 'px';
-      inner.style.whiteSpace = 'pre'; inner.textContent = replacement; inner.style.transform = `scaleX(${replacementWidth ? width / replacementWidth : 1})`;
-      outer.append(inner); fragment.append(outer); nodes.push(outer); generated.add(outer);
+    const sourceWidth = (start, length) => {
+      const range = document.createRange(); range.setStart(job.node, start); range.setEnd(job.node, start + length);
+      return [...range.getClientRects()].filter(r => r.width && r.height).reduce((sum, r) => sum + r.width, 0);
     };
-    if (job.width !== null) reserve(source, parsed.map(p => p.safe ? p.text : fake(p.text)).join(''), job.width);
-    else for (const part of parsed) {
+    const shown = value => job.textTransform === 'uppercase' ? value.toLocaleUpperCase(language) : job.textTransform === 'lowercase' ? value.toLocaleLowerCase(language) : job.textTransform === 'capitalize' ? value.replace(/\b\p{L}/gu, x => x.toLocaleUpperCase(language)) : value;
+    const widthOf = value => context.measureText(shown(value)).width + Math.max(0, [...shown(value)].length - 1) * spacing;
+    const reserve = (replacement, width) => {
+      const choices = words[language].map((_, i) => words[language][(hash(replacement) + i) % words[language].length]);
+      let candidate = choices.filter(value => widthOf(value) <= width + .25).sort((a, b) => widthOf(b) - widthOf(a))[0];
+      if (!candidate) {
+        const base = choices[0], graphemes = [...new Intl.Segmenter(language, {granularity: 'grapheme'}).segment(base)].map(x => x.segment);
+        for (let n = graphemes.length - 1; n > 0; n--) { const shorter = graphemes.slice(0, n).join(''); if (widthOf(shorter) <= width + .25) { candidate = shorter; break; } }
+      }
+      candidate ||= choices.at(-1);
+      const outer = document.createElement('span'); outer.dataset.anonWord = ''; outer.style.display = 'inline-block'; outer.style.verticalAlign = 'baseline'; outer.style.lineHeight = 'inherit'; outer.style.height = 'auto'; outer.style.width = width + 'px'; outer.style.minWidth = '0'; outer.style.maxWidth = width + 'px'; outer.style.whiteSpace = 'nowrap'; outer.style.overflow = 'clip'; outer.textContent = candidate;
+      fragment.append(outer); nodes.push(outer); generated.add(outer);
+    };
+    let offset = 0;
+    for (const part of parsed) {
+      const partStart = offset; offset += part.text.length;
       if (part.safe) { const n = document.createTextNode(part.text); generated.add(n); fragment.append(n); nodes.push(n); continue; }
       const segmenter = new Intl.Segmenter(language, {granularity: 'word'});
-      const tokens = [...segmenter.segment(part.text)].flatMap(({segment}) => ((job.wrap === 'anywhere' || job.wordBreak === 'break-all') && job.available > 0 && context.measureText(segment).width > job.available) ? [...new Intl.Segmenter(language, {granularity: 'grapheme'}).segment(segment)].map(x => x.segment) : [segment]);
-      for (const token of tokens) {
+      let tokenOffset = 0;
+      for (const {segment: token, isWordLike} of segmenter.segment(part.text)) {
         if (!token) continue;
-        if (/^[\s\-\u00ad/]+$/u.test(token)) { const n = document.createTextNode(token); generated.add(n); fragment.append(n); nodes.push(n); continue; }
-        reserve(token, fake(token), context.measureText(token).width + [...token].length * spacing);
+        if (!isWordLike || /^[\s\-\u00ad/]+$/u.test(token)) { const n = document.createTextNode(token); generated.add(n); fragment.append(n); nodes.push(n); tokenOffset += token.length; continue; }
+        const width = sourceWidth(partStart + tokenOffset, token.length);
+        if (width > 0) reserve(token, width); else { const n = document.createTextNode(fake(token)); generated.add(n); fragment.append(n); nodes.push(n); }
+        tokenOffset += token.length;
       }
     }
     const marker = document.createTextNode(''); generated.add(marker); fragment.prepend(marker);
@@ -121,7 +135,13 @@ window.DeckAnonymize = (() => {
         parent.setAttribute('textLength', job.svgWidth); parent.setAttribute('lengthAdjust', 'spacingAndGlyphs');
       }
       remember(node, 'text', source, job.replacement); node.data = job.replacement;
-    } else { remember(job.marker, 'nodes', source, job.nodes); node.replaceWith(job.fragment); }
+    } else {
+      if (job.block?.isConnected && Number.isFinite(job.blockHeight) && job.blockHeight > 0 && !records.get(job.block)?.has('layout-style')) {
+        const style = job.block.style; remember(job.block, 'layout-style', {width:[style.width,style.getPropertyPriority('width')],minWidth:[style.minWidth,style.getPropertyPriority('min-width')],maxWidth:[style.maxWidth,style.getPropertyPriority('max-width')],minHeight:[style.minHeight,style.getPropertyPriority('min-height')],maxHeight:[style.maxHeight,style.getPropertyPriority('max-height')],overflow:[style.overflow,style.getPropertyPriority('overflow')]}, true);
+        if (Number.isFinite(job.blockWidth) && job.blockWidth > 0) { style.width = job.blockWidth + 'px'; style.minWidth = job.blockWidth + 'px'; style.maxWidth = job.blockWidth + 'px'; } style.minHeight = job.blockHeight + 'px'; style.maxHeight = job.blockHeight + 'px'; style.overflow = 'clip';
+      }
+      remember(job.marker, 'nodes', source, job.nodes); node.replaceWith(job.fragment);
+    }
   }
   function element(el) {
     if (generated.has(el) || el.closest('script,style,noscript,[data-anon-word]')) return;
@@ -220,6 +240,7 @@ window.DeckAnonymize = (() => {
         if (key === 'nodes') { if (el.isConnected) { for (const n of r.masked) n.remove(); el.replaceWith(document.createTextNode(r.original)); } }
         else if (key === 'text') { if (el.data === r.masked) el.data = r.original; }
         else if (key === 'select-width') { el.style.width = r.original; }
+        else if (key === 'layout-style') { for (const [name, saved] of Object.entries(r.original)) { const cssName = name.replace(/[A-Z]/g, x => '-' + x.toLowerCase()); if (saved[0]) el.style.setProperty(cssName, saved[0], saved[1]); else el.style.removeProperty(cssName); } }
         else if (key === 'selection') { /* Restore after all option values. */ }
         else if (key === 'svg-width') { for (const [i, attr] of ['textLength', 'lengthAdjust'].entries()) if (r.original[i] === null) el.removeAttribute(attr); else el.setAttribute(attr, r.original[i]); }
         else if (key === 'readonly') { if ('readOnly' in el) el.readOnly = r.original.readOnly; if (r.original.aria === null) el.removeAttribute('aria-readonly'); else el.setAttribute('aria-readonly', r.original.aria); }

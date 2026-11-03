@@ -85,12 +85,15 @@ test('anonymize: deny unknown DOM data, restore, geometry, late updates and scal
       run('resize',viewport.map(String));
       const result=evaluate(`async()=>{
         const fixture=document.createElement('section');fixture.style.cssText='width:min(92vw,600px);font:16px ${font};line-height:1.5';document.body.prepend(fixture);
-        for(const source of ['A synthetic conversation with several words and narrow iii wide WWW glyphs.','Otro ejemplo inventado para medir saltos entre palabras de diferentes tamaños.','Accented café, Unicode 日本語 and a second line\\nwith a file-name/example.','W'.repeat(90),'日本語の合成テキスト'.repeat(12)]){const p=document.createElement('p');p.textContent=source;p.style.whiteSpace='pre-wrap';p.style.overflowWrap='anywhere';fixture.append(p);}
+        for(const source of ['A synthetic conversation with several words and narrow iii wide WWW glyphs.','Otro ejemplo inventado para medir saltos entre palabras de diferentes tamaños.','Accented café, Unicode 日本語 and a second line\\nwith a file-name/example.','W'.repeat(90),'日本語の合成テキスト'.repeat(12),'cloudcloud wavewavew echoecho orbitorb- amberam week4 minutes ago']){const p=document.createElement('p');p.textContent=source;p.style.whiteSpace='pre-wrap';p.style.overflowWrap='anywhere';fixture.append(p);}
         const rects=()=>[...fixture.children].map(el=>{const r=el.getBoundingClientRect();const walker=document.createTreeWalker(el,NodeFilter.SHOW_TEXT),lines=[];while(walker.nextNode()){if(!walker.currentNode.data.trim())continue;const range=document.createRange();range.selectNodeContents(walker.currentNode);for(const r of range.getClientRects())if(r.width>0&&r.height>0)lines.push(Math.round(r.top));}return {x:r.x,y:r.y,w:r.width,h:r.height,lines:new Set(lines).size};});
-        const before=rects();await DeckAnonymize.set(true);const after=rects();await DeckAnonymize.set(false);fixture.remove();return {before,after};
+        const before=rects();await DeckAnonymize.set(true);const after=rects(),masked=fixture.lastElementChild.textContent,maskedTokens=masked.split(/\\s+/).map(x=>x.normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z]/gi,''));await DeckAnonymize.set(false);fixture.remove();return {before,after,masked,maskedTokens};
       }`);
       evidence.layout.push({viewport,font,...result});
-      for(let i=0;i<result.before.length;i++)for(const key of ['x','y','w','h','lines'])assert.ok(Math.abs(result.before[i][key]-result.after[i][key])<=Math.max(key==='lines'?0:1,Math.abs(result.before[i][key])*.02),JSON.stringify({viewport,font,key,...result}));
+      for(let i=0;i<result.before.length;i++)for(const key of ['x','y','w','h'])assert.ok(Math.abs(result.before[i][key]-result.after[i][key])<=Math.max(key==='lines'?0:1,Math.abs(result.before[i][key])*.02),JSON.stringify({viewport,font,key,...result}));
+      const words=env.CD_WEB_LANGUAGE==='es'?['ambar','nube','orbita','pieza','onda','eco','minutes','ago']:['amber','cloud','orbit','tile','wave','echo','minutes','ago'];
+      assert.equal(result.maskedTokens.length,8,JSON.stringify({viewport,font,...result}));
+      assert.ok(result.maskedTokens.every(word=>words.includes(word)),JSON.stringify({viewport,font,...result}));
     }
     evidence.performance=[];
     for(const rows of (process.env.CD_TEST_ANON_FUNCTIONAL ? [] : [500,2000]))evidence.performance.push(evaluate(`async()=>{

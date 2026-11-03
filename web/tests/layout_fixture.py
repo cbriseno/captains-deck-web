@@ -22,6 +22,10 @@ _, home = fixture(root)
 f = bridge.fm
 now = time.time()
 data = activity_fleet.payload(now, True)
+# Match the reported board's four concurrently running tasks while retaining
+# the separate waiting, paused, ready and finished lanes from the fixture.
+data['in_flight'] = data['in_flight'][:4]
+data['in_flight'][3]['flow']['project'] = {'id': 'firstmate'}
 (Path(home.path) / 'data/relay-0b').mkdir(parents=True, exist_ok=True)
 (Path(home.path) / 'data/relay-0b/report.md').write_text('# Informe\n\n## Resultado\nLa medición quedó lista.\n')
 
@@ -74,7 +78,7 @@ snap = f.Snapshot(); snap.homes = f.inject_all_crew([home]); snap.home = snap.ho
 snap.cols, snap.totals = f.make_cards(home, data, {}, {}, {}, snap.homes)
 board = bridge.Board(root / 'web-data', '', FakeCollector(snap, {home.label: (data, now, home.path)}), language=language)
 with socket.socket() as probe:
-    probe.bind((bridge.LOOPBACK, 0)); port = probe.getsockname()[1]
-server = bridge.Server((bridge.LOOPBACK, port), board, bridge.Security(port))
-print(f'URL {bridge.local_origin(port)}/', flush=True)
+    probe.bind(('127.0.0.1', 0)); port = probe.getsockname()[1]
+server = bridge.Server(('127.0.0.1', port), board, bridge.Security(port))
+print(f'URL http://127.0.0.1:{port}/', flush=True)
 server.serve_forever()
