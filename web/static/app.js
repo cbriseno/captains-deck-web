@@ -148,7 +148,7 @@ function syncSubmit() {
 }
 const retryable = (message) => Object.assign(new Error(message), {retry: true});
 async function api(path, body) {
-  if (body && window.DeckAnonymize?.enabled) throw new Error(t('Editing is unavailable in Anonymize mode.'));
+  if (body && path !== '/api/diagnostics/export' && window.DeckAnonymize?.enabled) throw new Error(t('Editing is unavailable in Anonymize mode.'));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), body ? 100000 : 20000);
   try {
