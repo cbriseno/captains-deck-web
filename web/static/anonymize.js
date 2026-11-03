@@ -98,15 +98,14 @@ window.DeckAnonymize = (() => {
     };
     const shown = value => job.textTransform === 'uppercase' ? value.toLocaleUpperCase(language) : job.textTransform === 'lowercase' ? value.toLocaleLowerCase(language) : job.textTransform === 'capitalize' ? value.replace(/\b\p{L}/gu, x => x.toLocaleUpperCase(language)) : value;
     const widthOf = value => context.measureText(shown(value)).width + Math.max(0, [...shown(value)].length - 1) * spacing;
+    let previousWord = null;
     const reserve = (replacement, width) => {
       const choices = words[language].map((_, i) => words[language][(hash(replacement) + i) % words[language].length]);
-      let candidate = choices.filter(value => widthOf(value) <= width + .25).sort((a, b) => widthOf(b) - widthOf(a))[0];
-      if (!candidate) {
-        const base = choices[0], graphemes = [...new Intl.Segmenter(language, {granularity: 'grapheme'}).segment(base)].map(x => x.segment);
-        for (let n = graphemes.length - 1; n > 0; n--) { const shorter = graphemes.slice(0, n).join(''); if (widthOf(shorter) <= width + .25) { candidate = shorter; break; } }
-      }
-      candidate ||= choices.at(-1);
-      const outer = document.createElement('span'); outer.dataset.anonWord = ''; outer.style.display = 'inline-block'; outer.style.verticalAlign = 'baseline'; outer.style.lineHeight = 'inherit'; outer.style.height = 'auto'; outer.style.width = width + 'px'; outer.style.minWidth = '0'; outer.style.maxWidth = width + 'px'; outer.style.whiteSpace = 'nowrap'; outer.style.overflow = 'clip'; outer.textContent = candidate;
+      const fitting = choices.filter(value => widthOf(value) <= width + .25);
+      const candidate = fitting.find(value => value !== previousWord) || choices.find(value => value !== previousWord) || choices[0];
+      previousWord = candidate;
+      const scale = Math.min(1, width / Math.max(widthOf(candidate), 1));
+      const outer = document.createElement('span'); outer.dataset.anonWord = ''; outer.style.display = 'inline-block'; outer.style.verticalAlign = 'baseline'; outer.style.lineHeight = 'inherit'; outer.style.height = 'auto'; outer.style.width = width + 'px'; outer.style.minWidth = '0'; outer.style.maxWidth = width + 'px'; outer.style.whiteSpace = 'nowrap'; outer.style.fontSize = (scale * 100) + '%'; outer.textContent = candidate;
       fragment.append(outer); nodes.push(outer); generated.add(outer);
     };
     let offset = 0;
