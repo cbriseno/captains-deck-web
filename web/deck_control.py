@@ -176,7 +176,7 @@ class DeckControls:
         try:
             result = subprocess.run(shell_command(script, *args),
                                     input=json.dumps(payload, ensure_ascii=False) if payload is not None else None,
-                                    env=self.child_env(home), capture_output=True, text=True, timeout=8)
+                                    env=self.child_env(home), capture_output=True, text=True, timeout=15 if command == 'snapshot' else 8)
         except (OSError, subprocess.SubprocessError) as exc:
             raise ControlError('Firstmate did not confirm the request. Check its receipt before retrying.',
                                503, 'receipt-uncertain') from exc

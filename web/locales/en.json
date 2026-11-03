@@ -419,6 +419,7 @@
   "Saved doesn’t mean the agent has started again.": "Saved doesn’t mean the agent has started again.",
   "Nothing to show here yet.": "Nothing to show here yet.",
   "Update failed": "Update failed",
+  "Out of date since {time}": "Out of date since {time}",
   "Out of date": "Out of date",
   "Not sure yet.": "Not sure yet.",
   "Remote or unknown crew: no local task updates, so no time is guessed": "Remote or unknown crew: no local task updates, so no time is guessed",
