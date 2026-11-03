@@ -125,6 +125,9 @@ def main(argv=None):
     if directory.is_symlink():
         raise ValueError('runtime directory must not be a symlink')
     if args.command == 'start':
+        if sys.version_info < (3, 11):
+            print(f'Python 3.11 or newer is required; log: {directory / "server.log"}.')
+            return 1
         try:
             current = request(directory, 'status')
             if current.get('state') == 'running':
