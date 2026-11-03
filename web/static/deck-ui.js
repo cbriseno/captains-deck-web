@@ -3,6 +3,7 @@
  * come from the Firstmate owner. A missing owner is a read-only board. */
 window.createDeckUI = function (host) {
   const {t, node: n, button: b, append: add, api, ago, creationAge, exactTime, openCard, showDetail, closeDetail, detailOpen, parkDetail, state: app} = host;
+  const structural = (el, kind = 'count') => { window.DeckAnonymize?.structural(el, kind); return el; };
   const $ = id => document.getElementById(id);
   const pref = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Current page still works. */ } };
@@ -63,10 +64,10 @@ window.createDeckUI = function (host) {
     if(e?.date&&seconds<86400)return t('today');
     if(seconds<60)return t('now');
     const [count,singular,plural]=seconds<3600?[Math.floor(seconds/60),'1 minute','{count} minutes']:seconds<86400?[Math.floor(seconds/3600),'1 hour','{count} hours']:seconds<2592000?[Math.floor(seconds/86400),'1 day','{count} days']:[Math.floor(seconds/2592000),'1 month','{count} months'];
-    return count===1?t(singular):t(plural,{count});
+    return window.DeckAnonymize?.formatted(count===1?t(singular):t(plural,{count})) ?? (count===1?t(singular):t(plural,{count}));
   }
   const ageText=(label,value)=>t(label)+' '+(['Created','Created group'].includes(label)?creationAge(event(value)):naturalAge(value));
-  function time(labelText, value) { const e = event(value); const el = n('span','dates',ageText(labelText,value)); el.title = exactTime(e); el.dataset.event = JSON.stringify(e);el.dataset.ageLabel=labelText;return el; }
+  function time(labelText, value) { const e = event(value); const el = structural(n('span','dates',ageText(labelText,value)), 'time'); el.title = exactTime(e); el.dataset.event = JSON.stringify(e);el.dataset.ageLabel=labelText;return el; }
   function refreshAges(){for(const el of document.querySelectorAll('[data-age-label]'))el.textContent=ageText(el.dataset.ageLabel,JSON.parse(el.dataset.event));}
   function dates(x) { const created=x.kind !== 'project'||event(x.created_at);return add(n('div','dates'),created?time(x.kind === 'task' ? 'Created' : 'Created group',x.created_at):null,created?' · ':null,time(x.kind === 'task' ? 'Updated' : 'Updated group',x.updated_at)); }
   function normalize(data) {
@@ -95,7 +96,7 @@ window.createDeckUI = function (host) {
       const state = c.bucket === 'landed' ? 'done' : c.bucket === 'underway' && ['unknown','last_seen_working'].includes(a) ? 'unknown' : a === 'paused' ? 'paused' : a === 'ready' && c.native?.source !== 'backlog.hold_reason' ? 'ready' : a === 'working' || a === 'validating' ? 'active' : c.bucket === 'underway' && !['paused','deferred','blocked','held','stopped','decision'].includes(a) ? 'active' : 'waiting';
       const taskIdentity=sources.some(s=>s.home===c.home&&s.snapshot)?'task:'+c.task:c.task;
       nodes.push({id:keyOf(c.home,taskIdentity),owner_id:'',task:c.task,home:c.home,card:c,parent:pid,kind:'task',title:c.title,state,priority:null,
-        reason:host.cardLine(c) || host.phaseText(c),updated_at:null,created_at:c.time?.source === 'backlog.since' ? c.time : null,completed_at:state === 'done' ? c.time : null,
+        reason:host.cardLine(c) || host.phaseText(c),reason_time:!host.cardLine(c)&&['paused','deferred','last_seen_working'].includes(c.activity?.kind),updated_at:null,created_at:c.time?.source === 'backlog.since' ? c.time : null,completed_at:state === 'done' ? c.time : null,
         pause:{own:false,inherited:[]},progress:null});
       for (const dep of c.dependencies || []) edges.push({from:keyOf(c.home,c.task),to:keyOf(c.home,dep.id),origin:dep.origin || 'firstmate',completed:dep.state === 'done' || dep.unresolved === false});
     }
@@ -195,7 +196,7 @@ window.createDeckUI = function (host) {
     box.dataset.freshness=observationStale?'stale':freshness;
     if(current&&measured){
       const pct=Math.round(completed/total*100),bar=n('span','prog-bar'),fill=n('i');fill.style.width=pct+'%';bar.append(fill);
-      bar.setAttribute('role','progressbar');bar.setAttribute('aria-valuenow',pct);bar.setAttribute('aria-valuemin','0');bar.setAttribute('aria-valuemax','100');bar.setAttribute('aria-label',t('Reported progress'));box.append(bar,n('span','prog-txt',`${pct}% · ${completed}/${total} ${t('steps')}`));
+      bar.setAttribute('role','progressbar');bar.setAttribute('aria-valuenow',pct);bar.setAttribute('aria-valuemin','0');bar.setAttribute('aria-valuemax','100');bar.setAttribute('aria-label',t('Reported progress'));box.append(bar,structural(n('span','prog-txt',`${pct}% · ${completed}/${total} ${t('steps')}`)));
     }else{
       const messages={stale:'Progress needs an update.',missing:'No progress declared yet.',unknown:'Progress is not confirmed.',invalid:'The progress declaration is invalid.',unmeasured:'No measured steps yet.'};
       box.append(n('span','prog-txt',t(messages[freshness])));
@@ -207,7 +208,7 @@ window.createDeckUI = function (host) {
       const fold=add(n('details'),n('summary','',t(historical?'Last declaration (historical)':'View steps')));
       if(historical){
         fold.append(n('p','fact',t('This is a previous declaration, not current progress.')));
-        if(Number.isInteger(record.done)&&Number.isInteger(record.total)&&record.done>=0&&record.total>0&&record.done<=record.total)fold.append(n('p','fact',t('{done} of {total} steps in the last declaration',{done:record.done,total:record.total})));
+        if(Number.isInteger(record.done)&&Number.isInteger(record.total)&&record.done>=0&&record.total>0&&record.done<=record.total)fold.append(structural(n('p','fact',t('{done} of {total} steps in the last declaration',{done:record.done,total:record.total}))));
         if(record.updated)fold.append(time('Declared',record.updated));
       }
       if(Array.isArray(record.steps)&&record.steps.length){const list=n('ul','steps');for(const step of record.steps){const text=typeof step==='string'?step:step?.label||step?.title;if(typeof text!=='string')continue;const state=typeof step==='object'?step.state:null;const li=n('li','',(state==='done'?'✓ ':state==='active'?'→ ':'○ ')+text);li.dataset.s=state||'unknown';list.append(li);}fold.append(list);}
@@ -243,7 +244,7 @@ window.createDeckUI = function (host) {
     const text=[ts.length===1?t('1 task'):t('{count} tasks',{count:ts.length}),...(parts.length?parts:[c.paused?t(c.paused===ts.length&&ts.every(ownPause)?'Own pauses':'Paused'):t('No running work')])].join(' · ');
     const wrap=n('span','mix-sub'),bar=n('span','minibar');bar.setAttribute('aria-hidden','true');
     for(const [k,count]of Object.entries(c)){if(count){const i=n('i');i.dataset.k=k;i.style.flex=String(count);bar.append(i);}}
-    return add(wrap,bar,n('span','mix-pct',text));
+    return add(wrap,bar,structural(n('span','mix-pct',text)));
   }
   const originOf=own=>{const origin=own?.question?.origin_task;if(!origin)return null;const recorded=own.question.origin;return byId.get(keyOf(own.home,origin))||(recorded?{...recorded,id:keyOf(own.home,recorded.key||origin),state:recorded.backlog_state==='done'?'done':'unknown'}:null);};
   const questionNode=c=>{const own=byId.get(taskNodeId(c.home,c.task));return originOf(own)||own;};
@@ -320,9 +321,9 @@ window.createDeckUI = function (host) {
   function taskCard(x, turn, list=[]) {
     const card=setColor(n('article','task-card card'+(x.state==='done'?' done-card':'')),x);card.dataset.node=x.id;card.dataset.key=x.card?.key || x.id;card.dataset.state=x.state;card.dataset.open=String(ui.selected===x.id);
     const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}openNode(x,face);},'card-open');face.dataset.key=card.dataset.key;face.setAttribute('aria-expanded',String(ui.selected===x.id));face.setAttribute('aria-controls','detail');
-    const top=add(n('span','card-top'),turn !== undefined?n('span','turn',String(x.turn || turn+1)):null,n('span','where',pathOf(x)||x.card?.project?.label||t('Project not reported')));
+    const top=add(n('span','card-top'),turn !== undefined?structural(n('span','turn',String(x.turn || turn+1))):null,n('span','where',pathOf(x)||x.card?.project?.label||t('Project not reported')));
     add(face,top,n('span','title',label(x)),idBadge(x));
-    if(x.state==='done'){face.append(time('Completed',x.completed_at));const pending=questions().filter(c=>{const own=byId.get(taskNodeId(c.home,c.task));return own?.question?.origin_task===x.owner_id;});if(pending.length)face.append(n('span','deck-origin',t('Origin delivered · {count} open decisions',{count:pending.length})));}else{const reason=pauseText(x)||waitingText(x);if(reason)face.append(n('span','meta card-line',reason));if(questions().some(c=>questionNode(c)?.id===x.id))face.append(n('span','has-q',t('Has a question for you')));add(face,progress(x),dates(x));}
+    if(x.state==='done'){face.append(time('Completed',x.completed_at));const pending=questions().filter(c=>{const own=byId.get(taskNodeId(c.home,c.task));return own?.question?.origin_task===x.owner_id;});if(pending.length)face.append(structural(n('span','deck-origin',t('Origin delivered · {count} open decisions',{count:pending.length}))));}else{const reason=pauseText(x)||waitingText(x);if(reason){const line=n('span','meta card-line',reason);if(x.reason_time&&reason===x.reason)structural(line,'time');face.append(line);}if(questions().some(c=>questionNode(c)?.id===x.id))face.append(n('span','has-q',t('Has a question for you')));add(face,progress(x),dates(x));}
     const more=add(n('div','card-more'),n('div','card-more-inner'));add(card,face,more);
     if(x.state!=='done'){
       const ctl=add(n('div','card-ctl'),priority(x),pauseButton(x));
@@ -356,7 +357,7 @@ window.createDeckUI = function (host) {
   }
   function needs(cards) {
     const groups=new Map();for(const c of cards){const key=projectOf(questionNode(c))?.id || c.project?.id || c.home; if(!groups.has(key))groups.set(key,[]);groups.get(key).push(c);}
-    return [...groups].map(([key,list])=>{const open=list.length===1||ui.stacks.has(key)||list.some(c=>ui.selected==='question:'+c.key);const btn=b((projectOf(questionNode(list[0]))?.title||list[0].project?.label||t('Project not reported'))+(list.length>1?' · '+t('{count} questions',{count:list.length})+(open?' ▾':' ▸'):''),()=>{ui.stacks.has(key)?ui.stacks.delete(key):ui.stacks.add(key);render(true,'filter');},'stack-h');btn.disabled=list.length===1;btn.dataset.control='questions:'+key;btn.setAttribute('aria-expanded',String(open));return add(n('div','stackq'),btn,...(open?list.map(questionCard):[]));});
+    return [...groups].map(([key,list])=>{const open=list.length===1||ui.stacks.has(key)||list.some(c=>ui.selected==='question:'+c.key);const btn=b((projectOf(questionNode(list[0]))?.title||list[0].project?.label||t('Project not reported'))+(list.length>1?' · '+t('{count} questions',{count:list.length})+(open?' ▾':' ▸'):''),()=>{ui.stacks.has(key)?ui.stacks.delete(key):ui.stacks.add(key);render(true,'filter');},'stack-h');if(list.length>1)structural(btn,{kind:'count',suffix:' · '+t('{count} questions',{count:list.length})+(open?' ▾':' ▸')});btn.disabled=list.length===1;btn.dataset.control='questions:'+key;btn.setAttribute('aria-expanded',String(open));return add(n('div','stackq'),btn,...(open?list.map(questionCard):[]));});
   }
   function readyList(){return model.nodes.filter(x=>x.kind==='task'&&x.state==='ready').sort((a,b)=>(a.turn??Infinity)-(b.turn??Infinity));}
   function move(x,target,position) {
@@ -397,22 +398,22 @@ window.createDeckUI = function (host) {
     const doneShown=[...done.slice(0,8),...done.slice(8).filter(x=>model.edges.some(e=>e.to===x.id&&byId.get(e.from)?.state!=='done'))];
     if(!ui.column)ui.column=asks.length||act.length ? 'needs' : 'now';
     const uncertain=ts.some(x=>x.state==='unknown')||(app.board.sources||[]).some(x=>x.error);
-    const lead=[act.length===1?t('1 action requires attention.'):act.length?t('{count} actions require attention.',{count:act.length}):'',asks.length===1?t('1 decision needs you.'):asks.length?t('{count} decisions need you',{count:asks.length}):'',run.length===1?t('Firstmate has 1 task in progress.'):run.length?t('Firstmate has {count} tasks in progress.',{count:run.length}):uncertain?t('State not confirmed'):t('Firstmate has nothing in progress.')].filter(Boolean).join(' ');
-    $('deck-lead').textContent=ui.scope?label(byId.get(ui.scope))+': '+lead:lead;$('deck-next').textContent=ready[0]?t('Next is {name}',{name:label(ready[0])}):t('Nothing is ready to follow.');
+    const lead=[act.length===1?t('1 action requires attention.'):act.length?t('{count} actions require attention.',{count:act.length}):'',asks.length===1?t('1 decision needs you.'):asks.length?t('{count} decisions need you',{count:asks.length}):'',run.length===1?t('Firstmate has 1 task in progress.'):run.length?t('Firstmate has {count} tasks in progress.',{count:run.length}):uncertain?t('State not confirmed'):t('Firstmate has nothing in progress.')].filter(Boolean);
+    $('deck-lead').replaceChildren(...(ui.scope?[n('span','',label(byId.get(ui.scope))+': ')]:[]),...lead.flatMap((text,i)=>[i?' ':'',structural(n('span','',text))]));$('deck-next').textContent=ready[0]?t('Next is {name}',{name:label(ready[0])}):t('Nothing is ready to follow.');
     $('overview').textContent='';
     const diagnostics=$('deck-diagnostics');diagnostics.replaceChildren(...(app.board.diagnostics||[]).map(d=>add(n('div','deck-diagnostic'),n('strong','',t('Inventory needs attention')),n('p','',d.owner+' · '+d.message))));diagnostics.hidden=!diagnostics.children.length;
     const counts={needs:asks.length+act.length,now:run.length+stopping.length,waiting:sorted('waiting').length,paused:sorted('paused').length,done:done.length};
     const columns=[['needs',t('Needs you')],['now',t('Now')],['waiting',t('Waiting')],['paused',t('Paused')],['done',t('Finished')]];
-    $('columns-nav').className='mtabs';$('columns-nav').setAttribute('role','tablist');$('columns-nav').replaceChildren(...columns.map(([id,title])=>{const btn=b('',()=>{ui.column=id;render(true,'filter');});btn.setAttribute('role','tab');btn.id='state-tab-'+id;btn.tabIndex=ui.column===id?0:-1;btn.setAttribute('aria-controls','state-column-'+id);btn.dataset.kind=id;btn.setAttribute('aria-selected',String(ui.column===id));add(btn,n('b','',String(counts[id])),title);return btn;}));
+    $('columns-nav').className='mtabs';$('columns-nav').setAttribute('role','tablist');$('columns-nav').replaceChildren(...columns.map(([id,title])=>{const btn=b('',()=>{ui.column=id;render(true,'filter');});btn.setAttribute('role','tab');btn.id='state-tab-'+id;btn.tabIndex=ui.column===id?0:-1;btn.setAttribute('aria-controls','state-column-'+id);btn.dataset.kind=id;btn.setAttribute('aria-selected',String(ui.column===id));add(btn,structural(n('b','',String(counts[id]))),title);return btn;}));
     const detail=$('detail'),wasOpen=detailOpen();parkDetail();
     mixer();tree();
     const board=$('board');board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';board.replaceChildren();
-    for(const [id,title]of columns){const section=n('section','col');section.id='state-column-'+id;section.setAttribute('role','tabpanel');section.setAttribute('aria-labelledby','state-tab-'+id);section.dataset.k=id;section.dataset.on=String(ui.column===id);section.setAttribute('aria-label',title);const head=add(n('div','col-h'),n('span','sdot'),n('h2','',title),n('span','n',String(counts[id])));head.firstChild.dataset.k=id;
-      if(id==='paused'&&!ui.pausedOpen&&!matchMedia('(max-width:640px)').matches){section.classList.add('rail');const rail=add(b('',()=>{ui.pausedOpen=true;save('deck-paused-open',true);render(true,'filter');},'rail-btn'),n('span','n',String(counts.paused)),n('span','rail-t',title));rail.dataset.control='paused-toggle';rail.setAttribute('aria-label',t('Show paused'));rail.setAttribute('aria-expanded','false');section.append(rail);board.append(section);continue;}
-      if(id==='done'&&!ui.done&&!matchMedia('(max-width:640px)').matches){section.classList.add('rail');const rail=add(b('',()=>{ui.done=true;save('deck-done',true);render(true,'filter');},'rail-btn'),n('span','n',String(counts.done)),n('span','rail-t',title));rail.dataset.control='finished-toggle';rail.setAttribute('aria-label',t('Show finished'));rail.setAttribute('aria-expanded','false');section.append(rail);board.append(section);continue;}
+    for(const [id,title]of columns){const section=n('section','col');section.id='state-column-'+id;section.setAttribute('role','tabpanel');section.setAttribute('aria-labelledby','state-tab-'+id);section.dataset.k=id;section.dataset.on=String(ui.column===id);section.setAttribute('aria-label',title);const head=add(n('div','col-h'),n('span','sdot'),n('h2','',title),structural(n('span','n',String(counts[id]))));head.firstChild.dataset.k=id;
+      if(id==='paused'&&!ui.pausedOpen&&!matchMedia('(max-width:640px)').matches){section.classList.add('rail');const rail=add(b('',()=>{ui.pausedOpen=true;save('deck-paused-open',true);render(true,'filter');},'rail-btn'),structural(n('span','n',String(counts.paused))),n('span','rail-t',title));rail.dataset.control='paused-toggle';rail.setAttribute('aria-label',t('Show paused'));rail.setAttribute('aria-expanded','false');section.append(rail);board.append(section);continue;}
+      if(id==='done'&&!ui.done&&!matchMedia('(max-width:640px)').matches){section.classList.add('rail');const rail=add(b('',()=>{ui.done=true;save('deck-done',true);render(true,'filter');},'rail-btn'),structural(n('span','n',String(counts.done))),n('span','rail-t',title));rail.dataset.control='finished-toggle';rail.setAttribute('aria-label',t('Show finished'));rail.setAttribute('aria-expanded','false');section.append(rail);board.append(section);continue;}
       if(id==='paused'){const hide=b('»',()=>{ui.pausedOpen=false;save('deck-paused-open',false);render(true,'filter');},'hide-col');hide.dataset.control='paused-toggle';hide.setAttribute('aria-label',t('Hide paused'));hide.setAttribute('aria-expanded','true');head.append(hide);}
       if(id==='done'){const hide=b('»',()=>{ui.done=false;save('deck-done',false);render(true,'filter');},'hide-col');hide.dataset.control='finished-toggle';hide.setAttribute('aria-label',t('Hide finished'));hide.setAttribute('aria-expanded','true');head.append(hide);}
-      const cards=n('div','cards');if(id==='needs')cards.append(...act.map(actionCard),...needs(asks));else if(id==='now'){for(const [title,list,turns]of [[t('In progress'),run,false],...(stopping.length?[[t('Stopping'),stopping,false]]:[]),[t('Follow'),ready,true],...(unconfirmed.length?[[t('State not confirmed'),unconfirmed,false]]:[])]){const sub=add(n('div','subcol'),add(n('div','sub-h'),n('h3','',title),turns?n('span','dates',t('in this order')):null,n('span','n',String(list.length))));if(turns){const reorder=b(ui.reordering?t('Done editing'):t('Change order'),()=>{ui.reordering=!ui.reordering;document.documentElement.dataset.reordering=String(ui.reordering);render(true,'filter');},'more');sub.firstChild.append(reorder);}sub.append(...list.map((x,i)=>taskCard(x,turns?i:undefined,list)));if(!list.length)sub.append(n('p','none',t('Nothing here.')));cards.append(sub);}}
+      const cards=n('div','cards');if(id==='needs')cards.append(...act.map(actionCard),...needs(asks));else if(id==='now'){for(const [title,list,turns]of [[t('In progress'),run,false],...(stopping.length?[[t('Stopping'),stopping,false]]:[]),[t('Follow'),ready,true],...(unconfirmed.length?[[t('State not confirmed'),unconfirmed,false]]:[])]){const sub=add(n('div','subcol'),add(n('div','sub-h'),n('h3','',title),turns?n('span','dates',t('in this order')):null,structural(n('span','n',String(list.length)))));if(turns){const reorder=b(ui.reordering?t('Done editing'):t('Change order'),()=>{ui.reordering=!ui.reordering;document.documentElement.dataset.reordering=String(ui.reordering);render(true,'filter');},'more');sub.firstChild.append(reorder);}sub.append(...list.map((x,i)=>taskCard(x,turns?i:undefined,list)));if(!list.length)sub.append(n('p','none',t('Nothing here.')));cards.append(sub);}}
       else cards.append(...(id==='done'?doneShown:sorted(id)).map(x=>taskCard(x)));
       if(!cards.children.length)cards.append(n('p','none',t(id==='needs'?'Nothing needs you right now.':'Nothing here.')));if(id==='done')cards.append(b(t('View all history'),()=>host.setView('history'),'more'));
       add(section,head,cards);board.append(section);
@@ -454,13 +455,13 @@ window.createDeckUI = function (host) {
     const main=add(n('div','deck-action-row'),n('span','fact',t('Priority')),priority(x),pauseButton(x));controls.append(main);
     controls.append(progress(x,true));
     const deps=model.edges.filter(e=>ancestors(x).some(a=>a.id===e.from));
-    if(deps.length){const fold=n('details','source-details');fold.append(n('summary','',t('Waits for {count} tasks',{count:deps.length})));const list=n('ul','deps');for(const edge of deps){const other=byId.get(edge.to);list.append(add(n('li'),b(label(other),()=>{if(other)reveal(other);},'link'),edge.completed?n('span','meta',t('Already completed')):null));}fold.append(list);controls.append(fold);}
+    if(deps.length){const fold=n('details','source-details');fold.append(structural(n('summary','',t('Waits for {count} tasks',{count:deps.length}))));const list=n('ul','deps');for(const edge of deps){const other=byId.get(edge.to);list.append(add(n('li'),b(label(other),()=>{if(other)reveal(other);},'link'),edge.completed?n('span','meta',t('Already completed')):null));}fold.append(list);controls.append(fold);}
     const more=n('details','source-details deck-more');more.append(n('summary','',t('More options')),n('p','fact',t('Review dependencies or discuss a possible removal.')));
     const dep=n('select');dep.name='dependency';dep.setAttribute('aria-label',t('Dependency'));dep.append(new Option(t('Choose a dependency'),''));for(const y of model.nodes.filter(y=>y.home===x.home&&y.id!==x.id&&y.owner_id))dep.append(new Option(kinds[y.kind]+': '+label(y),y.owner_id));
     const edit=b(t('Preview dependency'),()=>{if(dep.value)preview(x,{action:'dependency-add',target:dep.value});});workControl(edit,can(x,'dependency-add'));
     more.append(dep,edit);
     if(x.root_blocker){const blocker=byId.get(keyOf(x.home,x.root_blocker));more.append(n('p','fact',t('Root blocker')+': '+label(blocker)));}
-    if(Number.isInteger(x.frees?.chain_count))more.append(n('p','fact',t('Releases {count} tasks in the chain',{count:x.frees.chain_count})));
+    if(Number.isInteger(x.frees?.chain_count))more.append(structural(n('p','fact',t('Releases {count} tasks in the chain',{count:x.frees.chain_count}))));
     more.append(n('p','fact',t('Scheduling priorities')+': '+ancestors(x).map(y=>kinds[y.kind]+': '+priorityText(y)).join(' › ')));
     for(const edge of deps){const remove=b(t('Remove dependency'),()=>preview(x,{action:'dependency-remove',target:byId.get(edge.to)?.owner_id}));workControl(remove,can(x,'dependency-remove'));more.append(add(n('div','dep-row'),n('span','',label(byId.get(edge.to))),remove));}controls.append(more);if(previous)previous.replaceWith(controls);else $('detail-content').append(controls);
   }
@@ -490,8 +491,8 @@ window.createDeckUI = function (host) {
     else if(value){
       if(value.message)box.append(n('p','fact',value.message));
       const groups = [['running',t('Running tasks')],['queued',t('Queued tasks')],['waiting_behind',t('Blocked descendants')]];
-      for(const [key,title]of groups){const ids=value.affected?.[key] || [];box.append(n('h4','',title+' · '+ids.length));if(ids.length){const list=n('ul');for(const id of ids)list.append(n('li','',label(model.nodes.find(x=>x.owner_id===(id.id||id)))));box.append(list);}}
-      if(Array.isArray(value.still_paused)){box.append(n('h4','',t('Keep their own pauses')+' · '+value.still_paused.length));for(const id of value.still_paused)box.append(n('p','',label(model.nodes.find(x=>x.owner_id===id))));}
+      for(const [key,title]of groups){const ids=value.affected?.[key] || [];box.append(structural(n('h4','',title+' · '+ids.length)));if(ids.length){const list=n('ul');for(const id of ids)list.append(n('li','',label(model.nodes.find(x=>x.owner_id===(id.id||id)))));box.append(list);}}
+      if(Array.isArray(value.still_paused)){box.append(structural(n('h4','',t('Keep their own pauses')+' · '+value.still_paused.length)));for(const id of value.still_paused)box.append(n('p','',label(model.nodes.find(x=>x.owner_id===id))));}
       if(Array.isArray(value.sigue_after)){const list=n('ol');value.sigue_after.forEach(id=>list.append(n('li','',label(model.nodes.find(x=>x.owner_id===id)))));box.append(add(n('details'),n('summary','',t('Order after this change')),list));}
       if(value.offer){const offer=model.nodes.find(x=>x.owner_id===value.offer.target);if(offer)box.append(b(value.offer.why || t('Pause {name}',{name:label(offer)}),()=>preview(offer,{action:'pause'})));}
     }else box.append(n('p','fact',t('Impact not reported. The change cannot be confirmed.')));
@@ -537,7 +538,7 @@ window.createDeckUI = function (host) {
   }
   function renderLog() {
     try{sessionStorage.setItem('deck-control-receipts',JSON.stringify(ui.log.slice(0,100)));}catch{/* Receipt status remains in memory. */}
-    $('changes-toggle').hidden=!ui.log.length;$('changes-toggle').textContent=t('Changes')+' '+ui.log.length;
+    structural($('changes-toggle'));$('changes-toggle').hidden=!ui.log.length;$('changes-toggle').textContent=t('Changes')+' '+ui.log.length;
     $('change-log').hidden=!ui.log.length;
     $('change-results').replaceChildren(...ui.log.map(entry=>{const row=add(n('div','change-row'),n('strong','',entry.title),n('span','',entry.command?.action==='scope-removal'&&entry.consultation?.status==='replied'?t('Firstmate replied'):t({pending:'Requested',received:'Received',applied:'Applied',error:'Error',uncertain:'Receipt not confirmed',rejected:'Rejected',conflict:'Changed before applying',failed:'Could not apply'}[entry.state]||'Requested')),n('p','fact',receiptLabel(entry)),receiptReply(entry),n('p','receipt-read-error',entry.receiptError||''));
       if(entry.undo&&entry.command.action!=='scope-removal')row.append(workControl(b(t('Undo'),()=>undo(entry)),true));if(entry.code==='busy')row.append(b(t('Try again'),()=>{const x=model.nodes.find(x=>x.home===entry.home&&x.owner_id===entry.command.node);if(x)apply(x,entry.command,$('change-results'));}));if(!['applied','error','rejected','conflict','failed'].includes(entry.state))row.append(b(t('Check receipt'),()=>checkReceipt(entry)));return row;}));

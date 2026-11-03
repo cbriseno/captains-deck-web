@@ -993,5 +993,7 @@
   "Effective planning: {mode}": "Effective planning: {mode}",
   "Planning setup is pending.": "Planning setup is pending.",
   "Planning setup failed.": "Planning setup failed.",
-  "Installation project preference: {mode}": "Installation project preference: {mode}"
+  "Installation project preference: {mode}": "Installation project preference: {mode}",
+  "Anonymize": "Anonymize",
+  "Editing is unavailable in Anonymize mode.": "Editing is unavailable in Anonymize mode."
 }

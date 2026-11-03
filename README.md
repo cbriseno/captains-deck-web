@@ -59,6 +59,32 @@ Firstmate is optional; Herdr is optional for the web.
 English is the default even on non-English systems.
 Set `CD_WEB_LANGUAGE=es` or a supported regional variant such as `es-MX` for Spanish; task prose is never translated.
 
+## Anonymize mode
+
+Enable **Anonymize** (**Anonimizar** in Spanish) in the header before taking a
+screenshot. It starts off and is remembered only in this tab's `sessionStorage`.
+The page scans text, tooltips (`title`), accessible labels, alternative text,
+placeholders and form values, including hidden and newly added DOM content.
+Unknown prose, errors, conversation, paths and attachment names are replaced with
+deterministic neutral words in the interface language. Catalog labels and explicitly
+typed counts, progress and formatted dates remain visible. The tab title stays unchanged.
+Original strings remain in memory for restoration when the switch is turned off.
+
+Text editing and selection changes are read only while enabled. Deck also refuses
+server writes and draft saves during this mode, so a replacement cannot become a
+real answer. Turn it off to edit or submit. Keyboard focus is retained.
+
+This is a screenshot aid, **not a privacy guarantee**. It does not cover browser
+chrome or tabs, images, canvas, CSS pseudo-elements, iframes or embedded content.
+Internal attributes and URLs, logs and network traffic retain real values. Review
+the entire screenshot before sharing it. Closed shadow roots are outside the DOM
+scanner; Deck currently creates no shadow roots. Open roots are scanned.
+
+Development check: `node --test web/tests/anonymize.browser.cjs`, using the existing
+`chrome-devtools-axi` browser fixture. Large sweeps run in hidden stages: the page can take several seconds to become
+visible on large boards. The check reports both total time and the largest measured
+main-thread pause, and keeps a 200 ms pause budget for 500 synthetic rows.
+
 ## Security defaults
 
 The listener accepts only `the numeric loopback address`; remote authentication is off by default.

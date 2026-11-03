@@ -23,3 +23,6 @@
   }, apply };
   apply(); media.addEventListener('change', apply);
 })();
+
+// Synchronous, before body paint; no original frame in a saved anonymous session.
+try { if (sessionStorage.getItem('deck-anonymize') === 'true') document.documentElement.setAttribute('data-anon-pending', ''); } catch { /* Default off. */ }

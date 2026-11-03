@@ -18,8 +18,11 @@ const agentStates = { working: t('working now'), validation: t('running checks')
 const staleDraftNote = t("The question changed since you started. Your draft is still here: pick an option or edit it to send.");
 const gapLines = { hold_until: t('No end time given for this hold.'), wait_until: t('No end time given for this pause.') };
 const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+window.DeckAnonymize?.formatted(zone);
+window.DeckAnonymize?.structural($('timezone'), 'time');
 $('timezone').textContent = t("Times in ") + zone;
 function node(tag, cls, text) { const n = document.createElement(tag); if (cls) n.className = cls; if (text !== undefined) n.textContent = text; return n; }
+function structural(el, kind = 'count') { window.DeckAnonymize?.structural(el, kind); return el; }
 function append(parent, ...children) { parent.append(...children.filter(Boolean)); return parent; }
 function button(text, action, cls = '') { const b = node('button', cls, text); b.type = 'button'; b.addEventListener('click', action); return b; }
 function prose(text) {
@@ -39,12 +42,12 @@ function prose(text) {
   }
   flush(); return root;
 }
-function contextRow(title, text) { return append(node('div', 'context-row'), node('h3', '', title), node('p', '', text || t("Not recorded."))); }
+function contextRow(title, text, kind) { const value = node('p', '', text || t("Not recorded.")); if (kind) structural(value, kind); return append(node('div', 'context-row'), node('h3', '', title), value); }
 function disclosure(title, ...children) { return append(node('details', 'source-details'), node('summary', '', title), ...children); }
 function timeView(event) {
-  const time = node('span', 'relative-time', eventTime(event));
+  const time = structural(node('span', 'relative-time', eventTime(event)), 'time');
   time.dataset.event = JSON.stringify(event || null); time.setAttribute('aria-live', 'off');
-  return append(node('details', 'event-time'), append(node('summary'), time, node('span', 'sr-only', t(' · Show exact local date'))), node('p', 'exact-time', exactTime(event)));
+  return append(node('details', 'event-time'), append(node('summary'), time, node('span', 'sr-only', t(' · Show exact local date'))), structural(node('p', 'exact-time', exactTime(event)), 'time'));
 }
 // One coordinating space is not news; it is named only when there are several.
 const manyHomes = () => (S.board?.homes || []).length > 1;
@@ -62,7 +65,7 @@ function projectTag(project) {
 }
 // A card's age: compact text, the exact date on hover and in the detail.
 function agoView(event) {
-  const n = node('span', 'card-ago', ago(event));
+  const n = structural(node('span', 'card-ago', ago(event)), 'time');
   n.dataset.event = JSON.stringify(event || null); n.title = t(event?.label || 'Event') + ' · ' + exactTime(event);
   return n;
 }
@@ -145,6 +148,7 @@ function syncSubmit() {
 }
 const retryable = (message) => Object.assign(new Error(message), {retry: true});
 async function api(path, body) {
+  if (body && window.DeckAnonymize?.enabled) throw new Error(t('Editing is unavailable in Anonymize mode.'));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), body ? 100000 : 20000);
   try {
@@ -174,6 +178,7 @@ function sourceStatus() {
   const connectionText = disconnected ? t("Offline") : failed ? t("Update failed") : stale ? t("Out of date") : S.board.loading ? t("Loading…") : t('updated {ago}', {ago: ago(read)});
   if ($('connection').textContent !== connectionText) $('connection').textContent = connectionText;
   $('connection').dataset.level = disconnected || failed ? 'error' : stale ? 'warning' : 'ok';
+  structural($('connection'), 'time');
   $('connection').title = S.lastRead ? t('Source read') + ' · ' + exactTime(read) : '';
   if (disconnected) notice(t("You’re offline. Your draft is safe. Check the question again once you’re back."));
   else if (failed) notice(t("Couldn’t refresh one source. Some cards may be out of date."));
@@ -290,10 +295,11 @@ async function loadHistory() {
   const generation = ++S.historyGeneration;
   $('history-status').textContent = t("Searching…");
   try {
-    const query = new URLSearchParams({ home: S.home, q: $('history-search').value });
+    const query = new URLSearchParams({ home: S.home, q: window.DeckAnonymize?.value($('history-search')) ?? $('history-search').value });
     const data = await api('api/history?' + query);
     if (generation !== S.historyGeneration) return;
     const count = data.records.length === 1 ? t('1 delivery') : t('{count} deliveries', {count: data.records.length});
+    structural($('history-status'));
     $('history-status').textContent = count + (data.omitted ? t(' · {count} more results; refine your search', {count: data.omitted}) : '');
     rescueDetail($('history-results'));
     // One line per delivery, newest first as the bridge sorts it: project,
@@ -306,7 +312,7 @@ async function loadHistory() {
       const article = append(node('article', 'task-card'), b, append(node('div', 'card-more'), node('div', 'card-more-inner')));
       article.dataset.key = key; return article;
     }));
-    if (data.records.length > (S.historyLimit || 40)) $('history-results').append(button(t('View {count} more', {count:Math.min(40,data.records.length-(S.historyLimit || 40))}), () => { S.historyLimit = (S.historyLimit || 40) + 40; loadHistory(); }, 'more'));
+    if (data.records.length > (S.historyLimit || 40)) $('history-results').append(structural(button(t('View {count} more', {count:Math.min(40,data.records.length-(S.historyLimit || 40))}), () => { S.historyLimit = (S.historyLimit || 40) + 40; loadHistory(); }, 'more')));
     if (!data.records.length) $('history-results').append(node('p', 'empty', t("No matches.")));
     $('history-sources').replaceChildren(node('p', 'muted', data.scope), ...data.details.map(d => contextRow(d.home, d.source)));
   } catch (err) { if (generation === S.historyGeneration) $('history-status').textContent = t("Could not refresh history. ") + err.message; }
@@ -369,6 +375,7 @@ function closeDetail(restoreFocus = true) {
 }
 function readDraft(key) { try { return JSON.parse(sessionStorage.getItem('deck-draft-' + key)) || {}; } catch { return S.drafts.get(key) || {}; } }
 function saveDraft(event) {
+  if (window.DeckAnonymize?.enabled) return;
   if (S.modal?.type !== 'call' || !$('answer-note') || S.receipt?.saved) return;
   if (event && ['input', 'change'].includes(event.type)) S.modal.draftNeedsReview = false;
   const draft = { note: $('answer-note').value, value: S.modal.value || '', request: S.modal.request || crypto.randomUUID().replaceAll('-', ''), occurrence: S.modal.draftNeedsReview ? S.modal.previousOccurrence : S.modal.ticket.call.occurrence };
@@ -389,6 +396,7 @@ async function openTicket(key, opener, asTask = false) {
     else {
       S.modal = { type: 'task', key, ticket };
       const c = ticket.context, p = ticket.presentation || {};
+      window.DeckAnonymize?.structural($('detail-kicker'), ['paused','deferred','last_seen_working'].includes(ticket.activity?.kind) ? 'time' : null);
       $('detail-kicker').textContent = phaseText(ticket);
       // Only what is recorded: a missing fact is no row, never a placeholder.
       const lead = [p.status, p.summary].filter((text, i, all) => text && all.indexOf(text) === i && flatten(text) !== flatten(ticket.title));
@@ -397,8 +405,9 @@ async function openTicket(key, opener, asTask = false) {
       if (who) $('detail-content').append(contextRow(t('Who’s on it'), who));
       const a = ticket.activity || {}, until = a.until ? untilText(a.until) : '';
       if (ticket.dependencies.length) $('detail-content').append(contextRow(t('Dependencies'), dependencyText(ticket)));
-      const waitingFor = (repeatsDependencies(ticket, p.waiting_for) ? '' : p.waiting_for) || (until ? t('Until {date}', {date: until}) : a.kind === 'validation_gate' ? t('Someone to approve its checks.') : '');
-      if (!['ready', 'queued'].includes(a.kind) && waitingFor) $('detail-content').append(contextRow(t('Waiting for'), waitingFor));
+      const declaredWaiting = repeatsDependencies(ticket, p.waiting_for) ? '' : p.waiting_for;
+      const waitingFor = declaredWaiting || (until ? t('Until {date}', {date: until}) : a.kind === 'validation_gate' ? t('Someone to approve its checks.') : '');
+      if (!['ready', 'queued'].includes(a.kind) && waitingFor) $('detail-content').append(contextRow(t('Waiting for'), waitingFor, !declaredWaiting && until ? 'time' : null));
       if (gapLines[a.gap]) $('detail-content').append(node('p', 'activity-note', gapLines[a.gap]));
       if (p.next_action) $('detail-content').append(contextRow(t('Next step'), p.next_action));
       // Work that waits for the captain outside a Captain's Call is answered in Firstmate.
@@ -590,7 +599,7 @@ async function loadReceipts() {
     $('receipts').replaceChildren(...data.receipts.map(r => {
       const detail = node('details', 'source-details');
       detail.dataset.request = r.request_id; detail.open = expanded.includes(r.request_id);
-      append(detail, node('summary', '', (r.title || r.task) + ' · ' + dateFmt.format(new Date(r.at * 1000))), receiptView(r));
+      append(detail, structural(node('summary', '', (r.title || r.task) + ' · ' + dateFmt.format(new Date(r.at * 1000))), 'time'), receiptView(r));
       return detail;
     }));
     $('receipts').dataset.signature = signature;
@@ -717,7 +726,7 @@ function explanationView(data) {
   box.hidden = !reply?.body;
   if (reply?.body && box.dataset.body !== reply.body + (reply.at || '')) {
     box.dataset.body = reply.body + (reply.at || '');
-    box.replaceChildren(markdown(reply.body), reply.at ? node('p', 'muted', dateFmt.format(new Date(reply.at))) : '');
+    box.replaceChildren(markdown(reply.body), reply.at ? structural(node('p', 'muted', dateFmt.format(new Date(reply.at))), 'time') : '');
   }
   const ask = $('explain-request');
   ask.hidden = data.state === 'unsupported';

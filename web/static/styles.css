@@ -1092,3 +1092,8 @@ footer { padding:16px 0 24px; }
 .explain-actions button { min-height:40px; font-size:13px; }
 .explain-status { flex:1 1 180px; flex-basis:auto; white-space:normal; }
 .explain-reply { border-left:3px solid var(--line); padding-left:10px; margin:6px 0 4px; }
+
+/* Hide a saved anonymous session until its first catalog-backed sweep finishes. */
+html[data-anon-pending] body { visibility: hidden; }
+[data-anon-word] { display: inline-block; white-space: nowrap; vertical-align: baseline; }
+[data-anon-word] > span { display: inline-block; transform-origin: left center; }
