@@ -419,6 +419,7 @@
   "Saved doesn’t mean the agent has started again.": "Saved doesn’t mean the agent has started again.",
   "Nothing to show here yet.": "Nothing to show here yet.",
   "Update failed": "Update failed",
+  "Sending closes this decision. To discuss it, use the supervisor chat.": "Sending closes this decision. To discuss it, use the supervisor chat.",
   "Out of date since {time}": "Out of date since {time}",
   "Out of date": "Out of date",
   "Not sure yet.": "Not sure yet.",

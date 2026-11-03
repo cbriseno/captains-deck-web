@@ -541,7 +541,7 @@ function renderCall(ticket, draftOverride) {
   const noteLabel = append(node('label', 'answer-label', c.freeform ? t('Your answer') : t('Add a note (optional)')), note);
   const send = c.freeform ? button(t('Send'), () => { S.modal.value = ''; saveDraft(); submitAnswer(); }, 'primary') : null;
   if (send) send.id = 'answer-submit';
-  const ownWords = append(node('div', 'own-words'), noteLabel, send);
+  const ownWords = append(node('div', 'own-words'), noteLabel, c.freeform ? node('p', 'notice', t('Sending closes this decision. To discuss it, use the supervisor chat.')) : null, send);
   if (choices.length) {
     const fold = disclosure(c.freeform ? t('Answer in my own words') : t('Add a note first (optional)'), ownWords);
     fold.className += ' own-words-fold'; fold.open = !!draft.note; content.append(fold);

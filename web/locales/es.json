@@ -419,6 +419,7 @@
   "Saved doesn’t mean the agent has started again.": "Guardada no significa que el agente ya retomó.",
   "Nothing to show here yet.": "Aún no hay nada que mostrar.",
   "Update failed": "Falló la actualización",
+  "Sending closes this decision. To discuss it, use the supervisor chat.": "Enviar cierra esta decisión. Para conversar, usa el chat del supervisor.",
   "Out of date since {time}": "Desactualizado desde {time}",
   "Out of date": "Desactualizado",
   "Not sure yet.": "Aún no se sabe.",
