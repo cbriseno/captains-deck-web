@@ -443,3 +443,4 @@ footer{margin:0;padding:10px 24px 18px;font-size:11px}footer .theme-label{displa
 .settings-field input,.settings-field select,.relay-settings textarea{font:inherit;color:var(--ink);background:var(--canvas);border:1px solid var(--line);border-radius:8px;padding:10px;min-width:0;width:100%;box-sizing:border-box}
 .relay-settings button{font:inherit;white-space:normal}
 .relay-settings button:disabled{opacity:.6;cursor:default}
+@media(min-width:861px){.mixer{margin-top:76px}#state-column-waiting .cards>.empty:first-child{margin-top:28px}}
