@@ -168,7 +168,7 @@ class DeckControls:
     def invoke(self, home, command, payload=None):
         script = endpoint_path(home.path, ENDPOINT)
         if not Path(script).is_file():
-            raise ControlError('Firstmate does not expose Deck controls yet.', 503, 'unsupported_op')
+            raise ControlError('Firstmate does not expose Deck controls yet.', 503, 'missing-source')
         args = ['work', command]
         if command == 'request-status':
             args += ['--request-id', payload['request_id']]
@@ -177,9 +177,17 @@ class DeckControls:
             result = subprocess.run(shell_command(script, *args),
                                     input=json.dumps(payload, ensure_ascii=False) if payload is not None else None,
                                     env=self.child_env(home), capture_output=True, text=True, timeout=15 if command == 'snapshot' else 8)
+        except subprocess.TimeoutExpired as exc:
+            raise ControlError('Firstmate took too long.', 503, 'timeout') from exc
         except (OSError, subprocess.SubprocessError) as exc:
             raise ControlError('Firstmate did not confirm the request. Check its receipt before retrying.',
                                503, 'receipt-uncertain') from exc
+        if command == 'snapshot' and result.returncode:
+            detail = (result.stderr or '').lower()
+            if 'busy' in detail:
+                raise ControlError('Firstmate is busy.', 503, 'busy')
+            if 'no such file' in detail or 'not found' in detail:
+                raise ControlError('A Firstmate source is missing.', 503, 'missing-source')
         if len(result.stdout) > 2 * 1024 * 1024:
             raise ControlError('Firstmate returned an oversized Deck response.', 502, 'invalid-response')
         try:

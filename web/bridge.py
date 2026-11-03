@@ -49,6 +49,28 @@ PRIMARY_WAKE = ("Captain's Deck: the captain answered {task} from the web board.
                 "Read the recorded answer for this task.")
 CANONICAL_TEXT = Localization('en').t
 
+# Structural diagnostics are intentionally limited to the allowlisted schema.
+DIAG_LOCK = threading.Lock()
+READ_LOCK = threading.Lock()
+FAILURES = 0
+try:
+    REVISION = subprocess.run(['git', '-C', str(HERE.parent), 'rev-parse', '--short=12', 'HEAD'],
+                              capture_output=True, text=True, timeout=2, check=True).stdout.strip()
+except (OSError, subprocess.SubprocessError):
+    REVISION = 'unknown'
+
+def diagnostic(event, **fields):
+    with DIAG_LOCK:
+        try:
+            logger = diagnostics.Logger('deck', diagnostics.PRODUCT_VERSION, REVISION)
+            logger.emit(event, **fields)
+            logger.flush()
+        except OSError:
+            pass
+
+def card_count(snapshot):
+    return sum(len(cards) for cards in snapshot.cols.values())
+
 
 class Refusal(Exception):
     def __init__(self, message, status=409):
@@ -1353,10 +1375,36 @@ class Handler(BaseHTTPRequestHandler):
             elif not unsafe and path == '/api/locale':
                 data = self.server.i18n.client()
             elif not unsafe and path == '/api/board':
-                data = board.board(value('home'))
-                logger = diagnostics.Logger('deck', 'unknown', 'unknown')
-                logger.emit('snapshot.read', tasks=sum(len(c.get('cards', [])) for c in data.get('columns', [])))
-                logger.flush()
+                global FAILURES
+                started = time.monotonic()
+                before = card_count(board.collector.snapshot())
+                concurrent = not READ_LOCK.acquire(blocking=False)
+                if concurrent:
+                    READ_LOCK.acquire()
+                try:
+                    after = card_count(board.collector.snapshot())
+                    if concurrent and before != after:
+                        diagnostic('snapshot.concurrent_difference', tasks_before=before, tasks_after=after)
+                    data = board.board(value('home'))
+                    sources = data.get('deck', {}).get('sources', [])
+                    errors = [x for x in sources if not x.get('available')]
+                    duration = round((time.monotonic() - started) * 1000)
+                    if errors or data.get('error') or any(x.get('error') for x in data.get('sources', [])):
+                        FAILURES += 1
+                        code = errors[0].get('code') if errors else 'parse'
+                        cause = code if code in ('timeout', 'missing-source', 'busy') else 'parse'
+                        diagnostic('snapshot.error', cause=cause, duration_ms=duration, streak=FAILURES)
+                    else:
+                        FAILURES = 0
+                        columns = {x['id']: len(x.get('cards', [])) for x in data.get('columns', [])}
+                        nodes = [n for x in sources for n in x.get('snapshot', {}).get('nodes', [])]
+                        projects = sum(n.get('kind') == 'project' for n in nodes)
+                        diagnostic('snapshot.read', tasks=sum(columns.values()), duration_ms=duration,
+                                   underway=columns.get('underway', 0), awaiting_closure=sum(n.get('state') == 'awaiting-closure' for n in nodes),
+                                   needs_you=columns.get('captains_call', 0), done=columns.get('landed', 0),
+                                   projects_received=projects, projects_shown=projects)
+                finally:
+                    READ_LOCK.release()
                 data['csrf'] = csrf
             elif not unsafe and path == '/api/diagnostics/preview':
                 data = {'preview': diagnostics.export(['deck'], preview=True)}
@@ -1475,9 +1523,21 @@ def main(argv=None, *, stop_event=None, on_ready=None):
                         filter(None, os.environ.get('CD_WEB_USERS', '').split(',')),
                         os.environ.get('CD_WEB_IDENTITY_HEADER', ''))
     board = Board(data, herdr)
-    server = Server((args.bind, args.port), board, security)
+    try:
+        server = Server((args.bind, args.port), board, security)
+    except OSError:
+        diagnostic('board.start', cause='port')
+        raise
+    diagnostic('board.start', cause='ok')
+    heartbeat_stop = threading.Event()
+    def heartbeat():
+        while not heartbeat_stop.wait(60):
+            diagnostic('board.heartbeat')
+    threading.Thread(target=heartbeat, daemon=True).start()
     board.start()
+    stop_reason = {'cause': 'shutdown'}
     def stop(signum, frame):
+        stop_reason['cause'] = 'signal'
         threading.Thread(target=server.shutdown, daemon=True).start()
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
@@ -1492,8 +1552,10 @@ def main(argv=None, *, stop_event=None, on_ready=None):
     try:
         server.serve_forever(poll_interval=0.5)
     finally:
+        heartbeat_stop.set()
         board.stop()
         server.server_close()
+        diagnostic('board.stop', cause=stop_reason['cause'])
     return 0
 
 

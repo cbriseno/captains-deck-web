@@ -17,15 +17,22 @@ from pathlib import Path
 
 LIMIT = 20 * 1024 * 1024
 BATCH = 32
+PRODUCT_VERSION = "0.7.0"
 EVENTS = {
     "state.change": {"from": "enum", "to": "enum", "actor": "enum", "fields_missing": "names", "task": "id"},
-    "snapshot.read": {"tasks": "count", "parent_unresolved": "count", "visibility_missing": "count"},
+    "snapshot.read": {"tasks": "count", "parent_unresolved": "count", "visibility_missing": "count", "duration_ms": "measure", "underway": "count", "awaiting_closure": "count", "needs_you": "count", "done": "count", "projects_received": "count", "projects_shown": "count"},
+    "snapshot.error": {"cause": "enum", "duration_ms": "measure", "streak": "count"},
+    "snapshot.concurrent_difference": {"tasks_before": "count", "tasks_after": "count"},
+    "board.start": {"cause": "enum"},
+    "board.stop": {"cause": "enum"},
+    "board.heartbeat": {},
     "ui.layout-shift": {"el": "name", "dx": "measure", "dy": "measure", "w_from": "measure", "w_to": "measure", "vw": "measure", "dpr": "measure"},
     "anon.measure": {"words": "count", "length": "length", "width_ratio": "ratio", "font": "enum", "lines_from": "count", "lines_to": "count"},
     "relay.preflight": {"check": "enum", "result": "enum", "reason": "enum", "version": "version", "revision": "revision"},
     "relay.attempt": {"result": "enum", "reason": "enum", "count": "count", "version": "version", "revision": "revision"},
 }
 ENUMS = {
+    "cause": {"ok", "interpreter", "port", "error", "shutdown", "signal", "timeout", "missing-source", "parse", "busy"},
     "from": {"queued", "working", "paused", "finished", "blocked", "unknown"},
     "to": {"queued", "working", "paused", "finished", "blocked", "unknown"},
     "actor": {"user", "agent", "system", "unknown"},
