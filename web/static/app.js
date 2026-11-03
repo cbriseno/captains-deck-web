@@ -781,4 +781,16 @@ setInterval(poll, 4000); setInterval(() => { sourceStatus(); refreshTimes(); dec
 if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(regs => { for (const reg of regs) if (reg.scope === new URL('./', location.href).href) reg.unregister(); }).catch(() => {});
 poll();
 
+const diagnosticsDialog = document.querySelector('#diagnostics-dialog');
+document.querySelector('#diagnostics-open').addEventListener('click', async () => {
+  diagnosticsDialog.showModal();
+  try { document.querySelector('#diagnostics-preview').textContent = (await api('/api/diagnostics/preview')).preview; }
+  catch (error) { document.querySelector('#diagnostics-preview').textContent = error.message; }
+});
+document.querySelector('#diagnostics-close').addEventListener('click', () => diagnosticsDialog.close());
+document.querySelector('#diagnostics-export').addEventListener('click', async () => {
+  try { const result = await api('/api/diagnostics/export', {}); document.querySelector('#diagnostics-preview').textContent = `Saved: ${result.file}`; }
+  catch (error) { document.querySelector('#diagnostics-preview').textContent = error.message; }
+});
+
 });

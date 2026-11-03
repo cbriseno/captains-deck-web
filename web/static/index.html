@@ -30,6 +30,7 @@
   <input id="board-search" class="board-search" aria-label="Search board" data-i18n-aria-label="Search board" type="search" placeholder="Search…" data-i18n-placeholder="Search…" autocomplete="off">
 
   <button id="history-view" class="tool" type="button" aria-pressed="false" title="History" data-i18n-title="History"><svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.4 1.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="tool-label" data-i18n="History">History</span></button>
+  <button id="diagnostics-open" class="tool" type="button">Export diagnostics</button>
   <button id="relay-settings-open" class="tool" type="button" data-i18n="Relay settings">Relay settings</button>
   <button id="refresh" class="tool" type="button" aria-label="Refresh" data-i18n-aria-label="Refresh" title="Refresh" data-i18n-title="Refresh"><span aria-hidden="true">↻</span></button>
 </header>
@@ -79,5 +80,6 @@
   <p class="muted" data-i18n="Your confirmation is saved exactly as written.">Your confirmation is saved exactly as written.</p>
   <div class="settings-actions"><button id="relay-confirm-apply" type="button" disabled></button><button id="relay-confirm-cancel" type="button" data-i18n="Cancel">Cancel</button></div>
 </dialog>
+<dialog id="diagnostics-dialog"><h2>Export diagnostics</h2><p id="diagnostics-preview" role="status"></p><button id="diagnostics-export" type="button">Export</button> <button id="diagnostics-close" type="button">Close</button></dialog>
 </body>
 </html>

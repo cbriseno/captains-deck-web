@@ -36,6 +36,7 @@ from deck_platform import LOOPBACK, local_origin, endpoint_path, private_directo
 
 from deck_control import DeckControls, ControlError
 from relay_settings import RelaySettings
+import fm_diagnostics as diagnostics
 
 STATIC = HERE / 'static'
 # What needs the captain leads; the board reads left to right toward done.
@@ -1353,7 +1354,14 @@ class Handler(BaseHTTPRequestHandler):
                 data = self.server.i18n.client()
             elif not unsafe and path == '/api/board':
                 data = board.board(value('home'))
+                logger = diagnostics.Logger('deck', 'unknown', 'unknown')
+                logger.emit('snapshot.read', tasks=sum(len(c.get('cards', [])) for c in data.get('columns', [])))
+                logger.flush()
                 data['csrf'] = csrf
+            elif not unsafe and path == '/api/diagnostics/preview':
+                data = {'preview': diagnostics.export(['deck'], preview=True)}
+            elif unsafe and path == '/api/diagnostics/export':
+                data = {'file': str(diagnostics.export(['deck']))}
             elif not unsafe and path == '/api/history':
                 data = board.history(value('home'), value('q')[:300])
             elif len(parts) == 3 and parts[:2] == ['api', 'settings'] and not unsafe:
