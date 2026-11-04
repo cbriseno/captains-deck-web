@@ -348,6 +348,29 @@ The current delivery history cannot correlate arbitrary notification item/artifa
 
 ## Relay and planning settings
 
-The optional Relay settings panel uses the Firstmate extensions CLI. Set `CD_WEB_EXTENSIONS_ROOT` to a checkout exposing `bin/fm-extension settings`. Without a compatible extension or Firstmate endpoint, and for remote spaces, settings are unavailable and cannot be changed. Automatic relay is off by default; viewing the panel does not enable it. Changes are validated by the extension, use revision-bound requests and provide explicit confirmation for automatic relay. Deck does not install extensions or run a relay engine.
+**Relay settings** opens the selected coordinating space's relay mode, thresholds, planning preferences and recent relay activity.
+Set `CD_WEB_EXTENSIONS_ROOT` to an installed extensions checkout that exposes the versioned `bin/fm-extension settings` contract.
+An absent or incompatible extension, an absent Firstmate endpoint or a remote space shows an unavailable state and permits no writes.
+Deck does not install extensions, prepare hooks, grant harness trust or initiate handoffs.
 
-Set `CD_TEST_EXTENSIONS_ROOT` to an extensions checkout to include real-CLI settings tests. Those tests use isolated temporary state and never enable automatic relay.
+Thresholds keep the captain's notation: `umbral:600K`, `umbral:80%`, `compactaciones:5`, whitespace for both conditions and `o` for whichever happens first.
+The extension validates and saves changes; Deck never edits its configuration files.
+Planning scopes distinguish task, project, coordinating space and installation; existing tasks keep their assigned plan.
+Project and task choices cover the Deck’s known board identities and registered preferences, rather than a complete inventory.
+Local managed `projects/<repository>` links map the owner’s repository identity to its canonical path; unresolved local identities have no writable selector.
+Every settings change uses a request ID and the extension's expected revision, with applied/rejected results, explicit retries with the same request ID and the extension's Undo token where available.
+
+Both enabling and disabling automatic relay require a separate confirmation dialog and the captain's own words.
+Activation discloses the effective harness thresholds and attempt limits, checks each covered harness through the extension's preflight, explains that authorization is global, and sends the confirmation verbatim through its authorize command.
+The installed default remains assisted, with automatic relay off; viewing the panel never changes it.
+An uncertain response offers **Retry same request**, which resends the exact confirmed operation rather than inventing a new request.
+The browser remembers that operation for this session; it never resends automatically on reload.
+Signed previews survive a Deck restart using a private key under `CD_WEB_DATA/settings`, created only after a valid preview.
+
+
+## Compatibility and inherited tools
+
+`python3 web/serve.py` accepts the same commands as `launch.py` and delegates to that launcher.
+The unregistered manifest and `push.py` are inherited artifacts; Web Push remains retired.
+No images are bundled; `python3 web/tools/make_icons.py` optionally generates local icons on demand.
+The optional push module requires cryptography and the icon generator requires Pillow; neither is imported or required by the web server.

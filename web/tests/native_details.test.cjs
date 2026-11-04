@@ -51,6 +51,7 @@ function makeDom() {
   };
   doc.querySelectorAll = () => [];
   doc.querySelector = (selector) => {
+    if (/^#[\w-]+$/.test(selector)) return doc.getElementById(selector.slice(1));
     const nodes = [...doc.byId.values()].flatMap(descendants);
     if (selector === 'input[name="answer"]:checked') return nodes.find(n => n.tagName === 'INPUT' && n.name === 'answer' && n.checked) || null;
     return nodes.find(n => n.matches(selector)) || null;

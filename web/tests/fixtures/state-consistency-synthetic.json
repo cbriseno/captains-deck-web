@@ -1,0 +1,24 @@
+{
+  "observed_epoch": 1793675524,
+  "project_inventory": ["project:captains-deck"],
+  "tasks": [
+    {
+      "id": "task:running",
+      "backlog": {"state": "in_flight"},
+      "meta": {"pane_id": "workspace:p1"},
+      "status": {"state": "working"},
+      "worker": {"observed": true, "alive": true, "pane_id": "workspace:p2"},
+      "pause": {"owner": null, "snapshot": null},
+      "snapshot": {"state": "active", "alias": "T-2W8", "parent": "project:captains-deck",
+                    "updated_epoch": 1793675400},
+      "deck": {"column": "now", "alias": "T-2W8", "parent": "project:captains-deck",
+               "progress_percent": 100, "age_seconds": 124}
+    },
+    {
+      "id": "task:orphan",
+      "backlog": {"state": "in_flight"},
+      "snapshot": {"state": "active", "parent": "project:None"},
+      "deck": {"column": "now"}
+    }
+  ]
+}

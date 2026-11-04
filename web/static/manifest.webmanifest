@@ -1,0 +1,11 @@
+{
+  "name": "Captain's Deck",
+  "short_name": "Deck",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220"
+}

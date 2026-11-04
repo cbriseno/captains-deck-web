@@ -7,7 +7,7 @@
 #   herdr plugin link /path/to/herdr-firstmate-flow
 id = "herdr-firstmate-flow"
 name = "Captain's Deck"
-version = "0.24.9"
+version = "0.24.11"
 description = "Optional terminal flow board for Firstmate: fleet and crew views, activity, delivery history, and guarded answers to recorded questions."
 min_herdr_version = "0.9.0"
 platforms = ["linux", "macos"]
