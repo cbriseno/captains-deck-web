@@ -36,7 +36,7 @@ test('an obsolete board reply cannot rewind Now to Waiting or mark a newer read 
       web.progress.done=done;fs.writeFileSync(snapshot,JSON.stringify(raw));
     };
     change('waiting_dep',0);
-    run('open',[url]);browser=true;
+    browser=true;run('open',[url]);
     evaluate(`async()=>{for(let i=0;i<100;i++){if(document.querySelector('#board [data-node$="task:web"]')?.dataset.state==='waiting')return true;await new Promise(r=>setTimeout(r,50));}throw Error('No initial wait');}`);
     // Keep the ordinary four-second polling loop, and observe every render.
     evaluate(`()=>{window.orderProof=[];window.orderTimer=setInterval(()=>{const c=document.querySelector('#board [data-node$="task:web"]');window.orderProof.push({at:Date.now(),state:c?.dataset.state,column:c?.closest('section')?.id,progress:c?.querySelector('[role=progressbar]')?.getAttribute('aria-valuenow'),connection:document.querySelector('#connection').dataset.level});},20);return true;}`);

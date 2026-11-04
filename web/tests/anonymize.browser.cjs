@@ -27,7 +27,7 @@ test('anonymize: deny unknown DOM data, restore, geometry, late updates and scal
       child.stdout.on('data',data=>{output+=data; const m=output.match(/(?:Fixture at|URL) ([^\s,]+)/); if(m){clearTimeout(timer);resolve(m[1]);}});
       child.stderr.on('data',data=>output+=data);child.on('exit',code=>reject(new Error('fixture exit '+code+' '+output)));
     });
-    run('open', [url]); opened=true;
+    opened=true; run('open', [url]);
     evidence.canaries = evaluate(`async () => {
       const wait=async f=>{for(let i=0;i<100;i++){if(f())return;await new Promise(r=>setTimeout(r,50));}throw Error('timeout');};
       await wait(()=>document.querySelector('.task-card'));
