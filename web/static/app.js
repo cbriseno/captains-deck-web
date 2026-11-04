@@ -148,7 +148,7 @@ function syncSubmit() {
 }
 const retryable = (message) => Object.assign(new Error(message), {retry: true});
 async function api(path, body) {
-  if (body && path !== '/api/diagnostics/export' && window.DeckAnonymize?.enabled) throw new Error(t('Editing is unavailable in Anonymize mode.'));
+  if (body && path !== '/api/diagnostics/trace' && path !== '/api/diagnostics/export' && window.DeckAnonymize?.enabled) throw new Error(t('Editing is unavailable in Anonymize mode.'));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), body ? 100000 : 20000);
   try {
@@ -355,6 +355,7 @@ function placeDetail(opener) {
 // receipt is never lost.
 function rescueDetail(n) { if (n.contains($('detail'))) parkDetail(); }
 function showDetail(title, meta, kicker, opener) {
+  window.DeckTrace?.setResponse('none');
   S.opener = opener || document.activeElement; S.receipt = null;
   S.openerKey = S.opener?.dataset?.key;
   $('detail-title').textContent = title; $('detail-meta').textContent = meta; $('detail-kicker').textContent = kicker;
@@ -366,6 +367,7 @@ function showDetail(title, meta, kicker, opener) {
 }
 function closeDetail(restoreFocus = true) {
   if (!detailOpen()) return;
+  if(S.receipt?.consumed==='consumed')window.DeckTrace?.setResponse('processed');
   saveDraft(); S.modal = null; S.generation++;
   const card = hostCard();
   $('detail').dataset.open = 'false'; markCurrent();
@@ -611,10 +613,12 @@ async function loadReceipts() {
 async function submitAnswer() {
   if (S.busy || !S.online || S.receipt || S.modal?.type !== 'call') return;
   saveDraft(); const modal = S.modal, draft = readDraft(modal.key);
+  window.DeckTrace?.setResponse('sent');
   S.busy = true; syncSubmit(); $('answer-status').replaceChildren(node('p', 'muted', t("Sending…")));
   try {
     const receipt = await api('api/ticket/' + encodeURIComponent(modal.key) + '/answer', { value: draft.value || '', note: draft.note || '', occurrence: modal.ticket.call.occurrence, request_id: modal.request });
     if (S.modal !== modal) return;
+    window.DeckTrace?.setResponse('receipt');
     S.receipt = receipt; $('answer-status').replaceChildren(receiptView(receipt));
     $('answer-status').append(button(t("See answer status"), async () => {
       await loadReceipts(); $('receipts-panel').open = true; closeDetail(false);
@@ -783,15 +787,16 @@ setInterval(poll, 4000); setInterval(() => { sourceStatus(); refreshTimes(); dec
 if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(regs => { for (const reg of regs) if (reg.scope === new URL('./', location.href).href) reg.unregister(); }).catch(() => {});
 poll();
 
+window.DeckTrace?.setSender((events,exporting)=>api('/api/diagnostics/trace',{events,exporting}));
 const diagnosticsDialog = document.querySelector('#diagnostics-dialog');
 document.querySelector('#diagnostics-open').addEventListener('click', async () => {
   diagnosticsDialog.showModal();
-  try { document.querySelector('#diagnostics-preview').textContent = (await api('/api/diagnostics/preview')).preview; }
+  try { document.querySelector('#diagnostics-preview').textContent = (await api('/api/diagnostics/preview')).preview + ' · browser: ' + JSON.stringify(window.DeckTrace?.counts() || {}); }
   catch (error) { document.querySelector('#diagnostics-preview').textContent = error.message; }
 });
 document.querySelector('#diagnostics-close').addEventListener('click', () => diagnosticsDialog.close());
 document.querySelector('#diagnostics-export').addEventListener('click', async () => {
-  try { const result = await api('/api/diagnostics/export', {}); document.querySelector('#diagnostics-preview').textContent = `Saved: ${result.file}`; }
+  try { await window.DeckTrace?.flush(true); const result = await api('/api/diagnostics/export', {}); document.querySelector('#diagnostics-preview').textContent = `Saved: ${result.file}`; }
   catch (error) { document.querySelector('#diagnostics-preview').textContent = error.message; }
 });
 

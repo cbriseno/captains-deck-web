@@ -378,6 +378,8 @@ window.createDeckUI = function (host) {
   }
   function render(force=false,mode='state') {
     if(!app.board)return;
+    const traceStart=performance.now(), oldColumns=new Map();
+    for(const el of document.querySelectorAll('#board .task-card[data-key]')){const actual=el.closest('.col')?.dataset.k;oldColumns.set(el.dataset.key,actual);const x=byId.get(el.dataset.node);if(x&&actual&&!el.classList.contains('qcard')&&!el.classList.contains('action-card')&&(colOf(x)!==actual||x.state!==el.dataset.state))window.DeckTrace?.mismatch(el.dataset.key,actual,colOf(x));}
     const cardSignature=app.board.columns.map(c=>[c.id,c.cards.map(x=>[x.key,x.title,x.question,x.question_summary,x.attention_kind,x.action,x.answered,x.project,host.cardLine(x),host.phaseText(x),x.dependencies,x.time?.epoch,x.time?.date])]);
     const workSignature=app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.sigue,s.retained_at && Date.now()/1000-s.retained_at>=30,s.snapshot?.nodes?.map(x=>x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30)]);
     const signature=JSON.stringify([cardSignature,workSignature,app.board.diagnostics,app.historyRows,app.query,ui.scope,ui.view,ui.column,ui.done,ui.pausedOpen,ui.mixer,[...ui.closed],[...ui.stacks],[...ui.tree],app.online]);
@@ -440,6 +442,8 @@ window.createDeckUI = function (host) {
     else if(focusKey && !focused.isConnected){const face=[...document.querySelectorAll('.card-open')].find(x=>x.dataset.key===focusKey && x.getClientRects().length);face?.focus({preventScroll:true});}
     if(!focused?.isConnected){const target=focusId?$(focusId):focusControl?[...document.querySelectorAll('[data-control]')].find(x=>x.dataset.control===focusControl&&x.getClientRects().length):null;target?.focus({preventScroll:true});}
     if(wasOpen)for(const [el,left,top]of detailScroll)if(el.isConnected){el.scrollLeft=left;el.scrollTop=top;}
+    for(const el of board.querySelectorAll('.task-card[data-key]')){const from=oldColumns.get(el.dataset.key),to=el.closest('.col')?.dataset.k;if(from&&to&&from!==to)window.DeckTrace?.move(el.dataset.key,from,to,'snapshot');const x=byId.get(el.dataset.node);if(x&&!el.classList.contains('qcard')&&!el.classList.contains('action-card')){const expected=colOf(x);if(to&&expected!==to)window.DeckTrace?.mismatch(el.dataset.key,to,expected);}}
+    window.DeckTrace?.add('card.render',{duration_ms:Math.round(performance.now()-traceStart)});
     $('focus-effects').checked=ui.focus;motion.play(movement,wasOpen?detail:null);host.refreshTimes();host.sourceStatus();renderLog();
     activityObserver.disconnect();for(const row of document.querySelectorAll('.mix[data-activity]:not([data-activity=none])')){
       const previous=activityTimes.get(activityKey(row)),animation=row.querySelector('.group-activity>i').getAnimations()[0];
@@ -584,7 +588,7 @@ window.createDeckUI = function (host) {
     return edges;
   }
   function highlight() {
-    if(!ui.focus){ui.pin='';ui.hover='';for(const el of document.querySelectorAll('[data-node]')){delete el.dataset.dim;delete el.dataset.link;if(el.classList.contains('mix'))el.dataset.on='false';}document.querySelectorAll('.relation-role').forEach(el=>el.remove());document.querySelector('svg.links')?.remove();$('connector-key').hidden=true;announceFocus('');return;}
+    if(!ui.focus){window.DeckTrace?.focus?.(false);ui.pin='';ui.hover='';for(const el of document.querySelectorAll('[data-node]')){delete el.dataset.dim;delete el.dataset.link;if(el.classList.contains('mix'))el.dataset.on='false';}document.querySelectorAll('.relation-role').forEach(el=>el.remove());document.querySelector('svg.links')?.remove();$('connector-key').hidden=true;announceFocus('');return;}
     if(motion.animating)return;
     for(const row of document.querySelectorAll('.mix[data-node]')){row.dataset.on=String(ui.pin===row.dataset.node);delete row.dataset.preview;}
     const focus=ui.pin||ui.selected||ui.hover, center=byId.get(focus), members=new Set(center&&center.kind!=='task'?model.nodes.filter(y=>ancestors(y).some(z=>z.id===center.id)).map(x=>x.id):[focus]);
@@ -592,6 +596,7 @@ window.createDeckUI = function (host) {
     const edges=[...relationshipEdges(),...inherited].filter(e=>members.has(e.from)||members.has(e.to));
     document.querySelectorAll('.relation-role').forEach(el=>el.remove());const related=new Set([...members,...edges.flatMap(e=>[e.from,e.to])]);
     for(const el of document.querySelectorAll('[data-node]')){delete el.dataset.link;delete el.dataset.dim;if(focus&&(edges.length||ui.pin)){if(related.has(el.dataset.node)){el.dataset.link='true';const edge=edges.find(e=>e.from===el.dataset.node||e.to===el.dataset.node);if(edge&&!members.has(el.dataset.node)){const text=edge.question?t(edge.from===el.dataset.node?'Question from this task':'Task asking this question'):edge.completed?t(edge.to===el.dataset.node?'Already released this':'Released by this'):t(edge.to===el.dataset.node?'Blocks this':'Waits for this');el.querySelector('.card-open,.mix-name')?.append(n('span','relation-role',text));}}else if(ui.focus)el.dataset.dim='true';}}
+    window.DeckTrace?.focus?.(focus.startsWith('question:')&&!!document.querySelector('#board .task-card[data-dim]'));
     $('connector-key').hidden=!edges.length;$('connector-key').replaceChildren(...[[t('Blocks this'),'k-before'],[t('Waits for this'),'k-after'],[t('Question from this task'),'k-ask'],[t('Already released this'),'k-freed']].map(([s,c])=>n('span',c,'— '+s)));
     document.querySelector('svg.links')?.remove();if(!edges.length||matchMedia('(max-width:640px)').matches){return;}
     const root=$('workspace');const find=id=>[...document.querySelectorAll('[data-node]')].find(el=>el.dataset.node===id&&el.getBoundingClientRect().width&&el.getBoundingClientRect().height&&!el.closest('[hidden]'));

@@ -19,6 +19,15 @@ LIMIT = 20 * 1024 * 1024
 BATCH = 32
 PRODUCT_VERSION = "0.7.0"
 EVENTS = {
+    "card.move": {"task":"id", "from_column":"enum", "to_column":"enum", "move_cause":"enum", "age":"count"},
+    "card.render": {"duration_ms":"measure", "age":"count"},
+    "anim.start": {"animation":"enum", "duration_ms":"measure", "age":"count"},
+    "anim.end": {"animation":"enum", "duration_ms":"measure", "age":"count"},
+    "anim.cancel": {"animation":"enum", "duration_ms":"measure", "age":"count"},
+    "overlay.show": {"overlay":"enum", "visible_s":"measure", "response":"enum", "age":"count"},
+    "overlay.hide": {"overlay":"enum", "visible_s":"measure", "response":"enum", "age":"count"},
+    "layout": {"width":"measure", "height":"measure", "dpr":"ratio", "reduced":"enum", "browser":"enum", "age":"count"},
+    "reconcile.mismatch": {"task":"id", "from_column":"enum", "to_column":"enum", "age":"count"},
     "state.change": {"from": "enum", "to": "enum", "actor": "enum", "fields_missing": "names", "task": "id"},
     "snapshot.read": {"tasks": "count", "parent_unresolved": "count", "visibility_missing": "count", "duration_ms": "measure", "underway": "count", "awaiting_closure": "count", "needs_you": "count", "done": "count", "projects_received": "count", "projects_shown": "count"},
     "snapshot.error": {"cause": "enum", "duration_ms": "measure", "streak": "count"},
@@ -32,6 +41,12 @@ EVENTS = {
     "relay.attempt": {"result": "enum", "reason": "enum", "count": "count", "version": "version", "revision": "revision"},
 }
 ENUMS = {
+    "from_column": {"needs", "now", "waiting", "paused", "done"},
+    "to_column": {"needs", "now", "waiting", "paused", "done"},
+    "move_cause": {"snapshot", "response", "optimistic"},
+    "animation": {"motion"}, "overlay": {"motion", "focus"},
+    "response": {"sent", "receipt", "processed", "none"},
+    "reduced": {"yes", "no"}, "browser": {"firefox", "edge", "chrome", "safari", "other"},
     "cause": {"ok", "interpreter", "port", "error", "shutdown", "signal", "timeout", "missing-source", "parse", "busy"},
     "from": {"queued", "working", "paused", "finished", "blocked", "unknown"},
     "to": {"queued", "working", "paused", "finished", "blocked", "unknown"},
@@ -128,7 +143,11 @@ def export(components, downloads=None, preview=False):
     size = sum(p.stat().st_size for p in sources)
     stamps = [r.get("t", "") for r in records]
     result = f"{size} bytes, {min(stamps) if stamps else '-'}..{max(stamps) if stamps else '-'}, {len(records)} eventos, verificador: {'ok' if _verify(records) else 'falló'}"
-    if preview: return result
+    if preview:
+        counts = {event: sum(record['e'] == event for record in records) for event in
+                  ('card.move', 'card.render', 'anim.start', 'anim.end', 'anim.cancel',
+                   'overlay.show', 'overlay.hide', 'layout', 'reconcile.mismatch')}
+        return result + ', ' + ', '.join(f'{event}: {count}' for event, count in counts.items())
     outdir = Path(downloads or Path.home() / "Downloads").expanduser()
     outdir.mkdir(parents=True, exist_ok=True)
     stamp = datetime.datetime.now().strftime("%Y-%m-%d-%H%M")

@@ -4,7 +4,7 @@ window.createDeckMotion = function ({t, settled}) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)');
   const visible = r => r && r.width > 0 && r.height > 0 && r.right > 0 && r.left < innerWidth && r.bottom > 0 && r.top < innerHeight;
   let generation = 0, layer = null, animations = [], hidden = new Map(), pending = false;
-  let notice = null, noticeTimer;
+  let notice = null, noticeTimer, layerStarted = 0;
   const api = {animating:false, capture, play, cancel};
 
   function reveal(el) {
@@ -22,6 +22,7 @@ window.createDeckMotion = function ({t, settled}) {
     for (const animation of animations) animation.cancel();
     animations = [];
     for (const el of hidden.keys()) reveal(el);
+    if(layer)window.DeckTrace?.add('overlay.hide',{overlay:'motion',visible_s:Math.round(((globalThis.performance?.now?.() ?? Date.now())-layerStarted)/1000),response:window.DeckTrace.response});
     layer?.remove(); layer = null;
     api.animating = false;
     pending = false;
@@ -68,15 +69,17 @@ window.createDeckMotion = function ({t, settled}) {
   }
   function overlay() {
     if (!layer) {
+      layerStarted=(globalThis.performance?.now?.() ?? Date.now());window.DeckTrace?.add('overlay.show',{overlay:'motion',visible_s:0,response:window.DeckTrace.response});
       layer = document.createElement('div'); layer.className = 'deck-motion-layer';
       layer.inert = true; layer.setAttribute('aria-hidden', 'true'); document.body.append(layer);
     }
     return layer;
   }
   function animate(el, frames, duration) {
+    const trace=window.DeckTrace, started=(globalThis.performance?.now?.() ?? Date.now());trace?.add('anim.start',{animation:'motion',duration_ms:duration});
     const animation = el.animate(frames, {duration, easing:'cubic-bezier(.2,.7,.2,1)', fill:'forwards'});
     animations.push(animation);
-    return animation.finished.catch(() => {});
+    return animation.finished.then(()=>trace?.add('anim.end',{animation:'motion',duration_ms:Math.round((globalThis.performance?.now?.() ?? Date.now())-started)}),()=>{trace?.add('anim.cancel',{animation:'motion',duration_ms:Math.round((globalThis.performance?.now?.() ?? Date.now())-started)});trace?.anomaly();});
   }
   function destination(el, key) {
     const column = el.closest('.col')?.dataset.k;

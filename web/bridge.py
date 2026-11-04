@@ -53,6 +53,7 @@ CANONICAL_TEXT = Localization('en').t
 DIAG_LOCK = threading.Lock()
 READ_LOCK = threading.Lock()
 FAILURES = 0
+TRACE_TIMES = []
 try:
     REVISION = subprocess.run(['git', '-C', str(HERE.parent), 'rev-parse', '--short=12', 'HEAD'],
                               capture_output=True, text=True, timeout=2, check=True).stdout.strip()
@@ -1408,6 +1409,33 @@ class Handler(BaseHTTPRequestHandler):
                 data['csrf'] = csrf
             elif not unsafe and path == '/api/diagnostics/preview':
                 data = {'preview': diagnostics.export(['deck'], preview=True)}
+            elif unsafe and path == '/api/diagnostics/trace':
+                events = body.get('events')
+                allowed = {'card.move', 'card.render', 'anim.start', 'anim.end', 'anim.cancel', 'overlay.show', 'overlay.hide', 'layout', 'reconcile.mismatch'}
+                if set(body) != {'events', 'exporting'} or type(body['exporting']) is not bool or not isinstance(events, list) or len(events) > 100:
+                    raise Refusal('Invalid trace.', 400)
+                clean = []
+                for event in events:
+                    if not isinstance(event, dict) or event.get('e') not in allowed:
+                        raise Refusal('Invalid trace.', 400)
+                    schema = diagnostics.EVENTS[event['e']]
+                    if set(event) != {'e'} | set(schema):
+                        raise Refusal('Invalid trace.', 400)
+                    fields = {k: diagnostics._clean(k, kind, event[k], b'validation') for k, kind in schema.items()}
+                    if any(v is None for v in fields.values()) or event.get('age', 0) > 600 or ('task' in event and (not isinstance(event['task'], str) or not event['task'].isdigit() or len(event['task']) > 10)):
+                        raise Refusal('Invalid trace.', 400)
+                    clean.append((event['e'], {k: event[k] for k in schema}))
+                with DIAG_LOCK:
+                    now = time.monotonic()
+                    TRACE_TIMES[:] = [t for t in TRACE_TIMES if t > now - 60]
+                    if len(TRACE_TIMES) + len(clean) > 200:
+                        raise Refusal('Trace limit reached.', 429)
+                    logger = diagnostics.Logger('deck', diagnostics.PRODUCT_VERSION, REVISION)
+                    for event, fields in clean:
+                        logger.emit(event, **fields)
+                    logger.flush()
+                    TRACE_TIMES.extend([now] * len(clean))
+                data = {'accepted': len(clean)}
             elif unsafe and path == '/api/diagnostics/export':
                 data = {'file': str(diagnostics.export(['deck']))}
             elif not unsafe and path == '/api/history':
