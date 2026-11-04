@@ -374,3 +374,22 @@ Signed previews survive a Deck restart using a private key under `CD_WEB_DATA/se
 The unregistered manifest and `push.py` are inherited artifacts; Web Push remains retired.
 No images are bundled; `python3 web/tools/make_icons.py` optionally generates local icons on demand.
 The optional push module requires cryptography and the icon generator requires Pillow; neither is imported or required by the web server.
+
+## Diagnostics retention and browser trace
+
+The Deck diagnostic log rotates by size, not by age: two JSONL files retain
+approximately 20 MiB in total. How much time that covers depends on activity.
+The browser also keeps up to 2,000 structural events from the last ten minutes
+in memory. It records card moves and render durations, motion starts, ends and
+cancellations, motion and question-focus layers, viewport characteristics and
+reconciliation mismatches. It does not record task titles, answers or paths.
+Task identifiers are pseudonymous and are remapped with a fresh salt on export.
+
+A rapid series of card moves, cancelled animation, mismatch or question layer
+still present three seconds after a receipt schedules a bounded context upload
+covering about 30 seconds before and after the signal. Export also uploads a
+bounded selection of the current buffer. Each upload contains at most 100 events
+and the server accepts at most 200 browser events per minute; these limits can
+omit context during heavy activity. The preview lists event counts. Browser
+memory is lost when the page closes, and an incomplete upload is not proof that
+no anomaly occurred.
