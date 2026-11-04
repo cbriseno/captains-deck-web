@@ -397,6 +397,11 @@ window.createDeckUI = function (host) {
     const detailScroll=detailOpen()?[...$('detail-content').querySelectorAll('*')]
       .filter(el=>el.matches('textarea,select')||el.scrollLeft||el.scrollTop).map(el=>[el,el.scrollLeft,el.scrollTop]):[];
     model=normalize(app.board);assignHues();
+    // A closed question must not leave the rest of the board dimmed. Keep the receipt open.
+    if(!(app.board.deck?.sources||[]).some(s=>!s.available)) {
+      const open=new Set(questions().map(c=>'question:'+c.key));
+      for(const field of ['pin','selected','hover'])if(ui[field].startsWith('question:')&&!open.has(ui[field]))ui[field]='';
+    }
     const actionOwner=app.modal?.type==='action'?byId.get(taskNodeId(app.modal.home,app.modal.task)):null;
     if(actionOwner?.source?.available&&actionOwner.question?.open===false){closeDetail(false);ui.selected='';ui.pin='';}
     if(!ui.initialized&&!app.board.loading){ui.initialized=true;model.nodes.filter(x=>x.kind==='project').forEach(p=>{if(!ui.hasClosedPreference&&!tasksOf(p).some(t=>['active','stopping'].includes(t.state)||questions().some(q=>taskNodeId(q.home,q.task)===t.id)))ui.closed.add(p.id);});}
