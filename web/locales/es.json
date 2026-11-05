@@ -999,5 +999,14 @@
   "Planning setup failed.": "La preparación de la planeación falló.",
   "Installation project preference: {mode}": "Preferencia del proyecto en la instalación: {mode}",
   "Anonymize": "Anonimizar",
-  "Editing is unavailable in Anonymize mode.": "No se puede editar en modo anónimo."
+  "Editing is unavailable in Anonymize mode.": "No se puede editar en modo anónimo.",
+  "Catppuccin": "Catppuccin",
+  "Rosé Pine": "Rosé Pine",
+  "Gruvbox": "Gruvbox",
+  "Solarized": "Solarized",
+  "Nord": "Nord",
+  "Dracula": "Dracula",
+  "GitHub": "GitHub",
+  "Everforest": "Everforest",
+  "Kanagawa": "Kanagawa"
 }

@@ -144,7 +144,7 @@ function theme(saved, systemDark, storageFails = false) {
   assert.equal(theme(a.storage.get('deck-modo'), false).document.documentElement.dataset.theme, 'dark');
   a.change('system'); a.system(false); assert.equal(a.document.documentElement.dataset.theme, 'light');
   a.system(true); assert.equal(a.document.documentElement.dataset.theme, 'dark');
-  a.palette('papel'); assert.equal(a.document.documentElement.dataset.palette, 'papel'); a.palette('oceano'); assert.equal(a.document.documentElement.dataset.palette, 'oceano');
+  for (const palette of ['grafito','papel','oceano','catppuccin','rosepine','gruvbox','solarized','nord','dracula','github','everforest','kanagawa']) { a.palette(palette); assert.equal(a.document.documentElement.dataset.palette, palette); }
   assert.equal(b.document.documentElement.dataset.theme, 'light');
   const denied = theme('light', true, true); denied.change('light');
   assert.equal(denied.document.documentElement.dataset.theme, 'light');
