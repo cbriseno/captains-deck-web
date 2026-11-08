@@ -14,6 +14,7 @@ class Element {
   setAttribute(name, value) { this.attributes[name] = String(value); if (name === 'class') this.className = value; }
   getClientRects() { return this.hidden ? [] : [this.rect]; }
   getBoundingClientRect() { return this.rect; }
+  matches() { return false; }
   closest(selector) { assert.equal(selector, '[hidden]'); return this.hidden ? this : null; }
 }
 function fixture(layout, options = {}) {
@@ -32,7 +33,7 @@ function fixture(layout, options = {}) {
     return [id, el];
   }));
   const descendants = el => el.children.flatMap(child => [child, ...descendants(child)]);
-  root.querySelectorAll = selector => selector.startsWith('#board .task-card') ? [...nodes.values()] :
+  root.querySelectorAll = selector => selector.startsWith('.task-card,') ? [...nodes.values()] :
     descendants(root).filter(el => el.className.includes('deck-routed-links') || el.className === 'deck-route-status');
   root.querySelector = selector => selector === '#board' ? board : selector === '#connector-key' ? legend : null;
   root.append(legend);
@@ -58,6 +59,11 @@ function geometry(f, result) {
         const intersects = a.y === b.y ? a.y > r.top && a.y < r.bottom && Math.max(a.x, b.x) > r.left && Math.min(a.x, b.x) < r.right :
           a.x > r.left && a.x < r.right && Math.max(a.y, b.y) > r.top && Math.min(a.y, b.y) < r.bottom;
         assert.equal(intersects, false, `card intersection ${el.id}`);
+        const length=Math.hypot(b.x-a.x,b.y-a.y), steps=Math.ceil(length/3);
+        for(let i=0;i<=steps;i++){
+          const x=a.x+(b.x-a.x)*i/steps,y=a.y+(b.y-a.y)*i/steps;
+          assert.ok(!(x>r.left-5&&x<r.right+5&&y>r.top-5&&y<r.bottom+5), `3px sample clears ${el.id} by 5px`);
+        }
       }
     }
     const full = [...segments(points)];
@@ -76,6 +82,12 @@ function geometry(f, result) {
       const overlap = horizontal ? Math.min(Math.max(a.x, b.x), Math.max(c.x, d.x)) - Math.max(Math.min(a.x, b.x), Math.min(c.x, d.x)) :
         vertical ? Math.min(Math.max(a.y, b.y), Math.max(c.y, d.y)) - Math.max(Math.min(a.y, b.y), Math.min(c.y, d.y)) : 0;
       assert.ok(overlap <= 0, 'no collinear overlap, including stubs');
+      if(result.separation===12){
+        const h=a.y===b.y&&c.y===d.y,v=a.x===b.x&&c.x===d.x;
+        const shared=h?Math.min(Math.max(a.x,b.x),Math.max(c.x,d.x))-Math.max(Math.min(a.x,b.x),Math.min(c.x,d.x)):
+          v?Math.min(Math.max(a.y,b.y),Math.max(c.y,d.y))-Math.max(Math.min(a.y,b.y),Math.min(c.y,d.y)):0;
+        if(shared>0)assert.ok((h?Math.abs(a.y-c.y):Math.abs(a.x-c.x))>=12,'parallel routes stay 12px apart');
+      }
     }
   }
   // A different route must also avoid the visible numbered circles, not just the card bodies.
@@ -96,6 +108,7 @@ test('orthogonal fan-out, same column, mixer above board, obstacles and duplicat
     ['d', 380, 340, 170, 90], ['block', 240, 70, 90, 200], ['group', 40, 15, 170, 55]]);
   const edges = [edge('a', 'b'), edge('b', 'd'), edge('c', 'a'), edge('group', 'c'), edge('a', 'b')];
   const result = f.draw({edges});
+  assert.equal(result.separation, 12);
   assert.equal(result.visibleRoutes, 4); assert.equal(result.routed, 4); assert.equal(result.unrouted.length, 0);
   geometry(f, result);
   assert.equal(f.root.querySelectorAll('svg.deck-routed-links,.deck-route-status').length, 2);
@@ -162,6 +175,7 @@ test('dense synthetic board spreads fan-out across both sides and reuses unchang
   const f = fixture(layout, {clientHeight: 1250, scrollHeight: 1250});
   const edges = Array.from({length: 8}, (_, i) => edge('0:0', '2:' + i));
   const result = f.draw({edges});
+  assert.equal(result.separation, 0, 'dense fan-out falls back to production spacing to retain every line');
   assert.equal(result.routed, 8); assert.equal(result.unrouted.length, 0); geometry(f, result);
   for (let i = 0; i < 5; i++) assert.equal(f.draw({edges}).cacheHit, true);
 });
@@ -184,7 +198,7 @@ test('real browser: SVG endpoints align after scroll, resize and card expansion;
     .links .route-halo{stroke:#fafafa;stroke-width:7}.route-port{fill:white;stroke:#357}.route-number{font:8px sans-serif;text-anchor:middle;dominant-baseline:central}
     #connector-key{position:absolute;left:10px;top:870px}
     </style><div id="workspace"><div id="board">
-    <div class="task-card" data-node="a" style="left:40px;top:150px"></div>
+    <div class="task-card" data-node="a" style="left:40px;top:150px"><div id="detail" style="position:absolute;inset:1px">Inline detail</div></div>
     <div class="task-card" data-node="b" style="left:780px;top:150px"></div>
     <div class="task-card" data-node="c" style="left:410px;top:30px"></div>
     <div class="task-card" data-node="d" style="left:410px;top:350px"></div>
@@ -233,6 +247,18 @@ test('real browser: SVG endpoints align after scroll, resize and card expansion;
     assert.ok(checks.initial.crossings > 0); assert.equal(checks.cached.cache, true); assert.equal(checks.pageScroll.cache, true); assert.equal(checks.rootScroll.cache, true);
     assert.equal(checks.resized.cache, false); assert.equal(checks.expanded.cache, false);
     assert.equal(checks.initial.height, checks.cached.height, 'SVG must not inflate the root on every call');
+    const headerCheck = await evaluate(`()=>{
+      const root=document.querySelector('#workspace'),header=document.createElement('div');
+      header.className='col-h';header.dataset.node='header';header.style.cssText='position:absolute;left:220px;top:100px;width:100px;height:32px';
+      const title=document.createElement('span');title.textContent='Overflowing header';title.style.cssText='position:absolute;left:-30px;width:230px;height:32px';header.append(title);document.querySelector('#board').append(header);
+      const hidden=document.querySelector('[data-node=b]');hidden.hidden=true;
+      const result=routeDeckRelations({edges:[{from:'a',to:'b'}],members:new Set(['a']),focus:'a',root,
+        find:id=>id==='b'?header:document.querySelector('[data-node="'+id+'"]'),label:id=>id,t:s=>s,motion:{animating:false}});
+      const port=result.paths[0]?.points[0],rr=root.getBoundingClientRect(),part=title.getBoundingClientRect();
+      const expected=part.left-rr.left+root.scrollLeft-root.clientLeft-8;
+      const answer={routed:result.routed,unrouted:result.unrouted.length,port,expected};header.remove();hidden.hidden=false;return answer;
+    }`);
+    assert.equal(headerCheck.routed,1);assert.equal(headerCheck.unrouted,0);assert.ok(Math.abs(headerCheck.port.x-headerCheck.expected)<.2,'header port uses the union of its visible overflowing parts');
     await run('resize', '390', '844');
     assert.equal(await evaluate(`()=>{draw();return document.querySelectorAll('svg.links').length;}`), 0);
     if (process.env.CD_TEST_EVIDENCE) {

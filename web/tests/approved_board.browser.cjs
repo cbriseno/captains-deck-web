@@ -68,6 +68,56 @@ test('approved Deck: hierarchy, controls, receipts, inline questions, history, t
       return {aliases,stateEvidence,unknown,collapsed,expanded,rail,beforeOrder,editOrder,crossed,notYet,focused,retained,cleanup,escapeCleared,overflow:document.documentElement.scrollWidth-innerWidth};
     }`);
     assert.ok(feedback.aliases.length);assert.ok(feedback.aliases.every(x=>/^ID: T-[2-9A-HJ-NP-Z]{3}$/.test(x)));assert.ok(feedback.stateEvidence.cardProjects.every(x=>!x.includes('Project not reported')));assert.ok(feedback.stateEvidence.projectVisibility.length);assert.ok(feedback.stateEvidence.projectVisibility.every(x=>!x.includes('Visibility not reported')));assert.ok(feedback.stateEvidence.ids.every(x=>!x.includes('ID pending')));assert.ok(feedback.stateEvidence.priorities.some(x=>x.priority.startsWith('NA')&&x.explanation.length>0));assert.equal(feedback.unknown,true);assert.equal(feedback.collapsed,true);assert.equal(feedback.expanded,true);assert.equal(feedback.rail,true);assert.equal(feedback.beforeOrder,0);assert.ok(feedback.editOrder>0);assert.equal(feedback.crossed,0);assert.equal(feedback.notYet,0);assert.ok(feedback.focused>0);assert.equal(feedback.retained,feedback.focused);assert.deepEqual(feedback.cleanup,{layers:0,ghosts:0,dim:0,svg:0,animations:0});assert.equal(feedback.overflow,0);assert.equal(feedback.escapeCleared,true);
+    // Relations use the real renderer: area focus, capture-phase dismissal and hidden endpoints.
+    const relations=evaluate(`async()=>{
+ const wait=async f=>{for(let i=0;i<100;i++){if(f())return;await new Promise(r=>setTimeout(r,50));}throw Error('timeout');};
+ const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+ await wait(()=>document.querySelector('#board .task-card'));await sleep(500);
+ const original=window.routeDeckRelations;window.routeDeckRelations=args=>{const result=original(args);window.lastRoute={args,result};return result;};
+ const clear=()=>document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));
+ const redraw=()=>document.dispatchEvent(new Event('scroll'));
+ const card=id=>[...document.querySelectorAll('#board .task-card')].find(e=>e.dataset.node.endsWith('task:'+id));
+ const selector='#board .task-card,#project-mixer .mix,.col-h>*,.sub-h>*,.mix-tools,.rail-btn,.stack-h,.none,#detail:not([hidden])';
+ const box=el=>{let r=el.getBoundingClientRect();if(el.matches('.mix,.col-h,.sub-h')){const parts=[...el.children].filter(e=>e.getClientRects().length&&!e.matches('.group-activity,#detail')).map(e=>e.getBoundingClientRect());if(parts.length)r={left:Math.min(...parts.map(p=>p.left)),right:Math.max(...parts.map(p=>p.right)),top:Math.min(r.top,...parts.map(p=>p.top)),bottom:Math.max(r.bottom,...parts.map(p=>p.bottom))};}return r;};
+ const inspect=()=>{
+   redraw();const {args,result}=lastRoute,svg=document.querySelector('svg.links'),errors=[],obstacles=[...document.querySelectorAll(selector)].filter(e=>e.getClientRects().length&&!e.closest('[hidden]')&&!e.parentElement?.closest('.task-card,.mix'));let samples=0;
+   const endpoints=result.paths.map(route=>{const [from,to,question]=JSON.parse(route.key);return {index:route.index,elements:(question?[from,to]:[to,from]).map(args.find)};});
+   for(const line of svg.querySelectorAll('path[data-relation]')){
+     const own=endpoints.find(e=>e.index===+line.dataset.relation),length=line.getTotalLength(),steps=Math.ceil(length/3);
+     for(let i=0;i<=steps;i++){
+       const p=line.getPointAtLength(length*i/steps),screen=new DOMPoint(p.x,p.y).matrixTransform(svg.getScreenCTM());samples++;
+       for(const el of obstacles){const r=box(el);if(own.elements.includes(el)&&length<=8.2)continue;
+         if(screen.x>r.left-4.9&&screen.x<r.right+4.9&&screen.y>r.top-4.9&&screen.y<r.bottom+4.9)errors.push({relation:own.index,obstacle:el.className,x:screen.x,y:screen.y});
+       }
+     }
+   }
+   let i=0;for(const route of result.paths){const own=endpoints.find(e=>e.index===route.index);for(const el of own.elements){const circle=svg.querySelectorAll('.route-port')[i++],p=new DOMPoint(+circle.getAttribute('cx'),+circle.getAttribute('cy')).matrixTransform(svg.getScreenCTM()),r=box(el);if(Math.min(Math.abs(p.x-r.left+8),Math.abs(p.x-r.right-8))>.3||p.y<r.top||p.y>r.bottom)errors.push({port:p,box:r});}}
+   return {routed:result.routed,unrouted:result.unrouted.length,separation:result.separation,samples,errors:errors.slice(0,8),anchors:endpoints.map(e=>e.elements.map(el=>({node:el.dataset.node,class:el.className}))),legend:[...document.querySelectorAll('#connector-key>span:not(.deck-route-status)')].map(e=>e.className)};
+ };
+ const project=document.querySelector('#project-mixer .mix[data-kind=project]');project.click();const area={filtered:document.querySelectorAll('.mix[data-filtered=true]').length,focused:project.dataset.on,cursor:getComputedStyle(project).cursor};
+ let outsideAtTarget;const search=document.querySelector('#board-search');search.addEventListener('click',()=>outsideAtTarget=document.querySelectorAll('.mix[data-on=true]').length,{once:true});search.click();area.outsideAtTarget=outsideAtTarget;
+ const group=document.querySelector('#project-mixer .mix-group');group.click();area.projectArea=project.dataset.on;clear();
+ card('dependent').querySelector('.card-open').click();await wait(()=>document.querySelector('.deck-controls'));await sleep(400);const expanded=inspect();
+ const roles=[...document.querySelectorAll('.relation-role')].map(e=>({parent:e.parentElement.className,display:getComputedStyle(e.parentElement).display}));
+ const next=card('next');next.hidden=true;const hidden=inspect();
+ const sub=document.querySelector('#project-mixer .mix[data-kind=sub]');sub.hidden=true;const collapsed=inspect();
+ sub.hidden=false;next.hidden=false;clear();
+ const unrelated=card('web');unrelated.querySelector('.card-open').click();await sleep(250);const unrelatedAction=[...document.querySelectorAll('.deck-controls button')].some(e=>e.textContent==='Ver relaciones registradas');clear();
+ card('dependent').querySelector('.card-open').click();await sleep(250);document.querySelector('#focus-effects').checked=false;document.querySelector('#focus-effects').dispatchEvent(new Event('change'));
+ const relButton=[...document.querySelectorAll('.deck-controls button')].find(e=>e.textContent==='Ver relaciones registradas');relButton?.click();await sleep(100);const explicit={shown:!!relButton,focused:document.querySelector('#focus-effects').checked,lines:document.querySelectorAll('svg.links path[data-relation]').length};
+ clear();await sleep(250);window.routeDeckRelations=original;
+ return {area,expanded,hidden,collapsed,roles,unrelatedAction,explicit};
+}`);
+    assert.deepEqual(relations.area,{filtered:0,focused:'true',cursor:'default',outsideAtTarget:0,projectArea:'true'});
+    for(const phase of ['expanded','hidden','collapsed']){
+      const result=relations[phase];assert.equal(result.routed,2,phase);assert.equal(result.unrouted,0,phase);
+      assert.ok(result.samples>200,phase);assert.deepEqual(result.errors,[],phase);assert.equal(result.separation,12,phase);
+      assert.deepEqual(result.legend,['k-before','k-freed']);
+    }
+    assert.ok(relations.hidden.anchors.flat().some(e=>e.node.endsWith('subproject:deck/ux')));
+    assert.ok(relations.collapsed.anchors.flat().some(e=>e.node.endsWith('project:deck')));
+    assert.ok(relations.roles.length);assert.ok(relations.roles.every(e=>e.parent==='node-id relation-id'&&e.display==='flex'));
+    assert.equal(relations.unrelatedAction,false);assert.equal(relations.explicit.shown,true);assert.equal(relations.explicit.focused,true);assert.ok(relations.explicit.lines>0);
     const ownerBeforeConsultation=fs.readFileSync(path.join(proof,'home/work-snapshot.json'),'utf8');
     const consultation=evaluate(`async()=>{${wait}document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));const card=[...document.querySelectorAll('#board .task-card')].find(x=>x.dataset.node.endsWith('task:next'));const alias=card.querySelector('.node-id').textContent;card.querySelector('.card-open').click();await wait(()=>document.querySelector('.deck-object-tools'));const reason=document.querySelector('[name=removal-reason]');reason.value='Consultar iniciativa y dependencias, sin eliminar.';const preview='Guarded consultation sent in one press';document.querySelector('.deck-removal-send').click();await wait(()=>document.querySelector('.change-preview')?.textContent.includes('Consulta registrada'));return {alias,detail:document.querySelector('.deck-object-tools .node-id').textContent,preview,receipt:document.querySelector('.change-preview').textContent};}`);
     assert.equal(consultation.detail,consultation.alias);assert.ok(consultation.receipt.includes('Firstmate debe revisar el impacto'));assert.equal(fs.readFileSync(path.join(proof,'home/work-snapshot.json'),'utf8'),ownerBeforeConsultation);
@@ -111,7 +161,7 @@ test('approved Deck: hierarchy, controls, receipts, inline questions, history, t
     assert.equal(phone.overflow,0);assert.deepEqual(phone.column,['needs']);assert.equal(phone.recommended,true);assert.equal(phone.lines,0);assert.equal(phone.draft,'Borrador del fixture');
     run('resize',['360','844']);assert.equal(evaluate(`()=>document.documentElement.scrollWidth-innerWidth`),0);
     evaluate(`async()=>{${wait}document.querySelector('#history-tab').click();await wait(()=>document.querySelector('.history-row'));document.querySelector('.history-row').click();await wait(()=>document.querySelector('#explain-request'));return {dialog:document.querySelectorAll('dialog').length,report:document.querySelector('#detail-content').textContent.includes('informe')};}`);
-    const evidence={initial,feedback,consultation,failedReceipt,advice,question,changed,lines,keyboard,phone,contrastFailures:contrast.length};
+    const evidence={initial,feedback,relations,consultation,failedReceipt,advice,question,changed,lines,keyboard,phone,contrastFailures:contrast.length};
     if(process.env.CD_TEST_EVIDENCE){fs.mkdirSync(process.env.CD_TEST_EVIDENCE,{recursive:true});fs.writeFileSync(path.join(process.env.CD_TEST_EVIDENCE,'browser-fixture-checks.json'),JSON.stringify(evidence,null,2));}
   } finally {
     child.kill('SIGTERM');

@@ -5,7 +5,8 @@
   const caches = new WeakMap();
   const round = n => Math.round(n * 10) / 10;
   const keyOf = edge => JSON.stringify([edge.from, edge.to, !!edge.question, !!edge.completed]);
-  const obstacleSelector = '#board .task-card,#project-mixer .mix,.col-h,.mix-tools,.rail-btn';
+  const headerSelector = '.mix,.col-h,.sub-h';
+  const obstacleSelector = '.task-card,.mix,.col-h>*,.sub-h>*,.mix-tools,.rail-btn,.stack-h,.none,#detail:not([hidden])';
 
   class Heap {
     constructor() { this.items = []; }
@@ -35,7 +36,7 @@
     return lo;
   }
 
-  function routeGeometry(routes, boxes, width, height) {
+  function routeGeometry(routes, boxes, width, height, separation = 12) {
     const xs = new Set([4, round(width - 4)]), ys = new Set([4, round(height - 4)]);
     const addX = n => { n = round(n); if (n >= 4 && n <= width - 4) xs.add(n); };
     const addY = n => { n = round(n); if (n >= 4 && n <= height - 4) ys.add(n); };
@@ -57,7 +58,7 @@
     const blocked = new Uint8Array(size), horizontal = new Uint8Array(size), vertical = new Uint8Array(size);
     // Rasterize obstacles once. Search does O(1) clearance checks rather than scanning every card per step.
     for (const box of boxes) {
-      const left = box.left - 3, right = box.right + 3, top = box.top - 3, bottom = box.bottom + 3;
+      const left = box.left - 5, right = box.right + 5, top = box.top - 5, bottom = box.bottom + 5;
       const x0 = bound(X, left, true), x1 = bound(X, right), y0 = bound(Y, top, true), y1 = bound(Y, bottom);
       for (let y = y0; y < y1; y++) {
         blocked.fill(1, y * nx + x0, y * nx + x1);
@@ -85,7 +86,20 @@
     const reserve = ids => {
       for (let i = 1; i < ids.length; i++) {
         const axis = Math.floor(ids[i - 1] / nx) === Math.floor(ids[i] / nx) ? 1 : 2;
-        occupied[ids[i - 1]] |= axis; occupied[ids[i]] |= axis;
+        const a = ids[i - 1], b = ids[i];
+        occupied[a] |= axis; occupied[b] |= axis;
+        // Reserve nearby parallel lanes; perpendicular crossings remain available.
+        if (axis === 1) {
+          const row = Math.floor(a / nx);
+          for (let y = bound(Y, Y[row] - separation, true); y < Y.length && Y[y] < Y[row] + separation; y++) {
+            for (let x = Math.min(a % nx, b % nx); x <= Math.max(a % nx, b % nx); x++) occupied[y * nx + x] |= 1;
+          }
+        } else {
+          const col = a % nx;
+          for (let x = bound(X, X[col] - separation, true); x < nx && X[x] < X[col] + separation; x++) {
+            for (let y = Math.min(Math.floor(a / nx), Math.floor(b / nx)); y <= Math.max(Math.floor(a / nx), Math.floor(b / nx)); y++) occupied[y * nx + x] |= 2;
+          }
+        }
       }
       occupied[ids[0]] = 3; occupied[ids.at(-1)] = 3;
     };
@@ -98,9 +112,9 @@
       const ids = [], step = start < finish ? 1 : -1;
       for (let id = start; ; id += step) { ids.push(id); if (id === finish) break; }
       // Only the owning card may intersect its endpoint stub.
-      if (boxes.some(other => other !== box && port.y > other.top - 3 && port.y < other.bottom + 3 &&
-          Math.max(port.x, side === 'right' ? box.right : box.left) > other.left - 3 &&
-          Math.min(port.x, side === 'right' ? box.right : box.left) < other.right + 3)) unavailable.add(route.key);
+      if (boxes.some(other => other !== box && port.y > other.top - 5 && port.y < other.bottom + 5 &&
+          Math.max(port.x, side === 'right' ? box.right : box.left) > other.left - 5 &&
+          Math.min(port.x, side === 'right' ? box.right : box.left) < other.right + 5)) unavailable.add(route.key);
       reserve(ids);
     }
 
@@ -154,7 +168,7 @@
         !((raw[i - 1].x === p.x && p.x === raw[i + 1].x) || (raw[i - 1].y === p.y && p.y === raw[i + 1].y)));
       paths.push({key: route.key, index: route.index, points, gridSegments: ids.length - 1});
     }
-    return {paths, unrouted, sharedSegments: 0, obstacleCount: boxes.length, grid: [nx, Y.length], gridSegments};
+    return {paths, unrouted, sharedSegments: 0, obstacleCount: boxes.length, grid: [nx, Y.length], gridSegments, separation};
   }
 
   // Explicit gaps in the earlier line make the later line an unambiguous overpass, in every theme.
@@ -194,19 +208,37 @@
     // Absolute SVG coordinates start at the root's padding edge, including its own scroll offset.
     const dx = (root.scrollLeft || 0) - (root.clientLeft || 0) - rr.left;
     const dy = (root.scrollTop || 0) - (root.clientTop || 0) - rr.top;
-    const boxes = [...root.querySelectorAll(obstacleSelector)].filter(el => el.getClientRects().length && !el.closest('[hidden]')).map(el => {
-      const r = el.getBoundingClientRect();
-      return {el, left: round(r.left + dx), right: round(r.right + dx), top: round(r.top + dy), bottom: round(r.bottom + dy), width: r.width, height: r.height};
-    }).filter(r => r.width > 0 && r.height > 0);
+    const visible = el => el && el.getClientRects().length && !el.closest('[hidden]');
+    const measure = el => {
+      let r = el.getBoundingClientRect();
+      if (el.matches(headerSelector)) {
+        const parts = [...el.children].filter(child => visible(child) && !child.matches('.group-activity,#detail')).map(child => child.getBoundingClientRect());
+        if (parts.length) r = {left: Math.min(...parts.map(p => p.left)), right: Math.max(...parts.map(p => p.right)),
+          top: Math.min(r.top, ...parts.map(p => p.top)), bottom: Math.max(r.bottom, ...parts.map(p => p.bottom))};
+      }
+      return {el, left: round(r.left + dx), right: round(r.right + dx), top: round(r.top + dy), bottom: round(r.bottom + dy),
+        width: r.right - r.left, height: r.bottom - r.top};
+    };
+    // An inline detail is already covered by its card or group row.
+    const boxes = [...root.querySelectorAll(obstacleSelector)].filter(el => visible(el) && !el.parentElement?.closest('.task-card,.mix')).map(measure).filter(r => r.width > 0 && r.height > 0);
     const byElement = new Map(boxes.map(box => [box.el, box]));
+    const boxFor = el => {
+      if (!visible(el)) return null;
+      if (!byElement.has(el)) {
+        const box = measure(el);
+        // A header endpoint replaces its individual parts with their union.
+        if (el.matches(headerSelector)) for (let i = boxes.length - 1; i >= 0; i--) if (boxes[i].el.parentElement === el) boxes.splice(i, 1);
+        boxes.push(box); byElement.set(el, box);
+      }
+      return byElement.get(el);
+    };
     const width = Math.max(root.clientWidth, root.scrollWidth);
-    const height = Math.max(root.clientHeight, root.scrollHeight, ...boxes.map(box => box.bottom + 12));
-    if (!width || !height) return;
+    if (!width) return;
     const seen = new Set(), routes = [];
     for (const edge of [...edges].sort((a, b) => { const ka = keyOf(a), kb = keyOf(b); return ka < kb ? -1 : ka > kb ? 1 : 0; })) {
       const key = keyOf(edge); if (seen.has(key)) continue; seen.add(key);
       const from = find(edge.question ? edge.from : edge.to), to = find(edge.question ? edge.to : edge.from);
-      const a = byElement.get(from), b = byElement.get(to); if (!a || !b || from === to) continue;
+      const a = boxFor(from), b = boxFor(to); if (!a || !b || from === to) continue;
       const same = Math.abs(a.left - b.left) < 20;
       const side = same ? (a.right + 48 < width ? 'right' : 'left') : (a.left < b.left ? 'right' : 'left');
       routes.push({key, edge, a, b, sa: side, sb: same ? side : side === 'right' ? 'left' : 'right', index: routes.length + 1,
@@ -232,9 +264,15 @@
       for (const {route, end, box, side} of list) if (route.crowded) route[end + 'p'] = {
         x: round(side === 'right' ? box.right + 8 : box.left - 8), y: round((box.top + box.bottom) / 2)};
     }
+    const height = Math.max(root.clientHeight, root.scrollHeight, ...boxes.map(box => box.bottom + 12));
+    if (!height) return;
     const cacheKey = JSON.stringify([width, height, routes.map(r => [r.key, r.ap, r.bp, !!r.crowded]), boxes.map(r => [r.left, r.top, r.right, r.bottom])]);
     const cached = caches.get(root), cacheHit = cached?.key === cacheKey;
-    const result = cacheHit ? cached.result : routeGeometry(routes, boxes, width, height);
+    let result = cacheHit ? cached.result : routeGeometry(routes, boxes, width, height);
+    if (!cacheHit && result.unrouted.length) {
+      const tight = routeGeometry(routes, boxes, width, height, 0);
+      if (tight.unrouted.length < result.unrouted.length) result = tight;
+    }
     if (!cacheHit) caches.set(root, {key: cacheKey, result});
     const {commands, crossings} = crossingPaths(result.paths);
     const svg = doc.createElementNS(NS, 'svg'); svg.classList.add('links', 'deck-routed-links');
@@ -253,7 +291,7 @@
       const route = routeMap.get(routed.key);
       for (const end of ['a', 'b']) {
         const port = route[end + 'p'], box = route[end], side = route['s' + end];
-        path(`M ${side === 'right' ? box.right : box.left} ${port.y} L ${port.x} ${port.y}`, route.cls);
+        path(`M ${side === 'right' ? box.right : box.left} ${port.y} L ${port.x} ${port.y}`, route.cls).dataset.relation = String(route.index);
         const circle = doc.createElementNS(NS, 'circle'); circle.setAttribute('cx', port.x); circle.setAttribute('cy', port.y); circle.setAttribute('r', '6'); circle.setAttribute('class', 'route-port ' + route.cls); svg.append(circle);
         const number = doc.createElementNS(NS, 'text'); number.setAttribute('x', port.x); number.setAttribute('y', port.y); number.setAttribute('class', 'route-number'); number.textContent = route.index; svg.append(number);
       }
