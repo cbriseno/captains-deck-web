@@ -37,9 +37,9 @@ test('pause preview, scope signals, confirmation, queue and owner events',{timeo
     assert.equal(evaluate(`async()=>{${wait}await wait(()=>${button('task:web')}?.textContent==='Pausar');return true;}`),true);
     assert.ok(calls().some(c=>c.command==='pause.cancel'));
     await click('req:demo','Pausar');confirm('Pausar');
-    assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('[data-pause-state=pending]'));return document.querySelector('[data-pause-state=pending]').textContent;}`),'Pausando… 0 de 2 en punto seguro');
+    assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('[data-node$="req:demo"] [data-pause-state=pending]'));return document.querySelector('[data-node$="req:demo"] [data-pause-state=pending]').textContent;}`),'Pausando… 0 de 2 en punto seguro');
     change(raw=>{const p=raw.pause_controls.find(p=>p.scope==='req:demo');p.agents_at_safe_point=1;});
-    assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('[data-pause-state=pending]')?.textContent.includes('1 de 2'));return ${button('req:demo')}.disabled;}`),true,'Cannot cancel after a safe point');
+    assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('[data-node$="req:demo"] [data-pause-state=pending]')?.textContent.includes('1 de 2'));return ${button('req:demo')}.disabled;}`),true,'Cannot cancel after a safe point');
     change(raw=>{const p=raw.pause_controls.find(p=>p.scope==='req:demo');Object.assign(p,{state:'paused',agents_at_safe_point:2,agents_closed:2});raw.events.push({event:'pause.confirmed',scope:'req:demo',at:'2026-11-08T19:00:00Z',agents_closed:2});});
     await click('req:demo','Reanudar');
     assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('.pause-preview')?.textContent.includes('Necesita 2 agentes; hay 3 de 6 en curso.'));return document.querySelector('#pause-events').textContent;}`),'Firstmate confirmó la pausa de Preparar entrega · ficticio: 2 agentes cerrados.');
