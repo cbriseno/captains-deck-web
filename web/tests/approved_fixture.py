@@ -168,6 +168,14 @@ if os.environ.get('CD_TEST_GROUP_ACTIVITY') == '1':
                                ('activity-held', 'subproject:activity/hold', 'running'),
                                ('activity-inherited', 'subproject:paused-hot/child', 'running')]:
         tasks.append({'key': 'task:' + key, 'parent': parent, 'title': key, 'state': state, 'rev': 'r1'})
+if os.environ.get('CD_TEST_PAUSE_SIGNALS') == '1':
+    tasks.append({'key': 'task:inherited-signal', 'title': 'Pausa heredada · ficticio', 'project': 'project:deck',
+                  'state': 'stopping', 'rev': 'r1', 'pause': {'own': None, 'safe_point': 'pending',
+                  'inherited': {'from': 'req:demo'}}})
+    snapshot.update(crew={'agents_running': 3, 'agents_cap': 6}, pause_controls=[], events=[],
+                    requests=[{'id': 'demo', 'scope': 'req:demo', 'key': 'request:demo',
+                               'label': 'Preparar entrega · ficticio', 'project': 'project:deck',
+                               'tasks': ['task:web', 'task:next'], 'pause': None}])
 (base / 'work-snapshot.json').write_text(json.dumps(snapshot))
 (base / 'bin/work-owner.py').write_text(Path(__file__).with_name('fixture_work_owner.py').read_text())
 p = base / 'bin/fm-tasks-axi.sh'; p.write_text('#!/bin/sh\nexec python3 "$(dirname "$0")/work-owner.py" "$@"\n'); p.chmod(0o755)

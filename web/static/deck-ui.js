@@ -115,7 +115,7 @@ window.createDeckUI = function (host) {
       for(const r of requests.values()){
         const id=keyOf(source.home,'req:'+r.id),project=typeof r.project==='object'?r.project?.id:r.project;
         const members=nodes.filter(x=>x.home===source.home&&x.kind==='task'&&((x.request||x.raw?.request||x.card?.request)?.id===r.id||r.tasks?.includes(x.owner_id)));
-        nodes.push({...r,id,owner_id:r.scope||'req:'+r.id,order_id:r.key||'request:'+r.id,scope:r.scope||'req:'+r.id,kind:'request',title:r.label,home:source.home,source,rev:source.snapshot.rev,parent:project?keyOf(source.home,project.startsWith('project:')?project:'project:'+project):members[0]?.parent||'',updated_at:r.updated_at,pause:{own:!!r.pause},manual:[...requests.keys()].indexOf(r.id)});
+        nodes.push({...r,id,owner_id:r.scope||'req:'+r.id,order_id:r.key||'request:'+r.id,scope:r.scope||'req:'+r.id,kind:'request',title:r.label,home:source.home,source,rev:source.snapshot.rev,parent:project?keyOf(source.home,project.startsWith('project:')?project:'project:'+project):members[0]?.parent||'',updated_at:r.updated_at,pause:{own:!!r.pause,can_resume:!!r.pause,can_pause:!r.pause,inherited:[],...source.snapshot.pause_controls?.find(p=>p.scope===(r.scope||'req:'+r.id))},manual:[...requests.keys()].indexOf(r.id)});
         for(const x of members)x.parent=id;
       }
     }
@@ -147,8 +147,97 @@ window.createDeckUI = function (host) {
   }
   function can(x, action) { if((action==='pause'&&x.pause?.can_pause===false)||(action==='resume'&&x.pause?.can_resume!==true))return false;return !!x.owner_id && !!x.rev && !x.observation_uncertain_since && !!x.source?.available && (x.source.capabilities?.actions || []).includes(action) && app.online; }
   let pauseDescriptionId=0;
+  const signalPause=x=>x.source?.capabilities?.signals?.includes('pause.request')&&x.source?.capabilities?.signals?.includes('resume.request');
+  function pausePill(x){
+    const p=x.pause||{},time=p.at?new Date(p.at).toLocaleTimeString(document.documentElement.lang,{hour:'2-digit',minute:'2-digit',hour12:false}):'';
+    const text={pending:Number.isInteger(p.agents_total)?t('Pausing… {safe} of {total} at a safe point',{safe:p.agents_at_safe_point??0,total:p.agents_total}):t('Reaching a safe point'),
+      paused:t('Paused · confirmed {time}',{time}),resuming:t('Resuming…'),queued:t('No room to resume · queued'),
+      unconfirmed:t('Safe point not confirmed'),failed:t('Firstmate could not complete the change')}[p.state];
+    if(!text)return null;
+    const pill=structural(n('span','pause-pill',text));pill.dataset.pauseState=p.state;
+    if(p.reason||p.queue_position)pill.title=[p.reason?t('Resume reason: {reason}',{reason:t({cap:'Agent limit',resources:'Resources',other:'Other'}[p.reason]||p.reason)}):'',p.queue_position?t('Queue position {position}',{position:p.queue_position}):''].filter(Boolean).join(' · ');
+    return pill;
+  }
+  function signalPauseButton(x){
+    const state=x.pause?.state,own=ownPause(x),action=own&&state==='pending'?'cancel-pause':own&&state==='queued'?'dequeue-resume':own?'resume':'pause';
+    const text=t(!own&&x.pause?.inherited?.length?(state==='pending'?'Pausing…':'Paused'):{'cancel-pause':'Cancel pause','dequeue-resume':'Leave paused',resume:'Resume',pause:'Pause'}[action]);
+    const wrap=n('span','pause-control'),btn=b(text,e=>{e.stopPropagation();if(!btn.disabled)pausePreview(x,action);},'mix-pause');
+    wrap.dataset.pauseNode=x.id;wrap.pauseReading=pauseReading(x);wrap.addEventListener('click',e=>e.stopPropagation());
+    btn.setAttribute('aria-label',t('{action}: {name}',{action:text,name:label(x)}));btn.setAttribute('aria-pressed',String(ownPause(x)));
+    const safe=x.pause?.agents_at_safe_point||x.pause?.agents_closed;
+    workControl(btn,can(x,action)&&!['resuming','unconfirmed','failed'].includes(state)&&!(action==='cancel-pause'&&safe));
+    add(wrap,pausePill(x),btn);
+    if(!btn.dataset.workAllowed||btn.dataset.workAllowed==='false'){
+      const note=n('span','pause-explanation',t(state==='unconfirmed'?'Safe point not confirmed':x.pause?.inherited?.length?'An inherited pause remains.':'This action is unavailable.'));
+      note.id='pause-explanation-'+(++pauseDescriptionId);btn.setAttribute('aria-describedby',note.id);add(wrap,note);
+      wrap.tabIndex=0;wrap.setAttribute('role','group');wrap.setAttribute('aria-describedby',note.id);wrap.setAttribute('aria-label',btn.getAttribute('aria-label'));
+    }
+    return wrap;
+  }
+  function mountPausePreview(){
+    const current=ui.pausePreview;if(!current)return;
+    const row=[...document.querySelectorAll('[data-node]')].find(el=>el.dataset.node===current.node&&!el.closest('#detail')&&el.getClientRects().length);
+    if(row)(row.matches('.request-row')?row.querySelector('.request-head'):row).after(current.slot);
+  }
+  async function pausePreview(x,action){
+    if(ui.busy)return;
+    ui.pausePreview?.slot.remove();
+    const slot=n('section','change-preview pause-preview');slot.setAttribute('role','status');slot.addEventListener('click',e=>e.stopPropagation());
+    ui.pausePreview={node:x.id,slot};mountPausePreview();
+    const request={action,node:x.owner_id,revision:x.rev,request_id:crypto.randomUUID().replaceAll('-','')};
+    if(['cancel-pause','dequeue-resume'].includes(action)){await apply(x,request,slot);ui.pausePreview=null;slot.remove();return;}
+    ui.busy=true;pending(true);slot.append(n('p','',t('Checking impact with Firstmate…')));
+    try{
+      const result=await api('api/control/'+encodeURIComponent(x.home)+'/preview',request);
+      if(ui.pausePreview?.slot!==slot)return;
+      slot.replaceChildren(n('strong','',t('Impact preview')+' · '+label(x)));
+      if(result.impact?.still_paused?.length)slot.append(n('p','',t('Pauses that will remain: {names}',{names:result.impact.still_paused.map(id=>label(model.nodes.find(y=>y.home===x.home&&y.owner_id===id))).join(', ')})));
+      const blocked=result.error||result.code||result.allowed===false||result.can_pause===false||['rejected','conflict','failed'].includes(result.state);
+      if(blocked){
+        slot.append(n('p','error',result.message||result.error||result.reason));
+        if(result.code==='stale_revision')slot.append(b(t('Review current data'),async()=>{await host.poll();const current=byId.get(x.id);if(current)pausePreview(current,action);}));
+      }else{
+        if(action==='pause')slot.append(n('p','',t('{running} running tasks will reach a safe point and Firstmate will close their agents; {pending} pending tasks will be set aside.',{running:result.impact?.affected?.running?.length??0,pending:result.impact?.affected?.queued?.length??0})));
+        else slot.append(n('p','',t('Needs {needed} agents; {running} of {cap} are running.',{needed:result.agents_needed??'?',running:result.agents_running??'?',cap:result.agents_cap??'?'})));
+        const confirm=b(t(action==='pause'?'Pause':'Resume'),async()=>{
+          await apply(x,request,slot);
+          const entry=ui.log.find(e=>e.request_id===request.request_id);
+          if(!['conflict','rejected','failed','error','uncertain'].includes(entry?.state)){ui.pausePreview=null;slot.remove();}
+          else{
+            if(entry?.code==='stale_revision')slot.append(b(t('Review current data'),()=>{const current=byId.get(x.id);if(current)pausePreview(current,action);}));
+            slot.append(b(t('Cancel'),()=>{ui.pausePreview=null;slot.remove();}));
+          }
+        });
+        workControl(confirm,!!result.impact);slot.append(confirm);
+      }
+      slot.append(b(t('Cancel'),()=>{ui.pausePreview=null;slot.remove();}));
+    }catch(err){slot.replaceChildren(n('p','error',err.message),b(t('Cancel'),()=>{ui.pausePreview=null;slot.remove();}));}
+    finally{ui.busy=false;pending(false);}
+  }
+  const pauseEventsSeen=new Set();let pauseEventsInitialized=false;
+  function pauseSignals(){
+    const capacity=$('agents-capacity');capacity.replaceChildren();
+    for(const source of model.sources){
+      const crew=source.snapshot?.crew;if(!crew)continue;
+      const chip=structural(n('span','agents-count',t('Agents {running} of {cap}',{running:crew.agents_running??'?',cap:crew.agents_cap??'?'})));
+      chip.title=app.board.homes?.find(h=>h.id===source.home)?.label||chip.textContent;chip.dataset.stale=String(!source.available);capacity.append(chip);
+    }
+    for(const source of model.sources)for(const e of source.snapshot?.events||[]){
+      const key=JSON.stringify([source.home,e]);if(pauseEventsSeen.has(key))continue;pauseEventsSeen.add(key);
+      if(!pauseEventsInitialized||!source.available)continue;
+      const text={'pause.confirmed':'Firstmate confirmed the pause of {name}: {count} agents closed.',
+        'pause.unconfirmed':'Firstmate has not confirmed the safe point of {name}.',
+        'resume.confirmed':'Firstmate resumed {name}: {count} agents started.',
+        'resume.refused':'Firstmate could not resume {name}: {running} of {cap} agents running. Waiting in the queue.',
+        'resume.started_from_queue':'Firstmate resumed {name} from the queue.'}[e.event];
+      if(text){const name=label(model.nodes.find(x=>x.home===source.home&&x.owner_id===e.scope));const message=e.event==='resume.refused'&&e.reason&&e.reason!=='cap'?t('Firstmate could not resume {name}: {reason}. Waiting in the queue.',{name,reason:t(e.reason==='resources'?'Resources':'Other')}):t(text,{name,count:e.agents_closed??e.agents_started??0,running:e.running??'?',cap:e.cap??'?'});$('pause-events').prepend(n('p','',message));}
+    }
+    pauseEventsInitialized=true;while($('pause-events').children.length>5)$('pause-events').lastChild.remove();
+  }
+
   const pauseReading=x=>JSON.stringify([x.state,x.pause,x.rev,x.observation_uncertain_since,x.kind==='task'?null:tasksOf(x).map(y=>[y.id,y.state,y.pause?.can_pause]),x.source?.available,x.source?.capabilities?.actions,app.online]);
   function pauseButton(x) {
+    if(signalPause(x))return signalPauseButton(x);
     const own=ownPause(x),stopping=isStopping(x),action=own?'resume':'pause',inherited=x.pause?.inherited||[];
     const sources=inherited.map(id=>id==='freeze'?t('the fleet freeze'):label(byId.get(keyOf(x.home,id))||byId.get(id))).join(', ');
     const condition=x.pause?.condition,wait=condition?.reason|| (condition?t('its existing condition'):'');
@@ -394,7 +483,7 @@ window.createDeckUI = function (host) {
     for(const c of attentionCards()){const own=byId.get(taskNodeId(c.home,c.task)),r=own&&(requestFor(own)||requestFor(questionNode(c)));if(r)groups.get(r.id)?.calls.push(c);}
     return [...groups.values()].filter(r=>r.tasks.length||r.calls.length);
   }
-  function requestState(r){return r.tasks.some(x=>['active','ready','stopping','unknown'].includes(x.state))?'now':r.tasks.some(x=>x.state==='paused')||r.pause?.own?'paused':r.calls.some(x=>!x.answered)||r.tasks.some(x=>x.state!=='done')?'waiting':'done';}
+  function requestState(r){if(ownPause(r)||['pending','paused','queued','unconfirmed','failed'].includes(r.pause?.state))return 'paused';return r.tasks.some(x=>['active','ready','unknown'].includes(x.state))?'now':r.tasks.some(x=>['stopping','paused'].includes(x.state))?'paused':r.calls.some(x=>!x.answered)||r.tasks.some(x=>x.state!=='done')?'waiting':'done';}
   function orderedRequests(rows){return [...rows].sort(ui.order==='mine'?(a,b)=>a.home.localeCompare(b.home)||(a.manual??Infinity)-(b.manual??Infinity): (a,b)=>(event(b.updated_at)?.epoch||0)-(event(a.updated_at)?.epoch||0));}
   function jumpAttention(x){
     const el=[...$('board').querySelectorAll('.attention-list .task-card')].find(el=>el.dataset.key===x||el.dataset.node===x);
@@ -449,7 +538,7 @@ window.createDeckUI = function (host) {
     const traceStart=performance.now(), oldColumns=new Map();
     for(const el of document.querySelectorAll('#board .task-card[data-key]')){const actual=el.closest('.col')?.dataset.k;oldColumns.set(el.dataset.key,actual);const x=byId.get(el.dataset.node);if(!el.closest('.request-board')&&x&&actual&&!el.classList.contains('qcard')&&!el.classList.contains('action-card')&&(colOf(x)!==actual||x.state!==el.dataset.state))window.DeckTrace?.mismatch(el.dataset.key,actual,colOf(x));}
     const cardSignature=app.board.columns.map(c=>[c.id,c.cards.map(x=>[x.key,x.title,x.question,x.question_summary,x.attention_kind,x.action,x.answered,x.project,host.cardLine(x),host.phaseText(x),x.dependencies,x.time?.epoch,x.time?.date])]);
-    const workSignature=app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.requests,s.snapshot?.rev,s.snapshot?.sigue,s.retained_at && Date.now()/1000-s.retained_at>=30,s.snapshot?.nodes?.map(x=>x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30)]);
+    const workSignature=app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.requests,s.snapshot?.rev,s.snapshot?.sigue,s.snapshot?.pause_controls,s.snapshot?.crew,s.snapshot?.events,s.retained_at && Date.now()/1000-s.retained_at>=30,s.snapshot?.nodes?.map(x=>x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30)]);
     const signature=JSON.stringify([cardSignature,workSignature,app.board.diagnostics,app.historyRows,app.query,ui.scope,ui.view,ui.column,ui.done,ui.pausedOpen,ui.order,[...ui.expanded],[...ui.groups],[...ui.steps],ui.mixer,[...ui.closed],[...ui.stacks],[...ui.tree],app.online]);
     if(!force&&signature===ui.signature){refreshAges();highlight();return;}ui.signature=signature;
     // A refresh may rebuild rows for unrelated detail/focus changes. Preserve
@@ -466,7 +555,7 @@ window.createDeckUI = function (host) {
     const focusedInDetail=$('detail').contains(focused);
     const detailScroll=detailOpen()?[...$('detail-content').querySelectorAll('*')]
       .filter(el=>el.matches('textarea,select')||el.scrollLeft||el.scrollTop).map(el=>[el,el.scrollLeft,el.scrollTop]):[];
-    model=normalize(app.board);assignHues();
+    model=normalize(app.board);assignHues();pauseSignals();
     // A closed question must not leave the rest of the board dimmed. Keep the receipt open.
     if(!(app.board.deck?.sources||[]).some(s=>!s.available)) {
       const open=new Set(questions().map(c=>'question:'+c.key));
@@ -492,6 +581,7 @@ window.createDeckUI = function (host) {
     mixer();tree();
     const board=$('board');board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';board.replaceChildren();
     renderRequests(board,ts,asks,act);
+    mountPausePreview();
     if(wasOpen){const face=[...document.querySelectorAll('.card-open')].find(y=>y.dataset.key===app.openerKey && y.getClientRects().length);if(face){app.opener=face;host.placeDetail(face);face.setAttribute('aria-expanded','true');face.closest('.task-card').dataset.open='true';}else if(ui.selected&&byId.has(ui.selected)){const group=[...document.querySelectorAll('[data-node]')].find(y=>y.dataset.node===ui.selected && y.getClientRects().length);if(group){group.append(detail);detail.hidden=false;$('detail-panel').dataset.active='false';}}}
     if(wasOpen){refreshDetailProgress(focused);refreshDetailPause(focused);if(app.modal?.type==='action'){const current=actions().find(c=>c.key===app.modal.key);if(current&&JSON.stringify(current.action)!==app.modal.reading)actionDetail(current);}}
     if(focusNode&&focusLabel&&!document.contains(focused)){const el=[...document.querySelectorAll('[data-node]')].filter(y=>y.dataset.node===focusNode&&y.getClientRects().length).flatMap(y=>[...y.querySelectorAll('[aria-label]')]).find(y=>y.getAttribute('aria-label')===focusLabel);el?.focus({preventScroll:true});}

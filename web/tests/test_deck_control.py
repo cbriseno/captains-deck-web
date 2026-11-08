@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 import test_bridge as existing
 from fixtures import fixture, bridge
-from deck_control import ControlError, project_snapshot, retain_unconfirmed
+from deck_control import ControlError, DeckControls, project_snapshot, retain_unconfirmed
 
 OWNER = '''import json,os,sys
 from pathlib import Path
@@ -49,6 +49,46 @@ class ProjectionTests(unittest.TestCase):
         self.assertEqual(snapshot['nodes'][0]['request'], request)
         self.assertEqual(snapshot['nodes'][0]['outcome'], outcome)
         self.assertEqual(project_snapshot({'tasks': [{'key': 'task:legacy'}]})['requests'], [])
+
+    def test_pause_signal_projection_preserves_owner_confirmation_and_capacity(self):
+        raw = {'projects': [], 'subprojects': [], 'sigue': [], 'tasks': [
+            {'key': 'task:held', 'state': 'set_aside'}],
+            'pause_controls': [{'scope': 'task:held', 'state': 'queued', 'agents_total': 2,
+                                'agents_at_safe_point': 2, 'agents_closed': 2,
+                                'reason': 'cap', 'queue_position': 1}],
+            'crew': {'agents_running': 6, 'agents_cap': 6},
+            'events': [{'event': 'resume.refused', 'scope': 'task:held'}],
+            'requests': [{'id': 'delivery', 'scope': 'req:delivery', 'tasks': ['task:held']}]}
+        projected = project_snapshot(raw)
+        self.assertEqual(projected['nodes'][0]['state'], 'paused')
+        self.assertEqual(projected['nodes'][0]['pause']['state'], 'queued')
+        for key in ('crew', 'events', 'requests', 'pause_controls'):
+            self.assertEqual(projected[key], raw[key])
+        self.assertNotIn('can_resume', raw['tasks'][0])
+
+    def test_advertised_signals_use_owner_verbs_and_keep_revision_and_scope(self):
+        controls = DeckControls(lambda home: {})
+        for action, verbs in {'pause': ('pause.preview', 'pause.request'),
+                              'resume': ('resume.preview', 'resume.request'),
+                              'cancel-pause': (None, 'pause.cancel'),
+                              'dequeue-resume': (None, 'resume.dequeue')}.items():
+            for command, verb in zip(('preview', 'apply'), verbs):
+                if verb is None:
+                    continue
+                calls = []
+                def invoke(home, command, payload=None):
+                    calls.append((command, payload))
+                    return ({'ops': ['set_pause', 'clear_pause'], 'signals': list(verbs)}
+                            if command == 'capabilities' else
+                            {'state': 'received', 'request_id': 'a' * 32})
+                with patch.object(controls, 'invoke', side_effect=invoke):
+                    controls.request(type('Home', (), {'path': 'synthetic'})(), command,
+                                     {'action': action, 'node': 'req:delivery', 'revision': 'r3',
+                                      'request_id': 'a' * 32}, 'captain')
+                self.assertEqual(calls[-1][0], verb)
+                self.assertEqual(calls[-1][1]['scope'], 'req:delivery')
+                self.assertEqual(calls[-1][1]['expected_rev'], 'r3')
+                self.assertNotIn('op', calls[-1][1])
 
     def test_unconfirmed_observation_retains_progress_until_confirmed_transition(self):
         def snapshot(state, progress=None):

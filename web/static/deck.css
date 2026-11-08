@@ -474,3 +474,11 @@ footer{margin:0;padding:10px 24px 18px;font-size:11px}footer .theme-label{displa
 @media(prefers-reduced-motion:reduce){.attention-flash{animation:none;outline:2px solid var(--blue)}}
 .request-order-result{display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:4px}
 body:has(#anonymize:checked) .task-card img,body:has(#anonymize:checked) #detail-content img{filter:blur(8px)}
+
+/* Owner-confirmed pause controls and inline impact preview. */
+.pause-pill{display:inline-flex;align-items:center;padding:3px 8px;border-radius:999px;font-size:12px;font-weight:600;color:var(--pause);background:var(--neutral);overflow-wrap:anywhere}
+.pause-preview{margin:6px 0;padding:10px 14px;border-color:var(--line);border-left:3px solid var(--pause);background:var(--surface);font-size:13px;min-width:0}
+.pause-preview p{margin:4px 0}.pause-preview h4{font-size:12px;margin:4px 0}.pause-preview .impact{display:flex;flex-wrap:wrap;gap:4px 12px}.pause-preview .impact ul{margin:0}
+#agents-capacity{display:flex;flex-wrap:wrap;gap:6px}.agents-count{font-size:12px;white-space:nowrap}.agents-count[data-stale=true]{color:var(--muted)}
+.pause-events:empty{display:none}.pause-events p{margin:4px 0;padding:8px 12px;background:var(--neutral);font-size:13px}
+@media(max-width:640px){.pause-pill{white-space:normal}.pause-preview{width:100%;box-sizing:border-box}}

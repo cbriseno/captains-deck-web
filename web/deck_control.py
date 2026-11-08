@@ -18,7 +18,12 @@ OPERATIONS = frozenset(('set_priority', 'set_pause', 'clear_pause', 'add_dep',
                         'remove_dep', 'move', 'request_removal'))
 ACTION_OP = {'priority': 'set_priority', 'pause': 'set_pause', 'resume': 'clear_pause',
              'dependency-add': 'add_dep', 'dependency-remove': 'remove_dep',
-             'move': 'move', 'scope-removal': 'request_removal'}
+             'move': 'move', 'scope-removal': 'request_removal',
+             'cancel-pause': 'clear_pause', 'dequeue-resume': 'clear_pause'}
+SIGNAL_ACTIONS = {'pause': ('pause.preview', 'pause.request'),
+                  'resume': ('resume.preview', 'resume.request'),
+                  'cancel-pause': (None, 'pause.cancel'),
+                  'dequeue-resume': (None, 'resume.dequeue')}
 
 
 class ControlError(Exception):
@@ -83,6 +88,8 @@ def project_snapshot(raw):
             state = {'running': 'active', 'paused_own': 'paused', 'paused_inherited': 'paused'}.get(state, state)
             if kind == 'task' and state != 'done' and isinstance(pause, dict) and pause.get('safe_point') == 'pending':
                 state = 'stopping'
+            if state == 'set_aside':
+                state = 'paused'
             if state not in ('active', 'stopping', 'paused', 'ready', 'done'):
                 state = 'waiting' if state.startswith('waiting') or state == 'captain' else 'unknown'
             node = {'id': key, 'kind': kind, 'parent': (row.get('parent') or row.get('subproject') or row.get('project') or '') if kind != 'project' else '',
@@ -157,8 +164,13 @@ def project_snapshot(raw):
         pause.update(can_resume=pause['own'] and reason is None,
                      can_pause=not pause['own'] and reason is None,
                      disabled_reason=reason)
-    return {'nodes': nodes, 'edges': edges, 'requests': raw.get('requests', []), 'rev': raw.get('rev'),
-            'generated_at': raw.get('generated_at'), 'sigue': raw.get('sigue', [])}
+    controls = {p['scope']: p for p in raw.get('pause_controls', [])}
+    for node in nodes:
+        if node['id'] in controls:
+            node['pause'].update(controls[node['id']])
+    return {'nodes': nodes, 'edges': edges, 'generated_at': raw.get('generated_at'), 'sigue': raw.get('sigue', []),
+            'rev': raw.get('rev'), 'requests': raw.get('requests', []), 'pause_controls': raw.get('pause_controls', []),
+            'crew': raw.get('crew'), 'events': raw.get('events', [])}
 
 
 class DeckControls:
@@ -226,7 +238,9 @@ class DeckControls:
                 if any(not isinstance(raw.get(key), list) for key in ('projects', 'subprojects', 'tasks', 'sigue')):
                     raise ControlError('Firstmate snapshot is incomplete.', 503, 'invalid-response')
                 # Unsupported operations disable their controls individually.
-                actions = [action for action, op in ACTION_OP.items() if op in capabilities['ops']]
+                actions = [action for action, op in ACTION_OP.items()
+                           if (SIGNAL_ACTIONS[action][1] in capabilities.get('signals', [])
+                               if action in ('cancel-pause', 'dequeue-resume') else op in capabilities['ops'])]
                 data = {'available': True, 'capabilities': dict(capabilities, actions=actions), 'snapshot': retain_unconfirmed(project_snapshot(raw), (data or {}).get('snapshot'), time.time())}
             except (KeyError, TypeError, ValueError, ControlError) as exc:
                 data = {'available': False, 'error': str(exc) if isinstance(exc, ControlError) else 'Firstmate snapshot is incomplete.', 'code': exc.code if isinstance(exc, ControlError) else 'invalid-response'}
@@ -309,7 +323,16 @@ class DeckControls:
             raise ControlError('This Deck action is not supported.', 400, 'unsupported_op')
         if command == 'apply':
             operation['request_id'] = request_id
-        result = self.invoke(home, command, operation)
+        signal = SIGNAL_ACTIONS.get(body.get('action'))
+        verb = signal[0 if command == 'preview' else 1] if signal else None
+        if verb and verb in capabilities.get('signals', []):
+            operation = {k: v for k, v in operation.items() if k != 'op'}
+            operation['scope'] = operation['target']
+            result = self.invoke(home, verb, operation)
+        else:
+            if body.get('action') in ('cancel-pause', 'dequeue-resume'):
+                raise ControlError('This Deck action is not supported.', 400, 'unsupported_op')
+            result = self.invoke(home, command, operation)
         if result.get('code') == 'stale_revision':
             self.cache.pop(home.path, None)
         if command == 'apply':

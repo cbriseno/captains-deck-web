@@ -87,7 +87,11 @@ test('pause controls: empty scopes, stopped descendants, inherited waits, own la
       assert.equal(fs.existsSync(path.join(proof,'home/work-calls.jsonl')),false,'No preview or apply was requested');
       // Cancel is the owner's clear_pause operation, distinct from resuming an already paused task.
       evaluate(`async()=>{document.querySelector('#state-tab-now').click();const p=document.querySelector('#board [data-node$="task:stopping"] .pause-control');[...p.querySelectorAll('button')].find(b=>b.textContent==='Cancelar pausa').click();return true;}`);
-      await new Promise(resolve=>setTimeout(resolve,1500));
+      for(let attempt=0;attempt<100;attempt++){
+        const recorded=fs.existsSync(path.join(proof,'home/work-calls.jsonl'))?fs.readFileSync(path.join(proof,'home/work-calls.jsonl'),'utf8'):'';
+        if(recorded.split('\n').filter(Boolean).map(JSON.parse).some(c=>c.command==='apply'&&c.operation.op==='clear_pause'&&c.operation.target==='task:stopping'))break;
+        await new Promise(resolve=>setTimeout(resolve,100));
+      }
       const calls=fs.readFileSync(path.join(proof,'home/work-calls.jsonl'),'utf8').trim().split('\n').map(JSON.parse);
       assert.ok(calls.some(c=>c.command==='preview'&&c.operation.op==='clear_pause'&&c.operation.target==='task:stopping'));
       assert.ok(calls.some(c=>c.command==='apply'&&c.operation.op==='clear_pause'&&c.operation.target==='task:stopping'));
