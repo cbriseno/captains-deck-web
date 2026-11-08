@@ -3,8 +3,9 @@
 window.DeckState = Object.freeze({
   reconcileProjects(nodes, keyOf) {
     for (const task of nodes) {
-      if (task.kind !== 'task' || task.parent) continue;
-      const project = task.card?.project || task.card?.flow?.project || task.flow?.project || task.project;
+      if (task.kind !== 'task' || task.parent && nodes.some(row => row.id === task.parent)) continue;
+      const declared = task.card?.project || task.card?.flow?.project || task.flow?.project || task.project || task.raw?.project || task.raw?.repository_project;
+      const project = typeof declared === 'string' && declared.startsWith('project:') ? {id:declared,label:declared.slice(8)} : declared;
       if (!project?.id) continue;
       const ownerId = project.id.startsWith('project:') ? project.id : 'project:' + project.id;
       let parent = nodes.find(row => row.home === task.home && row.owner_id === ownerId && row.kind === 'project');

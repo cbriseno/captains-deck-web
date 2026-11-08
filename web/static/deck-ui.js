@@ -477,15 +477,27 @@ window.createDeckUI = function (host) {
     preview(x,{action:'move',target:target.owner_id,position,adopt_priority:!fits&&near?(near.priority?Number(near.priority.slice(1)):near.priority_reported?4:null):null});
   }
   const requestFor=x=>ancestors(x).find(y=>y.kind==='request');
+  const activityEpoch=value=>{const e=event(value);return e?.epoch||Date.parse(e?.date||'')/1000||0;};
   const reviewNeeded=x=>x.state==='done'&&(x.outcome||x.raw?.outcome||x.card?.outcome)?.review==='needed';
   function requestRows(tasks){
     const groups=new Map(model.nodes.filter(x=>x.kind==='request').map(x=>[x.id,{...x,tasks:[],calls:[]}]));
-    for(const x of tasks){let r=requestFor(x);if(!r){const p=projectOf(x),id='legacy:'+(p?.id||x.home);r={id,home:x.home,kind:'request',title:t('Request not recorded'),parent:p?.id,project:p?.title,owner_id:'',pause:{},updated_at:null};if(!groups.has(id))groups.set(id,{...r,tasks:[],calls:[]});}groups.get(r.id)?.tasks.push(x);}
-    for(const c of attentionCards()){const own=byId.get(taskNodeId(c.home,c.task)),r=own&&(requestFor(own)||requestFor(questionNode(c)));if(r)groups.get(r.id)?.calls.push(c);}
+    const legacyId=x=>'legacy:'+(projectOf(x)?.id||x.home);
+    for(const x of tasks){
+      let r=requestFor(x);
+      if(!r){
+        const p=projectOf(x),id=legacyId(x);
+        r={id,home:x.home,kind:'request',title:p?.title||t('Project not reported'),parent:p?.id,project:p?.title,project_group:true,owner_id:'',pause:{},updated_at:null};
+        if(!groups.has(id))groups.set(id,{...r,tasks:[],calls:[]});
+      }
+      const group=groups.get(r.id);if(!group)continue;
+      group.tasks.push(x);
+      if(activityEpoch(x.updated_at)>activityEpoch(group.updated_at))group.updated_at=x.updated_at;
+    }
+    for(const c of attentionCards()){const own=byId.get(taskNodeId(c.home,c.task)),r=own&&(requestFor(own)||requestFor(questionNode(c))||groups.get(legacyId(own)));if(r)groups.get(r.id)?.calls.push(c);}
     return [...groups.values()].filter(r=>r.tasks.length||r.calls.length);
   }
   function requestState(r){if(ownPause(r)||['pending','paused','queued','unconfirmed','failed'].includes(r.pause?.state))return 'paused';return r.tasks.some(x=>['active','ready','unknown'].includes(x.state))?'now':r.tasks.some(x=>['stopping','paused'].includes(x.state))?'paused':r.calls.some(x=>!x.answered)||r.tasks.some(x=>x.state!=='done')?'waiting':'done';}
-  function orderedRequests(rows){return [...rows].sort(ui.order==='mine'?(a,b)=>a.home.localeCompare(b.home)||(a.manual??Infinity)-(b.manual??Infinity): (a,b)=>(event(b.updated_at)?.epoch||0)-(event(a.updated_at)?.epoch||0));}
+  function orderedRequests(rows){return [...rows].sort(ui.order==='mine'?(a,b)=>a.home.localeCompare(b.home)||(a.manual??Infinity)-(b.manual??Infinity): (a,b)=>activityEpoch(b.updated_at)-activityEpoch(a.updated_at));}
   function jumpAttention(x){
     const el=[...$('board').querySelectorAll('.attention-list .task-card')].find(el=>el.dataset.key===x||el.dataset.node===x);
     if(!el)return;el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.remove('attention-flash');void el.offsetWidth;el.classList.add('attention-flash');el.querySelector('button')?.focus({preventScroll:true});
@@ -499,7 +511,8 @@ window.createDeckUI = function (host) {
     const attention=r.calls.filter(c=>!c.answered),reviews=work.filter(reviewNeeded);
     if(attention.length)meta.append(structural(b(t('Needs you · {count}',{count:attention.length}),()=>jumpAttention(attention[0].attention_kind==='action'?attention[0].key:'question:'+attention[0].key),'request-chip')));
     if(reviews.length)meta.append(structural(b(t('Review · {count}',{count:reviews.length}),()=>jumpAttention(reviews[0].id),'request-chip')));
-    meta.append(time('Updated group',r.updated_at));
+    if(r.project_group)meta.querySelector('.request-project').textContent=t('Grouped by project');
+    meta.append(event(r.updated_at)?time('Updated group',r.updated_at):n('span','dates',t('Last activity not recorded')));
     const head=add(n('div','request-head'),title,r.owner_id?pauseButton(r):null,meta);wrap.append(head);
     if(ui.order==='mine'&&r.owner_id){
       const handle=b('⠿',()=>{},'request-handle');handle.title=t('Drag to move, or use ↑ and ↓');handle.dataset.control='handle:'+r.id;handle.setAttribute('aria-label',t('Move {name} up or down',{name:label(r)}));workControl(handle,can(r,'move'));head.prepend(handle);
@@ -521,7 +534,7 @@ window.createDeckUI = function (host) {
     board.classList.add('request-board');board.closest('.deck').classList.add('request-layout');$('projects-toggle').hidden=true;
     const nav=$('columns-nav');nav.className='request-tools';nav.removeAttribute('role');
     for(const [value,text]of [['recent','Recent first'],['mine','My order']]){const btn=b(t(text),()=>{ui.order=value;save('deck-request-sort',value);render(true,'filter');});btn.setAttribute('aria-pressed',String(ui.order===value));nav.append(btn);}
-    const rows=orderedRequests(requestRows(kanbanRows().tasks).filter(r=>r.tasks.some(x=>tasks.some(y=>y.id===x.id))||r.calls.some(c=>asks.some(q=>q.key===c.key)||act.some(q=>q.key===c.key)))),allOpen=rows.length&&rows.every(r=>ui.expanded.has(r.id));nav.append(b(t(allOpen?'Collapse requests':'Expand requests'),()=>{for(const r of rows)allOpen?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');}));
+    const rows=orderedRequests(requestRows(model.nodes.filter(x=>x.kind==='task')).filter(r=>r.tasks.some(x=>tasks.some(y=>y.id===x.id))||r.calls.some(c=>asks.some(q=>q.key===c.key)||act.some(q=>q.key===c.key)))),allOpen=rows.length&&rows.every(r=>ui.expanded.has(r.id));nav.append(b(t(allOpen?'Collapse requests':'Expand requests'),()=>{for(const r of rows)allOpen?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');}));
     const side=n('section','attention-list'),reviews=tasks.filter(reviewNeeded);side.setAttribute('aria-label',t('Needs you'));side.append(add(n('div','request-group-head'),n('h2','',t('Needs you')),structural(n('span','n',String(asks.length+act.length+reviews.length)))));
     // Keep owner attention order; card kinds are labels, never separate stacks.
     const pending=new Set([...asks,...act].map(c=>c.key));for(const c of attentionCards().filter(c=>pending.has(c.key)))side.append(c.attention_kind==='action'?actionCard(c):questionCard(c));side.append(...reviews.map(reviewCard));if(!pending.size&&!reviews.length)side.append(n('p','meta',t('Nothing needs you right now.')));

@@ -1083,5 +1083,7 @@
   "{count} KB": "{count} KB",
   "Up to 4096 bytes of text and eight files of 5 MB each. Typing only saves a draft.": "Hasta 4096 bytes de texto y ocho archivos de 5 MB cada uno. Escribir solo guarda un borrador.",
   "Use the task chat to change this answer.": "Usa el chat de la tarea para cambiar esta respuesta.",
-  "This Firstmate cannot receive corrections yet.": "Este Firstmate aún no puede recibir correcciones."
+  "This Firstmate cannot receive corrections yet.": "Este Firstmate aún no puede recibir correcciones.",
+  "Grouped by project": "Agrupado por proyecto",
+  "Last activity not recorded": "Última actividad no registrada"
 }

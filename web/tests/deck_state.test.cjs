@@ -38,3 +38,15 @@ test('canonical object identities fill absent aliases and full progress stays di
   assert.equal(state.completionNote(100,'done'),false);
   assert.equal(state.completionNote(80,'active'),false);
 });
+
+test('retained tasks recover a project container from the recorded canonical identity', () => {
+  const rows = [{kind:'task',home:'real',parent:'real:project:retired',raw:{project:'project:retired'}},
+    {kind:'task',home:'real',parent:'',raw:{repository_project:'project:retired'}},
+    {kind:'task',home:'real',parent:'',raw:{project:null}}];
+  state.reconcileProjects(rows,keyOf);
+  assert.equal(rows[0].parent,'real:project:retired');
+  assert.equal(rows[1].parent,'real:project:retired');
+  assert.equal(rows[2].parent,''); // No project is inferred from a title or task slug.
+  assert.equal(rows.find(row=>row.kind==='project').title,'retired');
+  assert.equal(rows.filter(row=>row.kind==='project').length,1);
+});
