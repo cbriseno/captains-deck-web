@@ -23,7 +23,7 @@ class Element {
   remove() { this.detach(); }
   contains(node) { for (let n = node; n; n = n.parentElement) if (n === this) return true; return false; }
   closest(selector) { for (let n = this; n; n = n.parentElement) if (n.matches(selector)) return n; return null; }
-  matches(selector) { const m = selector.match(/^([a-z0-9]*)((?:\.[\w-]+)*)$/); if (!m) throw new Error('Unsupported selector ' + selector);
+  matches(selector) { if(selector === '[data-uploading]') return this.dataset.uploading !== undefined; const m = selector.match(/^([a-z0-9]*)((?:\.[\w-]+)*)$/); if (!m) throw new Error('Unsupported selector ' + selector);
     const classes = (m[2] || '').split('.').filter(Boolean); const own = this.className.split(/\s+/);
     return (!m[1] || this.tagName === m[1].toUpperCase()) && classes.every(c => own.includes(c)); }
   querySelectorAll(selector) {
@@ -119,6 +119,7 @@ async function mountBoard(initial, clock = Date.UTC(2026, 0, 15, 12), tickets = 
   },setView() {},refreshAges() {},model:{nodes:[]}});
 
   vm.runInContext(fs.readFileSync(path.join(root, 'static/i18n.js'), 'utf8') + '\nthis.DeckI18n = DeckI18n;', context);
+  vm.runInContext(fs.readFileSync(path.join(root, 'static/deck-answers.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(root, 'static/app.js'), 'utf8'), context);
   const flush = async () => { for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve)); };
   await flush();

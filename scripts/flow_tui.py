@@ -3217,7 +3217,7 @@ def delivery_text(value) -> str:
     return ''.join(c for c in str(value) if c in '\n\t' or not unicodedata.category(c).startswith('C'))
 
 
-def delivery_read(home: str, path: str, limit: int) -> str:
+def delivery_read(home: str, path: str, limit: int, *, binary=False):
     """Read a regular file beneath home without traversing any symlink (also
     protects against a rename/symlink race). Absolute paths must be inside it.
     Oversize files are refused visibly rather than silently cutting a report.
@@ -3253,7 +3253,7 @@ def delivery_read(home: str, path: str, limit: int) -> str:
                 data = stream.read(limit + 1)
             if len(data) > limit:
                 raise ValueError(f'file exceeds {limit} byte read limit')
-            return data.decode('utf-8', errors='replace')
+            return data if binary else data.decode('utf-8', errors='replace')
         finally:
             os.close(leaf)
     finally:

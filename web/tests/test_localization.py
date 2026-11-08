@@ -60,7 +60,7 @@ class LocaleTests(unittest.TestCase):
         # Literal t(...) keys in the board script and static document text must
         # exist in both catalogs, so new copy never ships in only one language.
         static = Path(__file__).resolve().parents[1] / 'static'
-        script = '\n'.join((static / name).read_text(encoding='utf-8') for name in ('app.js', 'deck-ui.js', 'deck-motion.js', 'deck-relations.js', 'relay-settings.js'))
+        script = '\n'.join((static / name).read_text(encoding='utf-8') for name in ('app.js', 'deck-ui.js', 'deck-motion.js', 'deck-relations.js', 'deck-answers.js', 'relay-settings.js'))
         page = (static / 'index.html').read_text(encoding='utf-8')
         keys = set(re.findall(r"\bt\('((?:[^'\\\n]|\\.)*)'", script)) | set(re.findall(r'\bt\("((?:[^"\\\n]|\\.)*)"', script))
         keys = {key.encode().decode('unicode_escape').encode('latin-1').decode('utf-8') for key in keys}

@@ -138,14 +138,15 @@ function notice(text, error = false) { $('notice').hidden = !text; $('notice').c
 function syncSubmit() {
   const call = S.modal?.type === 'call' ? S.modal.ticket?.call : null;
   if (!call) return;
-  const blocked = S.busy || !S.online || !!S.modal.checkFailed || !!S.receipt;
+  const blocked = S.busy || !S.online || !!S.modal.checkFailed || !!S.receipt || !!document.querySelector('[data-uploading]');
   for (const b of $('detail-content').querySelectorAll('.option-choice')) {
     b.disabled = blocked;
     b.setAttribute('aria-pressed', String(b.dataset.value === S.modal.value));
   }
   const submit = $('answer-submit');
-  if (submit) submit.disabled = blocked || !!S.modal.draftNeedsReview || !$('answer-note')?.value.trim();
+  if (submit) submit.disabled = blocked || !!S.modal.draftNeedsReview || (!$('answer-note')?.value.trim() && !S.modal.attachments?.length) || !!document.querySelector('[data-uploading]');
 }
+const answerTools=window.createAnswerTools({t,node,button,api,state:S,syncSubmit});
 const retryable = (message) => Object.assign(new Error(message), {retry: true});
 async function api(path, body) {
   if (body && path !== '/api/diagnostics/trace' && path !== '/api/diagnostics/export' && window.DeckAnonymize?.enabled) throw new Error(t('Editing is unavailable in Anonymize mode.'));
@@ -195,7 +196,7 @@ function renderBoard() {
   if (!S.board) return;
   if (!relaySettings) relaySettings = window.createRelaySettings({t,node,button,api,state:S});
   if (!deckUI) deckUI = window.createDeckUI({t,node,button,append,api,ago,creationAge,exactTime,openCard,showDetail,closeDetail,detailOpen,parkDetail,state:S,
-    hashOf,cardLine,phaseText,refreshTimes,sourceStatus,poll,setView,placeDetail,openDelivery,reportLink,showAnswers:async()=>{await loadReceipts();$('receipts-panel').open=true;closeDetail(false);$('receipts-panel').scrollIntoView({block:'start'});}});
+    hashOf,cardLine,phaseText,refreshTimes,sourceStatus,poll,setView,placeDetail,openDelivery,reportLink,answerTools,showAnswers:async()=>{await loadReceipts();$('receipts-panel').open=true;closeDetail(false);$('receipts-panel').scrollIntoView({block:'start'});}});
   deckUI.render();
 }
 const flatten = (text) => String(text || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase(locale);
@@ -387,7 +388,7 @@ function saveDraft(event) {
   if (window.DeckAnonymize?.enabled) return;
   if (S.modal?.type !== 'call' || !$('answer-note') || S.receipt?.saved) return;
   if (event && ['input', 'change'].includes(event.type)) S.modal.draftNeedsReview = false;
-  const draft = { note: $('answer-note').value, value: S.modal.value || '', request: S.modal.request || crypto.randomUUID().replaceAll('-', ''), occurrence: S.modal.draftNeedsReview ? S.modal.previousOccurrence : S.modal.ticket.call.occurrence };
+  const draft = { note: $('answer-note').value, value: S.modal.value || '', request: S.modal.request || crypto.randomUUID().replaceAll('-', ''), attachments: S.modal.attachments || [], occurrence: S.modal.draftNeedsReview ? S.modal.previousOccurrence : S.modal.ticket.call.occurrence };
   S.modal.request = draft.request; S.drafts.set(S.modal.key, draft);
   try { sessionStorage.setItem('deck-draft-' + S.modal.key, JSON.stringify(draft)); } catch { /* In-memory draft remains available. */ }
   syncSubmit();
@@ -503,8 +504,8 @@ function choose(value) {
 }
 function renderCall(ticket, draftOverride) {
   const key = ticket.key, c = ticket.call, draft = draftOverride || readDraft(key);
-  const staleDraft = !!draft.occurrence && draft.occurrence !== c.occurrence && !!(draft.note || draft.value);
-  S.modal = { type: 'call', key, ticket, value: staleDraft ? '' : draft.value || '', request: draft.request || crypto.randomUUID().replaceAll('-', ''), draftNeedsReview: staleDraft, previousOccurrence: draft.occurrence, checkFailed: !!c.error };
+  const staleDraft = !!draft.occurrence && draft.occurrence !== c.occurrence && !!(draft.note || draft.value || draft.attachments?.length);
+  S.modal = { type: 'call', key, ticket, value: staleDraft ? '' : draft.value || '', attachments: draft.attachments || [], request: draft.request || crypto.randomUUID().replaceAll('-', ''), draftNeedsReview: staleDraft, previousOccurrence: draft.occurrence, checkFailed: !!c.error };
   $('detail-kicker').textContent = t('Needs you'); $('detail-title').textContent = ticket.title;
   const content = $('detail-content'); content.replaceChildren();
   const decisionOrigin=deckUI?.decisionOrigin?.(ticket.home,ticket.task);
@@ -513,12 +514,13 @@ function renderCall(ticket, draftOverride) {
   const howTo = c.link ? (c.detail || '').split(c.link).join('').replace(/\s+([.,;:])/g, '$1').replace(/\s{2,}/g, ' ').trim() : c.detail;
   const instructions = howTo ? contextRow(t('How to answer'), howTo) : null;
   if (instructions) instructions.className += ' call-instructions';
-  const technical = [contextRow(t('Answer limits'), t('One line, up to 512 bytes. Typing only saves a draft. Picking an option sends it right away; Send sends a written answer.'))];
+  const technical = [contextRow(t('Answer limits'), c.attachments ? t('Up to 4096 bytes of text and eight files of 5 MB each. Typing only saves a draft.') : t('One line, up to 512 bytes. Typing only saves a draft. Picking an option sends it right away; Send sends a written answer.'))];
   if (c.background) technical.unshift(contextRow(t('Original question text'), c.background));
   if (ticket.answered) {
     $('detail-kicker').textContent = t('Answer saved');
     content.append(prose(c.presentation?.decide || c.decide), contextRow(t('What happens next'), t('Firstmate has your answer and will pick it up next.')),
       button(t('See answer status'), async () => { await loadReceipts(); $('receipts-panel').open = true; closeDetail(false); $('receipts-panel').scrollIntoView({ block: 'start' }); }));
+    answerTools.panel(ticket.home,ticket.task).then(panel=>{if(content.isConnected&&S.modal?.key===key)content.append(panel);});
     if (instructions) content.append(instructions);
     const link = reportLink(c.link, key); if (link) content.append(link);
     addTechnical(ticket, ...technical); addHerdr(ticket); addStableLink(ticket.home, ticket.task, 'call'); return;
@@ -549,9 +551,10 @@ function renderCall(ticket, draftOverride) {
   const send = c.freeform ? button(t('Send'), () => { S.modal.value = ''; saveDraft(); submitAnswer(); }, 'primary') : null;
   if (send) send.id = 'answer-submit';
   const ownWords = append(node('div', 'own-words'), noteLabel, c.freeform ? node('p', 'notice', t('Sending closes this decision. To discuss it, use the supervisor chat.')) : null, send);
+  if(c.attachments){const modal=S.modal;answerTools.composer(ownWords,'api/ticket/'+encodeURIComponent(key)+'/upload',modal.attachments,()=>{modal.draftNeedsReview=false;saveDraft();},()=>S.modal===modal&&!S.receipt&&!S.busy);}
   if (choices.length) {
     const fold = disclosure(c.freeform ? t('Answer in my own words') : t('Add a note first (optional)'), ownWords);
-    fold.className += ' own-words-fold'; fold.open = !!draft.note; content.append(fold);
+    fold.className += ' own-words-fold'; fold.open = !!draft.note || !!draft.attachments?.length; content.append(fold);
   } else content.append(ownWords);
   if (recheck) {
     // The re-check carries its own one-line meaning.
@@ -590,6 +593,8 @@ async function checkCall() {
 function receiptView(receipt) {
   const box = node('div', 'receipt'); box.setAttribute('role', 'status');
   append(box, node('h3', '', receipt.saved ? t("Answer saved") : receipt.saved === false ? t("Answer not sent") : t("Not sure it was sent")), node('p', '', t(receipt.message)));
+  if(receipt.note)box.append(node('p','',receipt.note));
+  if(receipt.saved&&receipt.home&&receipt.task)answerTools.panel(receipt.home,receipt.task).then(panel=>box.append(panel));
   if (receipt.primary === 'unreachable') append(box, node('p', 'notice', t("Couldn’t reach Firstmate right now. It will see your answer on its next check.")));
   // Each step is a separate fact; none of them proves the agent resumed.
   const dl = node('dl'), no = t("Not yet");
@@ -621,7 +626,7 @@ async function submitAnswer() {
   window.DeckTrace?.setResponse('sent');
   S.busy = true; syncSubmit(); $('answer-status').replaceChildren(node('p', 'muted', t("Sending…")));
   try {
-    const receipt = await api('api/ticket/' + encodeURIComponent(modal.key) + '/answer', { value: draft.value || '', note: draft.note || '', occurrence: modal.ticket.call.occurrence, request_id: modal.request });
+    const receipt = await api('api/ticket/' + encodeURIComponent(modal.key) + '/answer', { value: draft.value || '', note: draft.note || '', attachments: (draft.attachments||[]).map(file=>file.id), occurrence: modal.ticket.call.occurrence, request_id: modal.request });
     if (S.modal !== modal) return;
     window.DeckTrace?.setResponse('receipt');
     S.receipt = receipt; $('answer-status').replaceChildren(receiptView(receipt));

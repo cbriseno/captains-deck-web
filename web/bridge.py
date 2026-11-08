@@ -9,6 +9,7 @@ one message the bridge sends is the Deck's fixed pointer to a recorded answer.
 from __future__ import annotations
 
 import argparse
+from answer_files import AnswerFiles, MAX_FILE
 import hashlib
 import http.cookies
 import json
@@ -369,6 +370,8 @@ class Board:
         self.data_dir = Path(data_dir).expanduser().absolute()
         self.herdr_origin = herdr_origin
         self.deck_controls = DeckControls(self.child_env)
+        self.file_capabilities = {}
+        self.answer_files = AnswerFiles(self, Refusal, fm, shell_command, endpoint_path, home_id)
         self.relay_settings = RelaySettings(self.child_env, os.environ.get('CD_WEB_EXTENSIONS_ROOT', ''),
             nodes=lambda home: self.deck_controls.source(home).get('snapshot', {}).get('nodes', []),
             proof_dir=self.data_dir / 'settings')
@@ -1048,6 +1051,7 @@ class Board:
         call['presentation'] = content['presentation']
         call['error'] = self.t(error)
         call['answer_limit'] = min(fm.ANSWER_LIMIT, 512)
+        call['attachments'] = self.file_answers_ready(home)
         return call
 
     @staticmethod
@@ -1066,19 +1070,22 @@ class Board:
             return kept[1]
         return self.guarded_intake(home)
 
-    @staticmethod
-    def guarded_intake(home):
+    def guarded_intake(self, home):
         try:
             response = subprocess.run(shell_command(endpoint_path(home.path, 'fm-captain-hold.sh'),
                                        'capabilities', '--json'), env=Board.child_env(home),
                                       capture_output=True, text=True, timeout=10,
                                       stdin=subprocess.DEVNULL)
             data = json.loads(response.stdout)
+            self.file_capabilities[home_id(home)] = data.get('attachments') is True
             return (response.returncode == 0 and data.get('schema') == 'fm-captain-hold.capabilities.v1'
                     and data.get('guarded_input') == 'single-row' and
                     all(command in data.get('expected_identity', []) for command in ('answers', 'reconcile-requests')))
         except (OSError, ValueError, subprocess.SubprocessError):
             return False
+
+    def file_answers_ready(self, home):
+        return not fm.is_remote_home(home) and self.file_capabilities.get(home_id(home), False)
 
     def submit(self, key, body, actor):
         if not all(isinstance(body.get(k, ''), str) for k in ('value', 'note', 'occurrence', 'request_id')):
@@ -1098,7 +1105,10 @@ class Board:
             if receipt_dir.is_symlink():
                 raise Refusal('Deck’s answer folder isn’t safe to use.')
             path = receipt_dir / (digest(key, occurrence) + '.json')
-            payload_hash = digest(key, occurrence, body.get('value', ''), body.get('note', ''))
+            payload = [key, occurrence, body.get('value', ''), body.get('note', '')]
+            if body.get('attachments'):
+                payload.append(body['attachments'])
+            payload_hash = digest(*payload)
             if path.exists() or path.is_symlink():
                 try:
                     previous = json.loads(fm.delivery_read(str(self.data_dir), str(path), 65536))
@@ -1121,17 +1131,20 @@ class Board:
                 raise Refusal(call['error'])
             if not secrets.compare_digest(call['occurrence'], occurrence):
                 raise Refusal('The question changed. Look at the new version first.')
+            paths = self.answer_files.paths(body.get('attachments', []), actor, key)
+            if paths and not call['attachments']:
+                raise Refusal('This Firstmate cannot receive attachments yet.', 409)
             value, note = body.get('value', '').strip(), body.get('note', '').strip()
             # The installed keyed intake bounds each field to 512 bytes. Reject
             # rather than silently truncate the captain's words.
-            if any(ch in value + note for ch in ('\x00', '\t', '\n', '\r')):
+            if '\x00' in value + note or (not call['attachments'] and any(ch in value + note for ch in ('\t', '\n', '\r'))):
                 raise Refusal('Keep the answer on one line. Nothing was sent.', 400)
-            if len(note.encode()) > min(fm.ANSWER_LIMIT, 512):
+            if len(note.encode()) > (4096 if call['attachments'] else min(fm.ANSWER_LIMIT, 512)):
                 raise Refusal('That answer is too long. Shorten it and send again.', 400)
             options = content['options']
             if value and value not in [o['value'] for o in options]:
                 raise Refusal('That option is no longer available.')
-            if (not value and (not call['freeform'] or not note)):
+            if (not value and (not call['freeform'] or not (note or paths))):
                 raise Refusal('Choose an option or write an answer.', 400)
             if self.content(card, home) != content:
                 raise Refusal('The question changed. Look at the new version first.')
@@ -1145,7 +1158,7 @@ class Board:
                 # Preserve every answer byte even with an unusually long title.
                 fields[2] = fm._flatten_field(card.title)[:80]
                 line = '\t'.join(fields)
-            if any(len(field.encode()) > 512 for field in line.split('\t')):
+            if not call['attachments'] and any(len(field.encode()) > 512 for field in line.split('\t')):
                 raise Refusal('Your choice plus note is too long. Shorten the note and send again.', 400)
             # No write until all checks pass. The pending marker is deliberately
             # durable: after an interrupted call retry cannot submit twice.
@@ -1154,6 +1167,7 @@ class Board:
                        'home': home_id(home), 'task': card.task, 'title': card.title, 'occurrence': occurrence,
                        'operation': 'reconcile' if value == 'reconcile' else 'answer',
                        'question_identity': call['identity'], 'question_signature': self.question_signature(content),
+                       'note': note, 'attachments': body.get('attachments', []),
                        'at': time.time(), 'saved': None, 'notice': 'unknown',
                        'ack': 'unknown', 'consumed': 'unknown', 'state': 'uncertain',
                        'message': 'Sending started. If the connection dropped, check the answer status before sending again.'}
@@ -1174,9 +1188,13 @@ class Board:
                         if binding.returncode:
                             raise Refusal('Couldn’t register Deck for re-check requests.')
                 args += ['--expected-identity', call['identity']]
-                process = subprocess.run(shell_command(endpoint_path(home.path, 'fm-captain-hold.sh'), *args),
-                                         input=line + '\n', text=True, capture_output=True,
-                                         env=self.child_env(home), timeout=90)
+                if call['attachments'] and value != 'reconcile':
+                    text = dialog.display_answer()
+                    process = self.answer_files.run(home, card.task, 'answer', text, paths, call['identity'], call['close'])
+                else:
+                    process = subprocess.run(shell_command(endpoint_path(home.path, 'fm-captain-hold.sh'), *args),
+                                             input=line + '\n', text=True, capture_output=True,
+                                             env=self.child_env(home), timeout=90)
                 output = (process.stdout + '\n' + process.stderr).strip()
                 receipt.update(state='saved' if process.returncode == 0 else 'uncertain',
                                saved=True if process.returncode == 0 else None,
@@ -1366,7 +1384,7 @@ class Handler(BaseHTTPRequestHandler):
                 if self.headers.get('Transfer-Encoding'):
                     raise Refusal('Transfer-Encoding is not allowed.', 400)
                 length = int(self.headers.get('Content-Length', '0'))
-                if not 0 < length <= MAX_BODY:
+                if not 0 < length <= (MAX_FILE * 4 // 3 + 4096 if path.endswith('/upload') else MAX_BODY):
                     raise Refusal('Request is too large or empty.', 413)
                 body = json.loads(self.rfile.read(length))
                 if not isinstance(body, dict):
@@ -1470,6 +1488,33 @@ class Handler(BaseHTTPRequestHandler):
                 data = board.ticket(parts[2])
             elif len(parts) == 4 and parts[:2] == ['api', 'ticket'] and parts[3] == 'report' and not unsafe:
                 data = board.call_report(parts[2])
+            elif len(parts) == 4 and parts[:2] == ['api', 'ticket'] and parts[3] == 'upload' and unsafe:
+                card = board.card(parts[2])
+                if (card.bucket != 'captains_call' or (getattr(card, 'call', None) or {}).get('kind') == 'action'
+                        or not board.intake_ready(board.owner(card), fresh=True)
+                        or not board.file_answers_ready(board.owner(card))):
+                    raise Refusal('This question cannot receive attachments.', 409)
+                data = board.answer_files.upload(parts[2], body, actor)
+            elif len(parts) == 3 and parts[:2] == ['api', 'attachments'] and not unsafe:
+                item, _, content = board.answer_files.uploaded(parts[2], actor)
+                self.respond(200, content, item['type'], sid, secure)
+                return
+            elif len(parts) >= 4 and parts[:2] == ['api', 'answers']:
+                home, task = board.home(parts[2]), parts[3]
+                if not fm.KEY_RE.fullmatch(task) or fm.is_remote_home(home):
+                    raise Refusal('Answer unavailable.', 404)
+                if len(parts) == 4 and not unsafe:
+                    data = board.answer_files.saved(home, task)
+                elif len(parts) == 5 and parts[4] == 'upload' and unsafe:
+                    data = board.answer_files.upload(parts[2] + '/' + task, body, actor)
+                elif len(parts) == 5 and parts[4] == 'correct' and unsafe:
+                    data = board.answer_files.correct(home, task, body, actor)
+                elif len(parts) == 6 and parts[4] == 'file' and parts[5].isdigit() and not unsafe:
+                    content, mime = board.answer_files.canonical_file(home, task, parts[5])
+                    self.respond(200, content, mime, sid, secure)
+                    return
+                else:
+                    raise Refusal('Route unavailable.', 404)
             elif len(parts) == 4 and parts[:2] == ['api', 'ticket'] and parts[3] == 'answer' and unsafe:
                 data = board.submit(parts[2], body, actor)
             elif len(parts) in (4, 5) and parts[:2] == ['api', 'delivery']:

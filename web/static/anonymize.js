@@ -2,7 +2,7 @@
 'use strict';
 window.DeckAnonymize = (() => {
   const attributes = ['title', 'aria-label', 'alt', 'placeholder', 'label'];
-  const readOnlyActions = '[data-work-allowed],.option-choice,#answer-submit,#explain-request,.deck-removal-send,.change-preview button,#relay-confirm-apply,#relay-settings-content button';
+  const readOnlyActions = '[data-work-allowed],.option-choice,#answer-submit,#explain-request,.deck-removal-send,.answer-edit,.answer-attach,.answer-remove,.change-preview button,#relay-confirm-apply,#relay-settings-content button';
   const words = {en: ['amber', 'cloud', 'orbit', 'tile', 'wave', 'echo'], es: ['ámbar', 'nube', 'órbita', 'pieza', 'onda', 'eco']};
   const provenance = new WeakMap(), records = new Map(), generated = new WeakSet(), roots = new Set();
   const projectAliases = new Map(), times = new Set(), selectWidths = new WeakMap();
@@ -258,7 +258,7 @@ window.DeckAnonymize = (() => {
     const selection = typeof focused?.selectionStart === 'number' ? [focused.selectionStart, focused.selectionEnd, focused.selectionDirection] : null;
     if (!processing) savedVisibility = document.body.style.visibility;
     document.body.style.visibility = 'hidden';
-    processing = true; active = !!enabled; pending.clear(); restore();
+    processing = true; active = !!enabled; document.documentElement.dataset.anonymized=String(active); pending.clear(); restore();
     const toggle = document.getElementById('anonymize'); if (toggle) toggle.checked = active;
     try { sessionStorage.setItem('deck-anonymize', String(active)); } catch { /* Current page still works. */ }
     metrics = {read: 0, calculate: 0, attributes: 0, write: 0, maxTask: 0, staged: false};

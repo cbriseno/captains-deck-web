@@ -31,6 +31,7 @@ Firstmate advises on initiative, dependencies and active work, then needs separa
 No Deck control creates or deletes work.
 
 Questions use the established guarded answer intake, with the recommended choice and free text, drafts, occurrence guards and durable answer status.
+Free responses accept text, attachments, or both when the owner advertises file intake. Choose files, paste screenshots, or drop them on the question card; each file is limited to 5 MB, with eight per answer. Supported types are PNG, JPEG, GIF, WebP, PDF, UTF-8 text (TXT, MD, CSV, JSON), and ZIP. Saved answers appear on the waiting task; images enlarge on click and blur in Anonymize mode. Changing an answer sends a new correction after a ten-second Undo window; it never reverses applied work, and active tasks use their chat. Unsent uploads remain in Deck’s private data directory.
 A completed investigation report may be the origin of a separate still-open decision; the two states are shown separately and no decision closes merely because its origin was delivered.
 Only genuine outstanding questions appear; several in one project form a compact stack.
 The work contract’s explicit question state also covers questions behind dependencies; it reuses the native card normalizer, occurrence guard and answer intake.

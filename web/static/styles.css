@@ -1097,3 +1097,20 @@ footer { padding:16px 0 24px; }
 html[data-anon-pending] body { visibility: hidden; }
 [data-anon-word] { display: inline-block; white-space: nowrap; vertical-align: baseline; }
 [data-anon-word] > span { display: inline-block; transform-origin: left center; }
+
+/* Answer attachments retain the same readable scale on desktop and phone. */
+.answer-files { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+.answer-file { position:relative; display:flex; flex-direction:column; gap:3px; max-width:160px; padding:6px; border:1px solid var(--line); border-radius:8px; overflow-wrap:anywhere; }
+.answer-image { padding:0; border:0; background:none; }
+.answer-image img { display:block; width:104px; height:76px; object-fit:cover; border-radius:4px; }
+.answer-remove { position:absolute; right:0; top:0; padding:2px 6px; }
+.answer-attach { margin-right:8px; }
+.answer-dragover { outline:2px dashed var(--accent); outline-offset:4px; }
+.answer-lightbox { padding:8px; max-width:95vw; max-height:95vh; border:0; background:transparent; }
+.answer-lightbox::backdrop { background:#000b; }
+.answer-lightbox img { display:block; max-width:90vw; max-height:88vh; object-fit:contain; }
+.answer-editor textarea { display:block; width:100%; margin:8px 0; }
+.recorded-answer,.answer-summary { padding:8px 12px; border-top:1px solid var(--line); }
+.answer-summary p { margin:4px 0; white-space:pre-wrap; }
+html[data-anonymized=true] .answer-image img,html[data-anonymized=true] .answer-lightbox img { filter:blur(12px); }
+html[data-anonymized=true] .answer-file-link { pointer-events:none; }
