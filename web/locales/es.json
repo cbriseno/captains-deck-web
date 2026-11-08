@@ -1049,5 +1049,6 @@
   "Firstmate could not resume {name}: {running} of {cap} agents running. Waiting in the queue.": "Firstmate no pudo reanudar {name}: hay {running} de {cap} agentes en curso. Queda en cola.",
   "Firstmate resumed {name} from the queue.": "Firstmate reanudó {name} desde la cola.",
   "Pauses that will remain: {names}": "Pausas que seguirán: {names}",
-  "Firstmate could not resume {name}: {reason}. Waiting in the queue.": "Firstmate no pudo reanudar {name}: {reason}. Queda en cola."
+  "Firstmate could not resume {name}: {reason}. Waiting in the queue.": "Firstmate no pudo reanudar {name}: {reason}. Queda en cola.",
+  "Agents · not reported": "Agentes · sin dato"
 }

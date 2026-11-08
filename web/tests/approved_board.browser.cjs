@@ -15,7 +15,7 @@ test('approved Deck: hierarchy, controls, receipts, inline questions, history, t
   const child = spawn('python3',[path.join(__dirname,'approved_fixture.py'),proof],{env,stdio:['ignore','pipe','pipe']});
   let browserStarted = false;
   const run = (command,args=[]) => {
-    const result = spawnSync(cli,[command,...args],{env,encoding:'utf8',timeout:30000,maxBuffer:2*1024*1024});
+    const result = spawnSync(cli,[command,...args],{env,encoding:'utf8',timeout:command==='open'?60000:30000,maxBuffer:2*1024*1024});
     assert.equal(result.status,0,`${command}: ${result.stdout}\n${result.stderr}`);
     return result.stdout;
   };

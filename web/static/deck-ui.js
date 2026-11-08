@@ -218,8 +218,8 @@ window.createDeckUI = function (host) {
   function pauseSignals(){
     const capacity=$('agents-capacity');capacity.replaceChildren();
     for(const source of model.sources){
-      const crew=source.snapshot?.crew;if(!crew)continue;
-      const chip=structural(n('span','agents-count',t('Agents {running} of {cap}',{running:crew.agents_running??'?',cap:crew.agents_cap??'?'})));
+      const crew=source.snapshot?.crew;
+      const chip=structural(n('span','agents-count',crew?t('Agents {running} of {cap}',{running:crew.agents_running??t('Not reported'),cap:crew.agents_cap??t('Not reported')}):t('Agents · not reported')));
       chip.title=app.board.homes?.find(h=>h.id===source.home)?.label||chip.textContent;chip.dataset.stale=String(!source.available);capacity.append(chip);
     }
     for(const source of model.sources)for(const e of source.snapshot?.events||[]){

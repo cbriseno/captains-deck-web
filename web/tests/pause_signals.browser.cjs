@@ -26,6 +26,10 @@ test('pause preview, scope signals, confirmation, queue and owner events',{timeo
     browser=true;run('open',url);run('resize','1440','1000');
     assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes 3 de 6');return true;}`),true);
     assert.equal(evaluate(`async()=>({disabled:${button('task:inherited-signal')}.disabled,text:${button('task:inherited-signal')}.textContent})`).disabled,true,'Inherited safe point cannot cancel a different scope');
+    change(raw=>{raw.crew=null;});
+    assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes · sin dato');return true;}`),true);
+    change(raw=>{raw.crew={agents_running:3,agents_cap:6};});
+    evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes 3 de 6');return true;}`);
     for(const id of ['task:web','req:demo','project:deck']){
       await click(id,'Pausar');
       assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('.pause-preview')?.textContent.includes('Firstmate cerrará sus agentes'));return document.querySelector('#detail').hidden;}`),true);

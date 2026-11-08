@@ -1049,5 +1049,6 @@
   "Firstmate could not resume {name}: {running} of {cap} agents running. Waiting in the queue.": "Firstmate could not resume {name}: {running} of {cap} agents running. Waiting in the queue.",
   "Firstmate resumed {name} from the queue.": "Firstmate resumed {name} from the queue.",
   "Pauses that will remain: {names}": "Pauses that will remain: {names}",
-  "Firstmate could not resume {name}: {reason}. Waiting in the queue.": "Firstmate could not resume {name}: {reason}. Waiting in the queue."
+  "Firstmate could not resume {name}: {reason}. Waiting in the queue.": "Firstmate could not resume {name}: {reason}. Waiting in the queue.",
+  "Agents · not reported": "Agents · not reported"
 }
