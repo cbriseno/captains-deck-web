@@ -641,6 +641,8 @@ class Board:
                 'supervisor': getattr(card, 'supervisor', {}) or {},
                 'time': self.event_json(getattr(card, 'event_time', None)),
                 # Delivered work leads with what the worker said changed.
+                'request': human.get('request'), 'outcome': human.get('outcome'),
+                'validation_pending': human.get('waiting_for'),
                 'summary': (excerpt(human['summary']) if isinstance(human.get('summary'), str) else '')
                            or excerpt(getattr(card, 'delivery_summary', '') or ''),
                 'answered': answered,
@@ -861,6 +863,7 @@ class Board:
                 result.append({'task': row['id'], 'title': title,
                                'home': home_id(home), 'owner': home.label, 'project': project,
                                'request': human.get('request'), 'outcome': human.get('outcome'),
+                               'summary': excerpt(human.get('summary') or ''),
                                'time': self.event_json(event), 'closed': row.get('closed') or ''})
         # The order follows the time each row shows, not the raw closing text.
         result.sort(key=lambda row: (newest_first(row['time']), row['task'], row['home']), reverse=True)
@@ -1481,7 +1484,7 @@ class Handler(BaseHTTPRequestHandler):
                 if fm.is_remote_home(owner):
                     raise Refusal('Controls require a local owner.', 403)
                 operation = parts[3]
-                if (unsafe and operation in ('preview', 'apply')) or (not unsafe and operation == 'receipt'):
+                if (unsafe and operation in ('preview', 'apply', 'review')) or (not unsafe and operation == 'receipt'):
                     data = board.deck_controls.request(owner, operation,
                         body if unsafe else {'request_id': value('request_id')}, actor)
                 else:

@@ -43,12 +43,31 @@ class ProjectionTests(unittest.TestCase):
         request = {'id': 'old', 'label': 'One request', 'project': 'deck'}
         outcome = {'role': 'partial', 'review': 'needed'}
         snapshot = project_snapshot({'requests': requests, 'rev': 'r9', 'tasks': [
-            {'key': 'task:work', 'state': 'done', 'request': request, 'outcome': outcome}]})
+            {'key': 'task:work', 'state': 'done', 'request': request, 'outcome': outcome, 'outcome_occurrence': 'result-v1'}]})
         self.assertEqual(snapshot['rev'], 'r9')
         self.assertEqual(snapshot['requests'], requests)
         self.assertEqual(snapshot['nodes'][0]['request'], request)
         self.assertEqual(snapshot['nodes'][0]['outcome'], outcome)
+        self.assertEqual(snapshot['nodes'][0]['outcome_occurrence'], 'result-v1')
         self.assertEqual(project_snapshot({'tasks': [{'key': 'task:legacy'}]})['requests'], [])
+
+    def test_shared_review_uses_exact_occurrence_contract_without_work_receipt(self):
+        controls = DeckControls(lambda home: {})
+        home = type('Home', (), {'path': 'synthetic'})()
+        payload = dict(target='task:result', occurrence='result-v1', review='done', expected_review='needed')
+        response = dict(ok=True, state='applied', occurrence='result-v1',
+                        undo=dict(payload, review='needed', expected_review='done'))
+        controls.cache[home.path] = (0, {})
+        with patch.object(controls, 'invoke', side_effect=[{'outcome_controls': ['outcome.review']}, response]) as invoke:
+            self.assertEqual(controls.request(home, 'review', payload, 'captain'), response)
+        self.assertEqual(invoke.call_args_list[1].args, (home, 'outcome.review', payload))
+        self.assertNotIn('request_id', payload)
+        self.assertNotIn(home.path, controls.cache)
+        with patch.object(controls, 'invoke', return_value={'ops': []}) as invoke:
+            with self.assertRaises(ControlError) as refused:
+                controls.request(home, 'review', payload, 'captain')
+            self.assertEqual(refused.exception.code, 'unsupported_op')
+            self.assertEqual(invoke.call_count, 1)
 
     def test_pause_signal_projection_preserves_owner_confirmation_and_capacity(self):
         raw = {'projects': [], 'subprojects': [], 'sigue': [], 'tasks': [

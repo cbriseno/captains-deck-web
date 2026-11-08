@@ -40,11 +40,11 @@ window.createAnswerTools = ({t,node,button,api,state,syncSubmit}) => {
         status.textContent=t('Uploading…');
         const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(String(reader.result).split(',')[1]);reader.onerror=reject;reader.readAsDataURL(file);});
         const saved=await api(uploadPath,{name:file.name,data});items.push(saved);draw();changed();
-      }status.textContent='';}catch(error){status.textContent=error.message;}finally{uploading=false;attach.disabled=false;delete container.dataset.uploading;status.hidden=!status.textContent;syncSubmit();}
+      }status.textContent='';}catch(error){status.textContent=error.message;}finally{uploading=false;attach.disabled=false;delete container.dataset.uploading;status.hidden=!status.textContent;changed();syncSubmit();}
     }
     picker.addEventListener('change',()=>{add([...picker.files]);picker.value='';});
     container.addEventListener('paste',event=>{const selected=[...(event.clipboardData?.files||[])];if(selected.length){event.preventDefault();add(selected);}});
-    const field=container.querySelector('.answer-label'),send=container.querySelector('#answer-submit');
+    const field=container.querySelector('.answer-label'),send=container.querySelector('#answer-submit')||container.querySelector('.answer-send');
     if(field&&send){const row=node('div','answer-compose');row.append(attach,field,send,picker);container.prepend(row);container.append(hint,list,status);}
     else container.append(attach,picker,hint,list,status);
     draw();

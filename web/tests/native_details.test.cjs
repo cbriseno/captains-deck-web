@@ -88,8 +88,9 @@ async function mountBoard(initial, clock = Date.UTC(2026, 0, 15, 12), tickets = 
     }
     return { ok: true, json: async () => ({ receipts: [] }) };
   };
+  const answerTimers=[];
   const context = vm.createContext({ document: doc, fetch, navigator: {}, location: { href: 'http://example.test/', search: '' },
-    matchMedia: (query) => ({ matches: !!setup.phone && /max-width/.test(query), addEventListener() {} }), setInterval: (fn) => timers.push(fn), setTimeout, clearTimeout,
+    matchMedia: (query) => ({ matches: !!setup.phone && /max-width/.test(query), addEventListener() {} }), setInterval: (fn) => timers.push(fn), setTimeout: (fn,ms,...args) => ms===10000 ? answerTimers.push(fn) : setTimeout(fn,ms,...args), clearTimeout,
     localStorage: { getItem(key) { return local.get(key) ?? null; }, setItem(key, value) { local.set(key, value); } },
     AbortController, URL, URLSearchParams, Intl, Date: FixedDate, JSON, Map, Set, Promise, crypto: require('node:crypto').webcrypto, Option: function Option(text, value) { return Object.assign(new Element('option', doc), { text, value }); },
     sessionStorage: { getItem(key) { return storage.get(key) || null; }, setItem(key, value) { storage.set(key, value); } } });
@@ -123,7 +124,7 @@ async function mountBoard(initial, clock = Date.UTC(2026, 0, 15, 12), tickets = 
   vm.runInContext(fs.readFileSync(path.join(root, 'static/app.js'), 'utf8'), context);
   const flush = async () => { for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve)); };
   await flush();
-  return { doc, flush, requests, local, poll: timers[0], setBoard(next) { current = next; } };
+  return { doc, flush, finishAnswer:async()=>{for(const fn of answerTimers.splice(0))fn();await flush();}, requests, local, poll: timers[0], setBoard(next) { current = next; } };
 }
 
 const underwayList = (doc) => doc.getElementById('board').children.find(s => s.dataset.kind === 'underway').querySelector('.cards');
@@ -288,7 +289,7 @@ test('answer receipt says whether Firstmate was pointed at the answer or sees it
     const field = view.doc.getElementById('answer-note'); field.value = 'Sample answer';
     field.listeners.input[0]({type: 'input'});
     const send = descendants(view.doc.getElementById('detail-content')).find(n => n.id === 'answer-submit');
-    send.listeners.click[0](); await view.flush();
+    send.listeners.click[0](); await view.finishAnswer();
     assert.ok(view.requests.some(r => r.url === 'api/ticket/ask/answer' && r.method === 'POST'));
     return view.doc.getElementById('answer-status').textContent;
   };
@@ -326,14 +327,14 @@ test('structured options are one-click choices with the recommended one marked',
   assert.equal(recheck.querySelector('strong').textContent, 'Check again first');
   assert.equal(recheck.querySelector('small').textContent, 'Nothing gets decided yet.'); assert.equal(list.contains(recheck), false);
   assert.equal(nodes.some(n => n.className === 'answer-help'), false);
-  // Free text is the secondary path: folded away until the captain opens it.
+  // Free text stays visible beside the options.
   const fold = nodes.find(n => n.tagName === 'DETAILS' && n.className.includes('own-words-fold'));
-  assert.equal(fold.open, false); assert.ok(fold.contains(view.doc.getElementById('answer-note')));
+  assert.equal(fold.open, true); assert.ok(fold.contains(view.doc.getElementById('answer-note')));
   const link = nodes.find(n => n.tagName === 'A' && n.textContent === 'See the full report ↗');
   assert.equal(link.href, 'https://example.com/report'); assert.equal(link.rel, 'noopener noreferrer');
   assert.ok(view.requests.every(r => r.method === 'GET'));
   tickets['pick/answer'] = {saved: true, state: 'saved', message: 'Answer saved by Firstmate.', notice: 'unknown', ack: 'unknown', consumed: 'unknown'};
-  choices[1].listeners.click[0](); await view.flush();
+  choices[1].listeners.click[0](); await view.finishAnswer();
   const posts = view.requests.filter(r => r.method === 'POST');
   assert.equal(posts.length, 1);
   assert.equal(posts[0].url, 'api/ticket/pick/answer');
@@ -344,6 +345,16 @@ test('structured options are one-click choices with the recommended one marked',
   assert.equal(view.requests.filter(r => r.method === 'POST').length, 1);
 });
 
+test('Undo cancels a pending answer before Firstmate is called and preserves the draft', async () => {
+  const view=await questionView({ask:questionTicket('ask','Choose scope','Choose scope','')});await view.open('ask');
+  const note=view.doc.getElementById('answer-note');note.value='Keep this draft';note.listeners.input[0]({type:'input'});
+  view.doc.getElementById('answer-submit').listeners.click[0]();await view.flush();
+  assert.equal(view.requests.some(r=>r.method==='POST'),false);
+  view.doc.getElementById('answer-status').querySelector('button').listeners.click[0]();await view.finishAnswer();
+  assert.equal(view.requests.some(r=>r.method==='POST'),false);assert.equal(note.value,'Keep this draft');
+  assert.equal(view.doc.getElementById('answer-submit').disabled,false);
+});
+
 test('a failed send offers a retry only when the request itself failed', async () => {
   const tickets = {pick: structuredTicket('pick', [{value: 'staged', label: 'Staged rollout', hint: ''}, reconcile])};
   const view = await questionView(tickets); await view.open('pick');
@@ -351,12 +362,12 @@ test('a failed send offers a retry only when the request itself failed', async (
   const staged = nodes.find(n => n.tagName === 'BUTTON' && n.dataset.value === 'staged');
   const status = () => view.doc.getElementById('answer-status').textContent;
   tickets['pick/answer'] = () => { throw Object.assign(new Error('aborted'), {name: 'AbortError'}); };
-  staged.listeners.click[0](); await view.flush();
+  staged.listeners.click[0](); await view.finishAnswer();
   assert.equal(status(), 'Deck took too long to answer. Your draft is safe. Try the same answer again.');
   assert.equal(staged.disabled, false);
   const refusal = 'That answer is too long. Shorten it and send again.';
   tickets['pick/answer'] = () => ({ok: false, status: 400, json: async () => ({error: refusal})});
-  staged.listeners.click[0](); await view.flush();
+  staged.listeners.click[0](); await view.finishAnswer();
   assert.equal(status(), refusal + ' Your draft is safe.');
   const posts = view.requests.filter(r => r.method === 'POST');
   assert.equal(posts.length, 2); assert.equal(posts[0].body.request_id, posts[1].body.request_id);
@@ -375,7 +386,7 @@ test('a call without options keeps the plain own-words flow and the re-check cho
   note.value = 'Ship it next week'; note.listeners.input[0]({type: 'input'});
   assert.equal(send.disabled, false);
   tickets['free/answer'] = {saved: true, state: 'saved', message: 'Answer saved by Firstmate.', notice: 'unknown', ack: 'unknown', consumed: 'unknown'};
-  send.listeners.click[0](); await view.flush();
+  send.listeners.click[0](); await view.finishAnswer();
   const post = view.requests.find(r => r.method === 'POST');
   assert.deepEqual([post.body.value, post.body.note], ['', 'Ship it next week']);
   assert.ok(nodes.some(n => n.tagName === 'BUTTON' && n.dataset.value === 'reconcile'));
@@ -464,7 +475,7 @@ test('a delivery without a summary opens its formatted report and one explanatio
   const history = {records: [{task: 'old', home: 'h', title: 'Delivered'}], details: [], omitted: 0, scope: ''};
   const view = await mountBoard(board([]), undefined, {}, {}, {history, delivery});
   await view.doc.getElementById('history-view').listeners.click[0](); await view.flush();
-  await view.doc.getElementById('history-results').querySelector('button').listeners.click[0](); await view.flush();
+  await view.doc.getElementById('history-results').querySelector('.history-row').listeners.click[0](); await view.flush();
   const content = view.doc.getElementById('detail-content');
   assert.equal(content.querySelector('.detail-tabs'), null);
   assert.equal(content.querySelector('h3').textContent, 'What changed');
@@ -487,7 +498,7 @@ test('explanation states share one control and one status line, with a safe form
     const explanation = {state, receipt: {reply: state === 'answered' ? {body: '**Done** <script>boom()</script>'} : null}};
     const view = await mountBoard(board([]), undefined, {}, {}, {history, delivery, explanation});
     view.doc.getElementById('history-view').listeners.click[0](); await view.flush();
-    view.doc.getElementById('history-results').querySelector('button').listeners.click[0](); await view.flush();
+    view.doc.getElementById('history-results').querySelector('.history-row').listeners.click[0](); await view.flush();
     const content = view.doc.getElementById('detail-content');
     assert.equal(content.querySelector('.explain-status').textContent, line);
     assert.equal(content.querySelector('.explain-actions').querySelectorAll('button').length, 1);

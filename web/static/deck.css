@@ -509,3 +509,17 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
  .request-head>.pause-control{max-width:155px;flex-wrap:wrap}.request-head .pause-pill{font-size:11px;padding:2px 5px}.request-head .mix-pause{font-size:12px}
  .deck-settings{padding:16px}.deck-settings .settings-options{gap:10px}
 }
+
+/* Direct attention actions keep the editor visible beside the choices. */
+.inline-answer{padding:0 14px 12px;display:grid;gap:8px}
+.inline-answer textarea{width:100%;min-width:0;resize:vertical;box-sizing:border-box}
+.inline-answer .option-list{margin:0}.inline-answer .recommended{margin-left:8px}
+.qcard:has(#detail[data-open="true"])>.inline-answer{display:none}
+.outcome-badge,.review-badge{display:inline-block;font-size:11px;font-weight:600;margin-right:8px}
+.result-summary{display:block;margin-top:8px}.reading-note{color:var(--accent);font-size:12px}
+.review-card>button:not(.card-open){margin:4px 12px 10px}
+.history-filters{display:flex;gap:8px;margin-bottom:12px}.history-filters [aria-pressed="true"]{font-weight:700}
+.history-request>summary{cursor:pointer;font-weight:600;padding:12px 0}.history-result{border-inline-start:3px solid var(--accent)}
+
+.inline-answer .own-words{padding:0;border:0;margin:0}
+.inline-answer .answer-compose{gap:5px}.inline-answer .answer-compose textarea{min-height:48px}

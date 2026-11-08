@@ -196,7 +196,7 @@ function renderBoard() {
   if (!S.board) return;
   if (!relaySettings) relaySettings = window.createRelaySettings({t,node,button,api,state:S});
   if (!deckUI) deckUI = window.createDeckUI({t,node,button,append,api,ago,creationAge,exactTime,openCard,showDetail,closeDetail,detailOpen,parkDetail,state:S,
-    hashOf,cardLine,phaseText,refreshTimes,sourceStatus,poll,setView,placeDetail,openDelivery,reportLink,answerTools,showAnswers:async()=>{await loadReceipts();$('receipts-panel').open=true;closeDetail(false);$('receipts-panel').scrollIntoView({block:'start'});}});
+    hashOf,cardLine,phaseText,refreshTimes,sourceStatus,poll,setView,placeDetail,openDelivery,reportLink,answerTools,inlineAnswer,showAnswers:async()=>{await loadReceipts();$('receipts-panel').open=true;closeDetail(false);$('receipts-panel').scrollIntoView({block:'start'});}});
   deckUI.render();
 }
 const flatten = (text) => String(text || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase(locale);
@@ -301,27 +301,31 @@ async function loadHistory() {
     const query = new URLSearchParams({ home: S.home, q: window.DeckAnonymize?.value($('history-search')) ?? $('history-search').value });
     const data = await api('api/history?' + query);
     if (generation !== S.historyGeneration) return;
-    const count = data.records.length === 1 ? t('1 delivery') : t('{count} deliveries', {count: data.records.length});
+    const records=data.records.filter(row=>S.historyFilter!=='final'||row.outcome?.role==='final');
+    const count = records.length === 1 ? t('1 delivery') : t('{count} deliveries', {count: records.length});
     structural($('history-status'));
     $('history-status').textContent = count + (data.omitted ? t(' · {count} more results; refine your search', {count: data.omitted}) : '');
     rescueDetail($('history-results'));
     // One line per delivery, newest first as the bridge sorts it: project,
     // crew tag when there are several, the full title, then how long ago.
     const groups=new Map();
-    data.records.slice(0,S.historyLimit || 40).map(row => {
+    records.slice().sort((a,b)=>(b.outcome?.role==='final')-(a.outcome?.role==='final')).slice(0,S.historyLimit || 40).map(row => {
       const key = 'history:' + row.home + ':' + row.task;
       const b = button('', () => detailOpen() && S.openerKey === key ? closeDetail() : openDelivery(row.home, row.task, b), 'card-open history-row');
       b.dataset.key = key; b.setAttribute('aria-expanded', 'false'); b.setAttribute('aria-controls', 'detail');
       append(b, projectTag(row.project), manyHomes() ? node('span', 'card-tag', row.owner) : null, node('h3', 't', row.title), node('span','node-id',row.alias||deckUI?.aliasFor?.(row.home,row.task)||t('ID pending')), agoView(row.time), structural(node('time','',row.time?.date||(Number.isFinite(row.time?.epoch)?new Date(row.time.epoch*1000).toLocaleString(document.documentElement.lang):t('Not reported'))),'time'));
-      const article = append(node('article', 'task-card'), b, append(node('div', 'card-more'), node('div', 'card-more-inner')));
+      if(row.summary)b.append(node('span','result-summary',row.summary));
+      if(row.outcome?.role)b.append(node('span','outcome-badge',t({final:'Result',partial:'Progress update',step:'Finished step'}[row.outcome.role]||'Delivered work')));
+      const article = append(node('article', 'task-card'+(row.outcome?.role==='final'?' history-result':'')), b, append(node('div', 'card-more'), node('div', 'card-more-inner')));
       article.dataset.key = key;
       const groupKey=row.home+':'+(row.request?.id||'legacy');
-      if(!groups.has(groupKey)){const group=node('section','history-request');append(group,node('h3','',row.request?.label||t('Request not recorded')));groups.set(groupKey,group);}
+      if(!groups.has(groupKey)){const group=node('details','history-request');group.open=!S.historyClosed?.has(groupKey);group.addEventListener('toggle',()=>{S.historyClosed??=new Set();group.open?S.historyClosed.delete(groupKey):S.historyClosed.add(groupKey);});append(group,node('summary','',row.request?.label||t('Request not recorded')));groups.set(groupKey,group);}
       groups.get(groupKey).append(article);return article;
     });
-    $('history-results').replaceChildren(...groups.values());
-    if (data.records.length > (S.historyLimit || 40)) $('history-results').append(structural(button(t('View {count} more', {count:Math.min(40,data.records.length-(S.historyLimit || 40))}), () => { S.historyLimit = (S.historyLimit || 40) + 40; loadHistory(); }, 'more')));
-    if (!data.records.length) $('history-results').append(node('p', 'empty', t("No matches.")));
+    const filters=node('div','history-filters');for(const [value,text] of [['all','All history'],['final','Results only']]){const filter=button(t(text),()=>{S.historyFilter=value;S.historyLimit=40;loadHistory();});filter.setAttribute('aria-pressed',String((S.historyFilter||'all')===value));filters.append(filter);}
+    $('history-results').replaceChildren(filters,...groups.values());
+    if (records.length > (S.historyLimit || 40)) $('history-results').append(structural(button(t('View {count} more', {count:Math.min(40,records.length-(S.historyLimit || 40))}), () => { S.historyLimit = (S.historyLimit || 40) + 40; loadHistory(); }, 'more')));
+    if (!records.length) $('history-results').append(node('p', 'empty', t("No matches.")));
     $('history-sources').replaceChildren(node('p', 'muted', data.scope), ...data.details.map(d => contextRow(d.home, d.source)));
   } catch (err) { if (generation === S.historyGeneration) $('history-status').textContent = t("Could not refresh history. ") + err.message; }
 }
@@ -497,6 +501,39 @@ function reportLink(link, key) {
   open.setAttribute('aria-expanded', 'false');
   return append(box, open, view);
 }
+// Card editors share the guarded ticket intake and its durable drafts.
+async function inlineAnswer(card, opener, container) {
+  const editor=node('div','inline-answer');container.append(editor);
+  try {
+    const ticket=await api('api/ticket/'+encodeURIComponent(card.key));
+    if(!editor.isConnected||ticket.answered||!ticket.call)return;
+    const c=ticket.call,draft=readDraft(card.key),items=draft.attachments||[];
+    const note=node('textarea');note.rows=2;note.value=draft.note||'';note.placeholder=t('Write here…');note.setAttribute('aria-label',t('Answer in my own words'));
+    const status=node('p','notice');status.hidden=true;status.setAttribute('role','status');
+    let edited=false;
+    const store=event=>{if(event)edited=true;const saved={...draft,note:note.value,attachments:items,occurrence:edited?c.occurrence:(draft.occurrence||c.occurrence)};S.drafts.set(card.key,saved);try{sessionStorage.setItem('deck-draft-'+card.key,JSON.stringify(saved));}catch{};sync();};
+    const sendAnswer=async value=>{
+      if(S.busy||!S.online||window.DeckAnonymize?.enabled||editor.querySelector('[data-uploading]'))return;
+      store();await openTicket(card.key,opener);
+      if(S.modal?.key!==card.key||S.modal?.type!=='call'||S.receipt)return;
+      if(S.modal.ticket.call.occurrence!==c.occurrence||S.modal.draftNeedsReview)return;
+      if(value)choose(value);else {S.modal.value='';saveDraft();submitAnswer();}
+    };
+    const choices=node('div','option-list');
+    for(const option of c.options.filter(o=>o.value!=='reconcile')){
+      const label=c.presentation?.options?.find(o=>o.value===option.value)||option;
+      const choice=button(label.label,()=>sendAnswer(option.value),'option-choice');
+      if(option.value===c.recommend){choice.classList.add('recommended-choice');choice.append(node('small','recommended',t('Recommended')));}
+      choices.append(choice);
+    }
+    const send=button(t('Send'),()=>sendAnswer(''),'primary answer-send');
+    const sync=()=>{const blocked=!!window.DeckAnonymize?.enabled||!S.online||S.busy||!!c.error||!!editor.querySelector('[data-uploading]');send.disabled=blocked||(!note.value.trim()&&!items.length);for(const b of choices.children)b.disabled=blocked;};
+    note.addEventListener('input',store);
+    const free=node('div','own-words');free.append(append(node('label','answer-label'),note),send);editor.append(choices,free,status);
+    if(c.attachments)answerTools.composer(free,'api/ticket/'+encodeURIComponent(card.key)+'/upload',items,()=>store(true),()=>editor.isConnected&&!window.DeckAnonymize?.enabled&&!S.busy);
+    if(c.error){status.textContent=c.error;status.hidden=false;}sync();
+  }catch(error){editor.append(node('p','notice error',error.message));}
+}
 function choose(value) {
   if (S.busy || S.receipt || S.modal?.type !== 'call') return;
   S.modal.value = value; S.modal.draftNeedsReview = false; $('call-change').hidden = true;
@@ -554,7 +591,7 @@ function renderCall(ticket, draftOverride) {
   if(c.attachments){const modal=S.modal;answerTools.composer(ownWords,'api/ticket/'+encodeURIComponent(key)+'/upload',modal.attachments,()=>{modal.draftNeedsReview=false;saveDraft();},()=>S.modal===modal&&!S.receipt&&!S.busy);}
   if (choices.length) {
     const fold = disclosure(c.freeform ? t('Answer in my own words') : t('Add a note first (optional)'), ownWords);
-    fold.className += ' own-words-fold'; fold.open = !!draft.note || !!draft.attachments?.length; content.append(fold);
+    fold.className += ' own-words-fold'; fold.open = true; content.append(fold);
   } else content.append(ownWords);
   if (recheck) {
     // The re-check carries its own one-line meaning.
@@ -624,7 +661,14 @@ async function submitAnswer() {
   if (S.busy || !S.online || S.receipt || S.modal?.type !== 'call') return;
   saveDraft(); const modal = S.modal, draft = readDraft(modal.key);
   window.DeckTrace?.setResponse('sent');
-  S.busy = true; syncSubmit(); $('answer-status').replaceChildren(node('p', 'muted', t("Sending…")));
+  S.busy = true; syncSubmit();
+  let cancelled=false;
+  const pending=node('span','',t('Answer not sent yet · Undo is available for 10 s.'));
+  $('answer-status').replaceChildren(pending,button(t('Undo'),()=>{cancelled=true;S.busy=false;pending.parentElement?.replaceChildren(node('p','notice',t('Sending cancelled. Your draft is saved.')));syncSubmit();}));
+  await new Promise(resolve=>setTimeout(resolve,10000));
+  if(cancelled)return;
+  if(S.modal!==modal){S.busy=false;syncSubmit();return;}
+  $('answer-status').replaceChildren(node('p', 'muted', t("Sending…")));
   try {
     const receipt = await api('api/ticket/' + encodeURIComponent(modal.key) + '/answer', { value: draft.value || '', note: draft.note || '', attachments: (draft.attachments||[]).map(file=>file.id), occurrence: modal.ticket.call.occurrence, request_id: modal.request });
     if (S.modal !== modal) return;

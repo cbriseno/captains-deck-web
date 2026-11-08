@@ -109,6 +109,7 @@ def project_snapshot(raw):
                     'progress': dict(progress, completed=progress.get('done')) if isinstance(progress, dict) else None,
                     'progress_evidence': row.get('progress_evidence'), 'declared_progress': row.get('declared_progress'),
                     'request': row.get('request'), 'outcome': row.get('outcome'),
+                    'outcome_occurrence': row.get('outcome_occurrence'),
                     'phase': row.get('phase'), 'verified_gates': row.get('verified_gates'),
                     'question': row.get('question'), 'root_blocker': row.get('root_blocker'), 'frees': row.get('frees'),
                     'raw': row}
@@ -241,6 +242,8 @@ class DeckControls:
                 actions = [action for action, op in ACTION_OP.items()
                            if (SIGNAL_ACTIONS[action][1] in capabilities.get('signals', [])
                                if action in ('cancel-pause', 'dequeue-resume') else op in capabilities['ops'])]
+                if 'outcome.review' in capabilities.get('outcome_controls', []):
+                    actions.append('review')
                 data = {'available': True, 'capabilities': dict(capabilities, actions=actions), 'snapshot': retain_unconfirmed(project_snapshot(raw), (data or {}).get('snapshot'), time.time())}
             except (KeyError, TypeError, ValueError, ControlError) as exc:
                 data = {'available': False, 'error': str(exc) if isinstance(exc, ControlError) else 'Firstmate snapshot is incomplete.', 'code': exc.code if isinstance(exc, ControlError) else 'invalid-response'}
@@ -306,6 +309,16 @@ class DeckControls:
         # Serialize this server's snapshot reads with its controls. The owner
         # still takes its authoritative lock and checks revisions/idempotency.
         with self.lock:
+            if command == 'review':
+                if not isinstance(body, dict):
+                    raise ControlError('A JSON object is required.', 400, 'invalid_value')
+                capabilities = self.invoke(home, 'capabilities')
+                if 'outcome.review' not in capabilities.get('outcome_controls', []):
+                    raise ControlError('Shared review is not available from this Firstmate yet.', 409, 'unsupported_op')
+                try:
+                    return self.invoke(home, 'outcome.review', body)
+                finally:
+                    self.cache.pop(home.path, None)
             return self._request(home, command, body, actor)
 
     def _request(self, home, command, body, actor):
