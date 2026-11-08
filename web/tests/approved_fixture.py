@@ -172,7 +172,7 @@ if os.environ.get('CD_TEST_PAUSE_SIGNALS') == '1':
     tasks.append({'key': 'task:inherited-signal', 'title': 'Pausa heredada · ficticio', 'project': 'project:deck',
                   'state': 'stopping', 'rev': 'r1', 'pause': {'own': None, 'safe_point': 'pending',
                   'inherited': {'from': 'req:demo'}}})
-    snapshot.update(crew={'agents_running': 3, 'agents_cap': 6}, pause_controls=[], events=[],
+    snapshot.update(rev='r1', crew={'agents_running': 3, 'agents_cap': 6}, pause_controls=[], events=[],
                     requests=[{'id': 'demo', 'scope': 'req:demo', 'key': 'request:demo',
                                'label': 'Preparar entrega · ficticio', 'project': 'project:deck',
                                'tasks': ['task:web', 'task:next'], 'pause': None}])

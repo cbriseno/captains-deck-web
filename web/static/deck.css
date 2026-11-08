@@ -482,4 +482,3 @@ body:has(#anonymize:checked) .task-card img,body:has(#anonymize:checked) #detail
 #agents-capacity{display:flex;flex-wrap:wrap;gap:6px}.agents-count{font-size:12px;white-space:nowrap}.agents-count[data-stale=true]{color:var(--muted)}
 .pause-events:empty{display:none}.pause-events p{margin:4px 0;padding:8px 12px;background:var(--neutral);font-size:13px}
 @media(max-width:640px){.pause-pill{white-space:normal}.pause-preview{width:100%;box-sizing:border-box}}
-.request-pause-row>.mix-label{flex:1;min-width:0}.request-pause-row>.pause-control{flex:0 1 auto;margin-left:auto;max-width:100%}
