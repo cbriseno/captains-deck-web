@@ -1085,5 +1085,17 @@
   "Use the task chat to change this answer.": "Use the task chat to change this answer.",
   "This Firstmate cannot receive corrections yet.": "This Firstmate cannot receive corrections yet.",
   "Grouped by project": "Grouped by project",
-  "Last activity not recorded": "Last activity not recorded"
+  "Last activity not recorded": "Last activity not recorded",
+  "Settings": "Settings",
+  "Appearance": "Appearance",
+  "Row size": "Row size",
+  "Automatic": "Automatic",
+  "Comfortable": "Comfortable",
+  "Animations": "Animations",
+  "Privacy": "Privacy",
+  "Support": "Support",
+  "Export diagnostics": "Export diagnostics",
+  "Export": "Export",
+  "Close": "Close",
+  "Go to pause scope": "Go to pause scope"
 }

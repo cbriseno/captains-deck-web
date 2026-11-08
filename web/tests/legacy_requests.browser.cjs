@@ -36,7 +36,7 @@ test('legacy project groups retain all tasks, attention and recorded activity be
     run('open',[url]);
     const legacy = rows({count:1,text:'Agrupado por proyecto'});
     assert.match(legacy[0].title,/Deck privado/);
-    assert.match(legacy[0].meta,/2 de 8 tareas hechas/); // Includes the task shown in Needs you.
+    assert.match(legacy[0].meta,/2 de 7 tareas hechas/); // Captain questions stay in Needs you and do not count as work.
     assert.match(legacy[0].meta,/Te necesita · 1/);
     assert.ok(legacy[0].event.epoch>0);
     const file=path.join(proof,'home/work-snapshot.json'), snapshot=JSON.parse(fs.readFileSync(file));
@@ -44,7 +44,7 @@ test('legacy project groups retain all tasks, attention and recorded activity be
     // Date-only activity remains useful without pretending to know an hour.
     for(const row of snapshot.tasks)row.updated={value:'2026-10-30',precision:'date'};
     fs.writeFileSync(file,JSON.stringify(snapshot));
-    const mixed = rows({count:2,text:'2 de 6 tareas hechas'});
+    const mixed = rows({count:2,text:'2 de 5 tareas hechas'});
     const explicit=mixed.find(r=>r.title.includes('Recorded request'));
     assert.match(explicit.meta,/0 de 2 tareas hechas/);
     assert.equal(explicit.event.date,'2026-10-30');

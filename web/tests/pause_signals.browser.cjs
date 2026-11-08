@@ -26,7 +26,10 @@ test('pause preview, scope signals, confirmation, queue and owner events',{timeo
     browser=true;run('open',url);run('resize','1440','1000');
     assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes 3 de 6');return true;}`),true);
     evaluate(`async()=>{document.querySelector('#columns-nav button:last-child').click();return true;}`);
-    assert.equal(evaluate(`async()=>({disabled:${button('task:inherited-signal')}.disabled,text:${button('task:inherited-signal')}.textContent})`).disabled,true,'Inherited safe point cannot cancel a different scope');
+    const inherited=evaluate(`async()=>{const b=${button('task:inherited-signal')};return {text:b.textContent,scopeLink:b.classList.contains('pause-owner'),disabled:b.disabled};}`);
+    assert.match(inherited.text,/Preparar entrega/);assert.equal(inherited.scopeLink,true);assert.equal(inherited.disabled,false,'Inherited pauses point to their owning scope');
+    evaluate(`async()=>{${button('task:inherited-signal')}.click();return true;}`);
+    assert.equal(calls().filter(c=>c.command==='pause.cancel').length,0,'Following an inherited pause never cancels it');
     change(raw=>{raw.crew=null;});
     assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes · sin dato');return true;}`),true);
     change(raw=>{raw.crew={agents_running:3,agents_cap:6};});

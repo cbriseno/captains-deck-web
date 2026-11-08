@@ -1085,5 +1085,17 @@
   "Use the task chat to change this answer.": "Usa el chat de la tarea para cambiar esta respuesta.",
   "This Firstmate cannot receive corrections yet.": "Este Firstmate aún no puede recibir correcciones.",
   "Grouped by project": "Agrupado por proyecto",
-  "Last activity not recorded": "Última actividad no registrada"
+  "Last activity not recorded": "Última actividad no registrada",
+  "Settings": "Ajustes",
+  "Appearance": "Apariencia",
+  "Row size": "Tamaño de filas",
+  "Automatic": "Automático",
+  "Comfortable": "Amplio",
+  "Animations": "Animaciones",
+  "Privacy": "Privacidad",
+  "Support": "Soporte",
+  "Export diagnostics": "Exportar diagnóstico",
+  "Export": "Exportar",
+  "Close": "Cerrar",
+  "Go to pause scope": "Ir al ámbito de la pausa"
 }

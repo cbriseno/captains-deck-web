@@ -811,3 +811,10 @@ document.querySelector('#diagnostics-export').addEventListener('click', async ()
 });
 
 });
+
+const deckSettings = document.getElementById('settings-dialog');
+document.getElementById('settings-open').addEventListener('click', () => deckSettings.showModal());
+document.getElementById('settings-close').addEventListener('click', () => deckSettings.close());
+for (const id of ['relay-settings-open', 'diagnostics-open']) {
+  document.getElementById(id).addEventListener('click', () => deckSettings.close(), true);
+}
