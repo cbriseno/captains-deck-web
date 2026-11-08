@@ -1097,5 +1097,11 @@
   "Export diagnostics": "Export diagnostics",
   "Export": "Export",
   "Close": "Close",
-  "Go to pause scope": "Go to pause scope"
+  "Go to pause scope": "Go to pause scope",
+  "Recorded relationships": "Recorded relationships",
+  "Recorded by the captain": "Recorded by the captain",
+  "Recorded by Firstmate": "Recorded by Firstmate",
+  "Recorded by {name}": "Recorded by {name}",
+  "Inherited from {name}": "Inherited from {name}",
+  "Question origin": "Question origin"
 }

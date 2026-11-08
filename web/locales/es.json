@@ -1097,5 +1097,11 @@
   "Export diagnostics": "Exportar diagnóstico",
   "Export": "Exportar",
   "Close": "Cerrar",
-  "Go to pause scope": "Ir al ámbito de la pausa"
+  "Go to pause scope": "Ir al ámbito de la pausa",
+  "Recorded relationships": "Relaciones registradas",
+  "Recorded by the captain": "Registrada por el capitán",
+  "Recorded by Firstmate": "Registrada por Firstmate",
+  "Recorded by {name}": "Registrada por {name}",
+  "Inherited from {name}": "Heredada de {name}",
+  "Question origin": "Origen de la pregunta"
 }

@@ -447,6 +447,7 @@ footer{margin:0;padding:10px 24px 18px;font-size:11px}footer .theme-label{displa
 
 /* Requests share a two-line header and expand their tasks in place. */
 .deck.request-layout{display:block}.request-layout>#project-mixer{display:none}
+.request-row[data-dim]>.request-head{opacity:.28}
 #board.request-board{display:grid;grid-template-columns:380px minmax(0,1fr);gap:32px;align-items:start}
 .request-layout #connector-key{min-height:0;padding:0;margin-bottom:8px}
 .request-tools{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 16px}

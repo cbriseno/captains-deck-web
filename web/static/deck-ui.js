@@ -650,7 +650,6 @@ window.createDeckUI = function (host) {
     if(x.kind==='task')controls.append(time('Created',x.created_at));
     const main=add(n('div','deck-action-row'),x.kind!=='request'?n('span','fact',t('Priority')):null,x.kind!=='request'?priority(x):null,pauseButton(x));controls.append(main);
     controls.append(progress(x,true));
-    if(relationshipEdges().some(e=>e.from===x.id||e.to===x.id))controls.append(b(t('View recorded relationships'),()=>{ui.focus=true;save('deck-focus',true);$('focus-effects').checked=true;delayInput.disabled=false;ui.pin=x.id;ui.hover='';highlight();announceFocus(x.id,label(x));},'more'));
     const deps=model.edges.filter(e=>ancestors(x).some(a=>a.id===e.from));
     if(deps.length){const fold=n('details','source-details');fold.append(structural(n('summary','',t('Waits for {count} tasks',{count:deps.length}))));const list=n('ul','deps');for(const edge of deps){const other=byId.get(edge.to);list.append(add(n('li'),b(label(other),()=>{if(other)reveal(other);},'link'),edge.completed?n('span','meta',t('Already completed')):null));}fold.append(list);controls.append(fold);}
     const more=n('details','source-details deck-more');more.append(n('summary','',t('More options')),n('p','fact',t('Review dependencies or discuss a possible removal.')));
@@ -664,6 +663,7 @@ window.createDeckUI = function (host) {
   }
   function reviewObject(x) {
     if(!x)return;const content=$('detail-content'),previous=content.querySelector('.deck-object-tools');
+    relationshipDetail(x);
     // Re-decoration must not replace a focused comment or another detail draft.
     if(previous?.dataset.node===x.id){previous.refreshRemoval();return;}
     previous?.remove();
@@ -773,14 +773,32 @@ window.createDeckUI = function (host) {
     for(const c of calls){const own=byId.get(taskNodeId(c.home,c.task)),origin=own?.question?.origin_task || c.question_origin,question='question:'+c.key,source=origin?keyOf(c.home,origin):'';if(source&&!edges.some(e=>e.from===source&&e.to===question||e.from===question&&e.to===source))edges.push({from:question,to:source,question:true});}
     return edges;
   }
+  function relationshipDetail(x) {
+    const content=$('detail-content');content.querySelector('.deck-relationships')?.remove();
+    const chain=new Set(ancestors(x).map(y=>y.id)),edges=relationshipEdges().filter(e=>chain.has(e.from)||e.to===x.id);
+    if(!edges.length)return;
+    const section=n('section','deck-relationships'),list=n('ul','deps');
+    section.append(n('h3','',t('Recorded relationships')),b(t('View recorded relationships'),()=>{ui.focus=true;save('deck-focus',true);$('focus-effects').checked=true;delayInput.disabled=false;ui.pin=x.id;ui.hover='';highlight();announceFocus(x.id,label(x));},'more'));
+    for(const edge of edges){
+      const outgoing=chain.has(edge.from),id=outgoing?edge.to:edge.from,call=questions().find(c=>'question:'+c.key===id),other=byId.get(id);
+      const role=edge.question?t(outgoing?'Task asking this question':'Question from this task'):edge.completed?t(outgoing?'Released by this':'Already released this'):t(outgoing?'Waits for this':'Blocks this');
+      const link=b(call?.question||call?.title||label(other),()=>{if(call)jumpAttention(id);else if(other)reveal(other);},'link');link.disabled=!call&&!other;
+      const source=edge.origin==='captain'?t('Recorded by the captain'):edge.origin==='firstmate'?t('Recorded by Firstmate'):edge.origin?t('Recorded by {name}',{name:edge.origin}):t('Question origin');
+      list.append(add(n('li'),n('span','meta',role+' · '),link,n('span','meta',' · '+source+(outgoing&&edge.from!==x.id?' · '+t('Inherited from {name}',{name:label(byId.get(edge.from))}):''))));
+    }
+    section.append(list);content.append(section);
+  }
   function findRelationNode(id) {
     const visible=el=>el&&el.getClientRects().length&&!el.closest('[hidden]');
     const nodes=[...$('workspace').querySelectorAll('[data-node]')];
     const direct=nodes.find(el=>el.dataset.node===id&&visible(el));if(direct)return direct.matches('.request-row')?direct.querySelector('.request-head'):direct;
     const call=id.startsWith('question:')&&questions().find(c=>'question:'+c.key===id);
     const own=byId.get(id)||call&&byId.get(taskNodeId(call.home,call.task));
+    if(call){const head=$('board').querySelector('.attention-list .request-group-head');if(visible(head))return head;}
+    const requests=own?requestRows(model.nodes.filter(x=>x.kind==='task')).filter(r=>r.id===own.id||r.tasks.some(x=>ancestors(x).some(group=>group.id===own.id))):[];
+    for(const request of requests){const row=nodes.find(el=>el.dataset.node===request.id&&visible(el));if(row)return row.querySelector('.request-head');}
     for(const group of own?ancestors(own).reverse():[]){const row=nodes.find(el=>el.dataset.node===group.id&&visible(el));if(row)return row.matches('.request-row')?row.querySelector('.request-head'):row;}
-    const column=own&&$('state-column-'+colOf(own));
+    const column=own&&$('state-column-'+(requests.length?requestState(requests[0]):colOf(own)));
     return column&&[...column.querySelectorAll('.rail-btn,.col-h')].find(visible);
   }
   function highlight() {
@@ -792,7 +810,7 @@ window.createDeckUI = function (host) {
     const edges=[...relationshipEdges(),...inherited].filter(e=>members.has(e.from)||members.has(e.to));
     document.querySelectorAll('.relation-role').forEach(el=>el.remove());document.querySelectorAll('.relation-id').forEach(el=>el.classList.remove('relation-id'));const related=new Set([...members,...edges.flatMap(e=>[e.from,e.to])]);
     const anchors=new Set([...related].map(findRelationNode).filter(Boolean));
-    for(const el of document.querySelectorAll('[data-node]')){delete el.dataset.link;delete el.dataset.dim;if(focus&&(edges.length||ui.pin)){if(related.has(el.dataset.node)||anchors.has(el)){el.dataset.link='true';const edge=edges.find(e=>e.from===el.dataset.node||e.to===el.dataset.node);if(edge&&!members.has(el.dataset.node)){const text=edge.question?t(edge.from===el.dataset.node?'Question from this task':'Task asking this question'):edge.completed?t(edge.to===el.dataset.node?'Already released this':'Released by this'):t(edge.to===el.dataset.node?'Blocks this':'Waits for this');const badge=el.querySelector('.node-id');if(badge){badge.classList.add('relation-id');badge.append(n('span','relation-role',text));}}}else if(ui.focus)el.dataset.dim='true';}}
+    for(const el of document.querySelectorAll('[data-node]')){delete el.dataset.link;delete el.dataset.dim;if(focus&&edges.length){if(related.has(el.dataset.node)||[...anchors].some(anchor=>el.contains(anchor))){el.dataset.link='true';const edge=edges.find(e=>e.from===el.dataset.node||e.to===el.dataset.node);if(edge&&!members.has(el.dataset.node)){const text=edge.question?t(edge.from===el.dataset.node?'Question from this task':'Task asking this question'):edge.completed?t(edge.to===el.dataset.node?'Already released this':'Released by this'):t(edge.to===el.dataset.node?'Blocks this':'Waits for this');const badge=el.querySelector('.node-id');if(badge){badge.classList.add('relation-id');badge.append(n('span','relation-role',text));}}}else if(ui.focus)el.dataset.dim='true';}}
     window.DeckTrace?.focus?.(focus.startsWith('question:')&&!!document.querySelector('#board .task-card[data-dim]'));
     $('connector-key').hidden=!edges.length;$('connector-key').replaceChildren(...[[t('Blocks this'),'k-before',edges.some(e=>!e.question&&!e.completed&&members.has(e.from))],[t('Waits for this'),'k-after',edges.some(e=>!e.question&&!e.completed&&!members.has(e.from))],[t('Question from this task'),'k-ask',edges.some(e=>e.question)],[t('Already released this'),'k-freed',edges.some(e=>!e.question&&e.completed)]].filter(([, ,used])=>used).map(([s,c])=>n('span',c,'— '+s)));
     document.querySelector('svg.links')?.remove();if(!edges.length||matchMedia('(max-width:640px)').matches){return;}

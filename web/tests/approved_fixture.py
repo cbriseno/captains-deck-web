@@ -176,6 +176,25 @@ if os.environ.get('CD_TEST_PAUSE_SIGNALS') == '1':
                     requests=[{'id': 'demo', 'scope': 'req:demo', 'key': 'request:demo',
                                'label': 'Preparar entrega · ficticio', 'project': 'project:deck',
                                'tasks': ['task:web', 'task:next'], 'pause': None}])
+if os.environ.get('CD_TEST_RELATIONS') == '1':
+    projects.extend([{'key': 'project:other', 'label': 'Cross-project destination', 'rev': 'r1'},
+                     {'key': 'project:isolated', 'label': 'Unrelated project', 'rev': 'r1'}])
+    projects[0]['blocked_by'] = [{'ref': 'project:other', 'by': 'captain', 'open': True}]
+    snapshot['requests'] = []
+    for key, title, ids, project, pause in [
+            ('run', 'Active request', ['web', 'ask'], 'deck', None),
+            ('paused', 'Paused aggregate', ['next'], 'other', {'reason': 'Fixture pause'}),
+            ('waiting', 'Dependent request', ['dependent'], 'deck', None),
+            ('result', 'Completed result', ['demo-research'], 'deck', None),
+            ('isolated', 'Unrelated request', ['phone', 'second', 'integration'], 'isolated', None)]:
+        request = dict(id=key, key='request:' + key, scope='req:' + key, label=title,
+                       project='project:' + project, tasks=['task:' + task for task in ids], pause=pause)
+        snapshot['requests'].append(request)
+        for task in tasks:
+            if task['key'] in request['tasks']:
+                task.update(request={field: request[field] for field in ('id', 'label', 'project')},
+                            project=request['project'])
+                task.pop('subproject', None)
 (base / 'work-snapshot.json').write_text(json.dumps(snapshot))
 (base / 'bin/work-owner.py').write_text(Path(__file__).with_name('fixture_work_owner.py').read_text())
 p = base / 'bin/fm-tasks-axi.sh'; p.write_text('#!/bin/sh\nexec python3 "$(dirname "$0")/work-owner.py" "$@"\n'); p.chmod(0o755)
