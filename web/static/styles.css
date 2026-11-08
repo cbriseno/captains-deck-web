@@ -1103,7 +1103,7 @@ html[data-anon-pending] body { visibility: hidden; }
 .answer-file { position:relative; display:flex; flex-direction:column; gap:3px; max-width:160px; padding:6px; border:1px solid var(--line); border-radius:8px; overflow-wrap:anywhere; }
 .answer-image { padding:0; border:0; background:none; }
 .answer-image img { display:block; width:104px; height:76px; object-fit:cover; border-radius:4px; }
-.answer-remove { position:absolute; right:0; top:0; padding:2px 6px; }
+.own-words .answer-remove,.answer-remove { position:absolute; width:24px; min-width:24px; min-height:24px; height:24px; padding:0; right:3px; top:3px; border-radius:50%; }
 .answer-attach { margin-right:8px; }
 .answer-dragover { outline:2px dashed var(--accent); outline-offset:4px; }
 .answer-lightbox { padding:8px; max-width:95vw; max-height:95vh; border:0; background:transparent; }
@@ -1114,3 +1114,11 @@ html[data-anon-pending] body { visibility: hidden; }
 .answer-summary p { margin:4px 0; white-space:pre-wrap; }
 html[data-anonymized=true] .answer-image img,html[data-anonymized=true] .answer-lightbox img { filter:blur(12px); }
 html[data-anonymized=true] .answer-file-link { pointer-events:none; }
+.answer-compose { display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:end; gap:8px; }
+.answer-compose .answer-label { min-width:0; }
+.answer-compose textarea { min-height:64px; }
+.answer-compose .answer-attach { margin:0; }
+.own-words .answer-compose button { width:auto; min-height:36px; }
+.own-words .answer-image { width:auto; min-height:0; }
+.answer-text { white-space:pre-wrap; }
+.answer-file-link { padding-right:20px; }

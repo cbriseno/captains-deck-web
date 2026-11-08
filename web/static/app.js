@@ -138,7 +138,7 @@ function notice(text, error = false) { $('notice').hidden = !text; $('notice').c
 function syncSubmit() {
   const call = S.modal?.type === 'call' ? S.modal.ticket?.call : null;
   if (!call) return;
-  const blocked = S.busy || !S.online || !!S.modal.checkFailed || !!S.receipt || !!document.querySelector('[data-uploading]');
+  const blocked = !!window.DeckAnonymize?.enabled || S.busy || !S.online || !!S.modal.checkFailed || !!S.receipt || !!document.querySelector('[data-uploading]');
   for (const b of $('detail-content').querySelectorAll('.option-choice')) {
     b.disabled = blocked;
     b.setAttribute('aria-pressed', String(b.dataset.value === S.modal.value));
@@ -593,7 +593,7 @@ async function checkCall() {
 function receiptView(receipt) {
   const box = node('div', 'receipt'); box.setAttribute('role', 'status');
   append(box, node('h3', '', receipt.saved ? t("Answer saved") : receipt.saved === false ? t("Answer not sent") : t("Not sure it was sent")), node('p', '', t(receipt.message)));
-  if(receipt.note)box.append(node('p','',receipt.note));
+  if(receipt.note)box.append(node('p','answer-text',receipt.note));
   if(receipt.saved&&receipt.home&&receipt.task)answerTools.panel(receipt.home,receipt.task).then(panel=>box.append(panel));
   if (receipt.primary === 'unreachable') append(box, node('p', 'notice', t("Couldn’t reach Firstmate right now. It will see your answer on its next check.")));
   // Each step is a separate fact; none of them proves the agent resumed.

@@ -370,7 +370,7 @@ class Board:
         self.data_dir = Path(data_dir).expanduser().absolute()
         self.herdr_origin = herdr_origin
         self.deck_controls = DeckControls(self.child_env)
-        self.file_capabilities = {}
+        self.answer_capabilities = {}
         self.answer_files = AnswerFiles(self, Refusal, fm, shell_command, endpoint_path, home_id)
         self.relay_settings = RelaySettings(self.child_env, os.environ.get('CD_WEB_EXTENSIONS_ROOT', ''),
             nodes=lambda home: self.deck_controls.source(home).get('snapshot', {}).get('nodes', []),
@@ -1077,7 +1077,7 @@ class Board:
                                       capture_output=True, text=True, timeout=10,
                                       stdin=subprocess.DEVNULL)
             data = json.loads(response.stdout)
-            self.file_capabilities[home_id(home)] = data.get('attachments') is True
+            self.answer_capabilities[home_id(home)] = data
             return (response.returncode == 0 and data.get('schema') == 'fm-captain-hold.capabilities.v1'
                     and data.get('guarded_input') == 'single-row' and
                     all(command in data.get('expected_identity', []) for command in ('answers', 'reconcile-requests')))
@@ -1085,7 +1085,13 @@ class Board:
             return False
 
     def file_answers_ready(self, home):
-        return not fm.is_remote_home(home) and self.file_capabilities.get(home_id(home), False)
+        return not fm.is_remote_home(home) and self.answer_capabilities.get(home_id(home), {}).get('attachments') is True
+
+    def corrections_ready(self, home, fresh=False):
+        if fm.is_remote_home(home) or not self.intake_ready(home, fresh=fresh):
+            return False
+        capabilities = self.answer_capabilities.get(home_id(home), {})
+        return capabilities.get('correction') is True and 'correct' in capabilities.get('expected_identity', [])
 
     def submit(self, key, body, actor):
         if not all(isinstance(body.get(k, ''), str) for k in ('value', 'note', 'occurrence', 'request_id')):

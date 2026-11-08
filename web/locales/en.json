@@ -1082,5 +1082,6 @@
   "Your correction": "Your correction",
   "{count} KB": "{count} KB",
   "Up to 4096 bytes of text and eight files of 5 MB each. Typing only saves a draft.": "Up to 4096 bytes of text and eight files of 5 MB each. Typing only saves a draft.",
-  "Use the task chat to change this answer.": "Use the task chat to change this answer."
+  "Use the task chat to change this answer.": "Use the task chat to change this answer.",
+  "This Firstmate cannot receive corrections yet.": "This Firstmate cannot receive corrections yet."
 }

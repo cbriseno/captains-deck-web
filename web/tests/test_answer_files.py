@@ -82,17 +82,22 @@ class AnswerFileTests(unittest.TestCase):
         folder = root / 'data/ask/answer-attachments/files.demo';folder.mkdir(parents=True)
         file = folder / '1-notes.txt';file.write_text('original attachment')
         answer = dict(task_id='ask', origin='origin-work', text='original answer', occurrence=1,
-                      correction_identity='2026-10-25T15:00:00Z#1', recorded=True,
+                      recorded=True,
                       attachments=[dict(path=str(file), name='notes.txt')])
         node = dict(task='ask', state='done', question=dict(open=False, answer=answer), raw={})
         origin = dict(task='origin-work', state='waiting')
         source = dict(available=True, snapshot=dict(nodes=[node, origin]))
         route = '/api/answers/' + home_id + '/ask'
-        with patch.object(self.board.deck_controls, 'source', return_value=source):
+        with patch.object(self.board.deck_controls, 'source', return_value=source), \
+                patch.object(self.board, 'corrections_ready', return_value=True) as capability:
             status, saved = self.req(route)
             self.assertEqual(status, 200)
             public, = saved['answers']
             self.assertTrue(public['can_correct'])
+            capability.return_value = False
+            self.assertFalse(self.req(route)[1]['answers'][0]['can_correct'])
+            self.assertEqual(self.req(route + '/correct', dict(note='unsupported', identity='#1', request_id='u'*32))[0], 409)
+            capability.return_value = True
             self.assertNotIn('path', json.dumps(public))
             self.assertEqual(self.req(public['files'][0]['url']), (200, b'original attachment'))
             body = dict(note='correction', identity='wrong', request_id='c' * 32)

@@ -102,10 +102,12 @@ class AnswerFiles:
     def saved(self, home, task):
         nodes, answers = self.canonical(home, task)
         result = []
+        supported = bool(answers) and self.board.corrections_ready(home)
         for answer in answers:
             question = next((n for n in nodes if n.get('task') == answer.get('task_id')), {})
             public = {k: answer.get(k) for k in ('task_id', 'origin', 'text', 'value', 'correction', 'application', 'occurrence')}
-            public['identity'] = answer.get('correction_identity')
+            # A3 closed-row CAS is #<resolution count>; no open hold stamp remains.
+            public['identity'] = '#' + str(answer['occurrence'])
             origin = next((n for n in nodes if n.get('task') == answer.get('origin')), {})
             public['chat_required'] = origin.get('state') == 'active'
             public['files'] = []
@@ -116,7 +118,7 @@ class AnswerFiles:
                     size = None
                 public['files'].append(dict(name=item['name'], size=size, type=TYPES.get(Path(item['name']).suffix.lower(), 'application/octet-stream'),
                     url=f'/api/answers/{self.home_id(home)}/{answer["task_id"]}/file/{i}'))
-            public['can_correct'] = bool(public['identity']) and (question.get('question') or {}).get('open') is False
+            public['can_correct'] = supported and bool(public['identity']) and (question.get('question') or {}).get('open') is False
             result.append(public)
         return {'answers': result}
 
@@ -150,6 +152,8 @@ class AnswerFiles:
                 stdin=subprocess.DEVNULL, text=True, capture_output=True, env=self.board.child_env(home), timeout=90)
 
     def correct(self, home, task, body, actor):
+        if not self.board.corrections_ready(home, fresh=True):
+            raise self.refusal('This Firstmate cannot receive corrections yet.', 409)
         if not re.fullmatch(r'[A-Za-z0-9_-]{16,80}', str(body.get('request_id', ''))):
             raise self.refusal('Invalid correction request.', 400)
         text = body.get('note', '')
