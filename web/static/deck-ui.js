@@ -208,7 +208,7 @@ window.createDeckUI = function (host) {
             slot.append(b(t('Cancel'),()=>{ui.pausePreview=null;slot.remove();}));
           }
         });
-        workControl(confirm,!!result.impact);slot.append(confirm);
+        confirm.className='primary';workControl(confirm,!!result.impact);slot.append(confirm);
       }
       slot.append(b(t('Cancel'),()=>{ui.pausePreview=null;slot.remove();}));
     }catch(err){slot.replaceChildren(n('p','error',err.message),b(t('Cancel'),()=>{ui.pausePreview=null;slot.remove();}));}
