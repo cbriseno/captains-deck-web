@@ -37,6 +37,19 @@ def owner(home):
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_requests_keep_explicit_membership_activity_and_manual_order(self):
+        requests = [{'id': 'old', 'tasks': ['task:work'], 'updated_at': '2026-11-01T00:00:00Z'},
+                    {'id': 'new', 'tasks': [], 'updated_at': '2026-11-08T00:00:00Z'}]
+        request = {'id': 'old', 'label': 'One request', 'project': 'deck'}
+        outcome = {'role': 'partial', 'review': 'needed'}
+        snapshot = project_snapshot({'requests': requests, 'rev': 'r9', 'tasks': [
+            {'key': 'task:work', 'state': 'done', 'request': request, 'outcome': outcome}]})
+        self.assertEqual(snapshot['rev'], 'r9')
+        self.assertEqual(snapshot['requests'], requests)
+        self.assertEqual(snapshot['nodes'][0]['request'], request)
+        self.assertEqual(snapshot['nodes'][0]['outcome'], outcome)
+        self.assertEqual(project_snapshot({'tasks': [{'key': 'task:legacy'}]})['requests'], [])
+
     def test_unconfirmed_observation_retains_progress_until_confirmed_transition(self):
         def snapshot(state, progress=None):
             return project_snapshot({'projects': [], 'subprojects': [], 'sigue': [], 'tasks': [

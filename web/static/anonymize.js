@@ -5,7 +5,7 @@ window.DeckAnonymize = (() => {
   const readOnlyActions = '[data-work-allowed],.option-choice,#answer-submit,#explain-request,.deck-removal-send,.change-preview button,#relay-confirm-apply,#relay-settings-content button';
   const words = {en: ['amber', 'cloud', 'orbit', 'tile', 'wave', 'echo'], es: ['ámbar', 'nube', 'órbita', 'pieza', 'onda', 'eco']};
   const provenance = new WeakMap(), records = new Map(), generated = new WeakSet(), roots = new Set();
-  const times = new Set(), selectWidths = new WeakMap();
+  const projectAliases = new Map(), times = new Set(), selectWidths = new WeakMap();
   const candidateWidths = new Map(), context = document.createElement('canvas').getContext('2d');
   let active = false, started = false, internal = false, language = 'en', known = new Set(), templates = [];
   let revision = 0, processing = false, savedVisibility = '', metrics = {};
@@ -75,7 +75,9 @@ window.DeckAnonymize = (() => {
   function read(node) {
     const parent = node.parentElement || node.parentNode?.host;
     if (generated.has(node) || !parent || parent.closest('script,style,noscript,[data-anon-word]')) return null;
-    const source = node.data, parsed = parts(source, provenance.get(parent));
+    const source = node.data, kind = provenance.get(parent);
+    if (kind?.alias) return {node, parent, source, simple:true, parsed:[{text:kind.alias,safe:true}]};
+    const parsed = parts(source, kind);
     if (parsed.every(p => p.safe)) return null;
     const css = getComputedStyle(parent), range = document.createRange(); range.selectNodeContents(node);
     const rects = [...range.getClientRects()].filter(r => r.width && r.height);
@@ -289,5 +291,5 @@ window.DeckAnonymize = (() => {
     window.addEventListener('resize', () => { if (active) set(true); });
     return set(saved);
   }
-  return {catalog, start, set, value(el) { return records.get(el)?.get('value')?.original ?? el.value; }, formatted(value) { times.add(value); if (times.size > 4096) times.delete(times.values().next().value); return value; }, structural(el, kind) { provenance.set(el, kind); return el; }, get enabled() { return active; }, get metrics() { return {...metrics}; }};
+  return {catalog, start, set, project(el,key) { if(!projectAliases.has(key))projectAliases.set(key,projectAliases.size+1);provenance.set(el,{alias:(language==='es'?'Proyecto ':'Project ')+projectAliases.get(key)});return el; }, value(el) { return records.get(el)?.get('value')?.original ?? el.value; }, formatted(value) { times.add(value); if (times.size > 4096) times.delete(times.values().next().value); return value; }, structural(el, kind) { provenance.set(el, kind); return el; }, get enabled() { return active; }, get metrics() { return {...metrics}; }};
 })();

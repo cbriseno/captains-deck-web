@@ -851,12 +851,13 @@ class Board:
                 project = self.delivered_project(home, rows, row, human)
                 title = card_field(human.get('card_title'), 'card_title') or record_title(row, self.t, titles)
                 if query.casefold() not in ' '.join([str(row.get(k) or '') for k in ('id', 'title', 'body', 'artifact')]
-                                                    + [title, project['label'] if project else '']).casefold():
+                                                    + [title, project['label'] if project else '', (human.get('request') or {}).get('label', '')]).casefold():
                     continue
                 event = fm.producer_card_time(row.get('card_time'), 'landed',
                                               fm.CardTime('Delivered', row.get('closed')))
                 result.append({'task': row['id'], 'title': title,
                                'home': home_id(home), 'owner': home.label, 'project': project,
+                               'request': human.get('request'), 'outcome': human.get('outcome'),
                                'time': self.event_json(event), 'closed': row.get('closed') or ''})
         # The order follows the time each row shows, not the raw closing text.
         result.sort(key=lambda row: (newest_first(row['time']), row['task'], row['home']), reverse=True)

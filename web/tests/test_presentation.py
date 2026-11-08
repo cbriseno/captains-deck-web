@@ -21,6 +21,19 @@ class PresentationTests(unittest.TestCase):
         self.addCleanup(env.stop)
         self.board, self.home = fixture(self.root)
 
+    def test_history_retains_request_and_result_for_grouping_and_search(self):
+        import json
+        request = {'id': 'trip', 'label': 'Plan a fictional trip', 'project': 'deck'}
+        outcome = {'role': 'final', 'review': 'needed'}
+        path = Path(self.home.path) / 'data/demo-research/presentation.json'
+        path.write_text(json.dumps({'schema': 'fm-task-presentation.v1', 'id': 'demo-research',
+            'home': self.home.path, 'source': 'task.owner.declaration',
+            'presentation': {'request': request, 'outcome': outcome}}))
+        records = self.board.history(query='fictional trip')['records']
+        self.assertEqual([row['task'] for row in records], ['demo-research'])
+        self.assertEqual(records[0]['request'], request)
+        self.assertEqual(records[0]['outcome'], outcome)
+
     def test_delivery_without_recap_opens_report_without_empty_summary(self):
         import json
         root = Path(self.home.path)

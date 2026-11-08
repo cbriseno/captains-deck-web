@@ -5,8 +5,8 @@
   const caches = new WeakMap();
   const round = n => Math.round(n * 10) / 10;
   const keyOf = edge => JSON.stringify([edge.from, edge.to, !!edge.question, !!edge.completed]);
-  const headerSelector = '.mix,.col-h,.sub-h';
-  const obstacleSelector = '.task-card,.mix,.col-h>*,.sub-h>*,.mix-tools,.rail-btn,.stack-h,.none,#detail:not([hidden])';
+  const headerSelector = '.mix,.col-h,.sub-h,.request-head';
+  const obstacleSelector = '.task-card,.mix,.request-head>*,.col-h>*,.sub-h>*,.mix-tools,.rail-btn,.stack-h,.none,#detail:not([hidden])';
 
   class Heap {
     constructor() { this.items = []; }

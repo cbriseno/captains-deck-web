@@ -101,6 +101,7 @@ def project_snapshot(raw):
                               'inherited_reason': inherited.get('reason') if isinstance(inherited, dict) else None},
                     'progress': dict(progress, completed=progress.get('done')) if isinstance(progress, dict) else None,
                     'progress_evidence': row.get('progress_evidence'), 'declared_progress': row.get('declared_progress'),
+                    'request': row.get('request'), 'outcome': row.get('outcome'),
                     'phase': row.get('phase'), 'verified_gates': row.get('verified_gates'),
                     'question': row.get('question'), 'root_blocker': row.get('root_blocker'), 'frees': row.get('frees'),
                     'raw': row}
@@ -156,7 +157,8 @@ def project_snapshot(raw):
         pause.update(can_resume=pause['own'] and reason is None,
                      can_pause=not pause['own'] and reason is None,
                      disabled_reason=reason)
-    return {'nodes': nodes, 'edges': edges, 'generated_at': raw.get('generated_at'), 'sigue': raw.get('sigue', [])}
+    return {'nodes': nodes, 'edges': edges, 'requests': raw.get('requests', []), 'rev': raw.get('rev'),
+            'generated_at': raw.get('generated_at'), 'sigue': raw.get('sigue', [])}
 
 
 class DeckControls:
@@ -170,6 +172,8 @@ class DeckControls:
         if not Path(script).is_file():
             raise ControlError('Firstmate does not expose Deck controls yet.', 503, 'missing-source')
         args = ['work', command]
+        if command == 'snapshot':
+            args += ['--order', 'manual']
         if command == 'request-status':
             args += ['--request-id', payload['request_id']]
             payload = None
