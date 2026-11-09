@@ -1134,5 +1134,12 @@
   "Order": "Order",
   "Up to date": "Up to date",
   "Firstmate counts {count} lanes in use": "Firstmate counts {count} lanes in use",
-  "{done} of {total} task done": "{done} of {total} task done"
+  "{done} of {total} task done": "{done} of {total} task done",
+  "Confirm": "Confirm",
+  "Firstmate will handle it when no higher priority tasks are ready.": "Firstmate will handle it when no higher priority tasks are ready.",
+  "It will have no reported priority; no order is assumed.": "It will have no reported priority; no order is assumed.",
+  "It will have {name} priority.": "It will have {name} priority.",
+  "Firstmate will handle it sooner.": "Firstmate will handle it sooner.",
+  "Firstmate will handle it later.": "Firstmate will handle it later.",
+  "From {from} to {to}: {effect}": "From {from} to {to}: {effect}"
 }

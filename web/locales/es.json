@@ -1134,5 +1134,12 @@
   "Order": "Orden",
   "Up to date": "Al día",
   "Firstmate counts {count} lanes in use": "Firstmate cuenta {count} carriles ocupados",
-  "{done} of {total} task done": "{done} de {total} tarea hecha"
+  "{done} of {total} task done": "{done} de {total} tarea hecha",
+  "Confirm": "Confirmar",
+  "Firstmate will handle it when no higher priority tasks are ready.": "La atenderá cuando no haya tareas listas de mayor prioridad.",
+  "It will have no reported priority; no order is assumed.": "Quedará sin prioridad indicada; no se supone un orden.",
+  "It will have {name} priority.": "Quedará con prioridad {name}.",
+  "Firstmate will handle it sooner.": "Firstmate la atenderá antes.",
+  "Firstmate will handle it later.": "Firstmate la atenderá después.",
+  "From {from} to {to}: {effect}": "De {from} a {to}: {effect}"
 }

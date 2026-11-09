@@ -161,6 +161,12 @@ window.createDeckUI = function (host) {
     wrap.title = x.priority === 'P4' || x.priority_reported && x.priority === null ? t('NA: Firstmate handles this when no higher priority work is ready.') : !x.priority ? t('Priority not reported; no scheduling rank is assumed.') : t('Priority');
     return wrap;
   }
+  const priorityRank=p=>['P4','','P3','P2','P1','P0'].indexOf(p||'');
+  function priorityChange(x,to) {
+    const from=x.priority_reported&&x.priority===null?'P4':x.priority||'';to=to||'';
+    const effect=to==='P4'?t('Firstmate will handle it when no higher priority tasks are ready.'):!to?t('It will have no reported priority; no order is assumed.'):!from?t('It will have {name} priority.',{name:priorityName(to)}):t(priorityRank(to)>priorityRank(from)?'Firstmate will handle it sooner.':'Firstmate will handle it later.');
+    return t('From {from} to {to}: {effect}',{from:priorityText(x),to:priorityName(to),effect});
+  }
   function can(x, action) { if((action==='pause'&&x.pause?.can_pause===false)||(action==='resume'&&x.pause?.can_resume!==true))return false;return !!x.owner_id && (action==='review'?!!x.outcome_occurrence:!!x.rev) && !x.observation_uncertain_since && !!x.source?.available && (x.source.capabilities?.actions || []).includes(action) && app.online; }
   let pauseDescriptionId=0;
   const signalPause=x=>x.source?.capabilities?.signals?.includes('pause.request')&&x.source?.capabilities?.signals?.includes('resume.request');
@@ -254,11 +260,15 @@ window.createDeckUI = function (host) {
   }
 
   const pauseReading=x=>JSON.stringify([x.state,x.pause,x.rev,x.observation_uncertain_since,x.kind==='task'?null:tasksOf(x).map(y=>[y.id,y.state,y.pause?.can_pause]),x.source?.available,x.source?.capabilities?.actions,app.online]);
+  // Approved demo: a request whose open tasks are all paused by another scope
+  // has nothing of its own to pause; it shows that scope's pause instead.
+  const heldBy=x=>{if(x.kind==='task'||ownPause(x))return null;const open=tasksOf(x).filter(y=>y.state!=='done'&&!questionOnly(y));return open.every(y=>ownPause(y)||y.pause?.inherited?.length)&&open.find(y=>!ownPause(y)&&y.pause?.inherited?.length)?.pause.inherited||null;};
   function pauseButton(x) {
-    if(!ownPause(x)&&x.pause?.inherited?.length){
-      const scope=x.pause.inherited[0],owner=byId.get(keyOf(x.home,scope))||byId.get(scope),wrap=n('span','pause-control inherited-pause');
+    const inheritedScopes=!ownPause(x)&&x.pause?.inherited?.length?x.pause.inherited:heldBy(x);
+    if(inheritedScopes){
+      const scope=inheritedScopes[0],owner=byId.get(keyOf(x.home,scope))||byId.get(scope),wrap=n('span','pause-control inherited-pause');
       const note=b(t('Pause from {name}',{name:owner?label(owner):scope==='freeze'?t('the fleet freeze'):t('Pause origin not reported')}),e=>{e.stopPropagation();if(!owner)return;if(owner.kind==='request'){const row=requestRows(model.nodes.filter(x=>x.kind==='task')).find(r=>r.id===owner.id);if(row)ui.groups.delete(requestState(row));ui.expanded.add(owner.id);host.setView('board');render(true,'filter');[...$('board').querySelectorAll('.request-row')].find(el=>el.dataset.node===owner.id)?.querySelector('.request-title')?.focus();}else{host.setView('projects');for(const group of ancestors(owner))ui.tree.add(group.id);render(true,'filter');const row=[...$('project-tree').querySelectorAll('.mix')].find(el=>el.dataset.node===owner.id);if(row)openNode(owner,row.querySelector('.mix-name'));}},'pause-owner');
-      note.disabled=!owner;note.title=owner?t('Go to pause scope'):pauseText(x);wrap.dataset.pauseNode=x.id;wrap.pauseReading=pauseReading(x);wrap.append(note);if(x.pause.condition?.reason)wrap.append(n('span','pause-explanation',t('Waiting for: {reason}',{reason:x.pause.condition.reason})));return wrap;
+      note.disabled=!owner;note.title=owner?t('Go to pause scope'):pauseText(x);wrap.dataset.pauseNode=x.id;wrap.pauseReading=pauseReading(x);wrap.append(note);if(x.pause?.condition?.reason)wrap.append(n('span','pause-explanation',t('Waiting for: {reason}',{reason:x.pause.condition.reason})));return wrap;
     }
     if(signalPause(x))return signalPauseButton(x);
     const own=ownPause(x),stopping=isStopping(x),action=own?'resume':'pause',inherited=x.pause?.inherited||[];
@@ -558,7 +568,6 @@ window.createDeckUI = function (host) {
   const activityEpoch=value=>{const e=event(value);return e?.epoch||Date.parse(e?.date||'')/1000||0;};
   const reviewNeeded=x=>x.state==='done'&&(x.outcome||x.raw?.outcome||x.card?.outcome)?.review==='needed';
   function requestRows(tasks){
-    const decisions=new Set(attentionCards().map(c=>keyOf(c.home,c.task)));
     const groups=new Map(model.nodes.filter(x=>x.kind==='request').map(x=>[x.id,{...x,tasks:[],calls:[]}]));
     const legacyId=x=>'legacy:'+(projectOf(x)?.id||x.home);
     for(const x of tasks){
@@ -569,7 +578,7 @@ window.createDeckUI = function (host) {
         if(!groups.has(id))groups.set(id,{...r,tasks:[],calls:[]});
       }
       const group=groups.get(r.id);if(!group)continue;
-      if(!decisions.has(keyOf(x.home,x.task))&&!questionOnly(x))group.tasks.push(x);
+      if(!questionOnly(x))group.tasks.push(x);
       if(activityEpoch(x.updated_at)>activityEpoch(group.updated_at))group.updated_at=x.updated_at;
     }
     for(const c of attentionCards()){const own=byId.get(taskNodeId(c.home,c.task)),r=own&&(requestFor(own)||requestFor(questionNode(c))||groups.get(legacyId(own)));if(r)groups.get(r.id)?.calls.push(c);}
@@ -633,7 +642,8 @@ window.createDeckUI = function (host) {
     }
     if(opened){
       const body=n('div','request-tasks'),done=work.filter(x=>x.state==='done'&&!['final','partial'].includes((x.outcome||x.raw?.outcome||x.card?.outcome)?.role)&&visible(x)),rank={active:0,stopping:1,unknown:2,ready:3,waiting:4,paused:5,done:6};
-      body.append(...work.filter(x=>!done.includes(x)&&visible(x)).sort((a,b)=>rank[a.state]-rank[b.state]).map(requestTaskRow));
+      const asking=new Set(r.calls.filter(c=>!c.answered).map(c=>keyOf(c.home,c.task)));
+      body.append(...work.filter(x=>!done.includes(x)&&!asking.has(keyOf(x.home,x.task))&&visible(x)).sort((a,b)=>rank[a.state]-rank[b.state]).map(requestTaskRow));
       if(done.length){const show=ui.steps.has(r.id),fold=b(t(show?'Hide {count} finished tasks':'View {count} finished tasks',{count:done.length}),()=>{show?ui.steps.delete(r.id):ui.steps.add(r.id);render(true,'filter');},'more');fold.setAttribute('aria-expanded',String(show));body.append(structural(fold));if(show)body.append(...done.map(requestTaskRow));}
       if(!body.children.length)body.append(n('p','meta',t('What remains is in Needs you.')));wrap.append(body);
     }
@@ -800,7 +810,7 @@ window.createDeckUI = function (host) {
     const requestMove=x.kind==='request'&&(command.action==='move'||command.undo_operation?.op==='move');
     if(requestMove){const row=[...document.querySelectorAll('.request-row')].find(y=>y.dataset.node===x.id);row?.querySelector('.change-preview')?.remove();row?.append(previewSlot);}
     else{if(!detailOpen() || (ui.selected!==x.id&&!reviewing))await openNode(x,[...document.querySelectorAll('[data-node]')].find(y=>y.dataset.node===x.id)?.querySelector('button'));
-      $('detail-content').querySelector('.change-preview')?.remove();$('detail-content').append(previewSlot);}
+      const previous=$('detail-content').querySelector('.change-preview');previous?.restore?.();previous?.remove();$('detail-content').append(previewSlot);}
     const request={...command,node:command.action==='move'&&x.order_id?x.order_id:x.owner_id,revision:x.rev,request_id:crypto.randomUUID().replaceAll('-','')};
     try {
       const result=await api('api/control/'+encodeURIComponent(x.home)+'/preview',request);
@@ -809,6 +819,15 @@ window.createDeckUI = function (host) {
       if(result.error || result.allowed===false || ['rejected','conflict','failed'].includes(result.state) || result.code || (result.cycle_path||result.impact?.cycle_path)?.length){add(previewSlot,n('p','error',result.message||result.error),(result.cycle || result.cycle_path || result.impact?.cycle_path)?n('p','',t('Cycle')+': '+(result.cycle || result.cycle_path || result.impact.cycle_path).map(id=>label(model.nodes.find(x=>x.owner_id===id))).join(' → ')):null);if(result.code==='stale_revision')previewSlot.append(b(t('Review current data'),async()=>{ui.busy=false;await host.poll();const current=byId.get(x.id);ui.selected='';if(current){const face=[...document.querySelectorAll('[data-node]')].find(el=>el.dataset.node===x.id&&el.getClientRects().length)?.querySelector('.card-open,.mix-name');if(face)openNode(current,face);}}));return;}
       if(!result.impact)previewSlot.append(renderImpact(null));
       if(command.action==='scope-removal'){ui.busy=false;await apply(x,{...request,preview:result.token || result.preview_token},previewSlot);return;}
+      // Approved demo: «De X a Y: efecto · Confirmar · Cancelar» beside the selector, which shows the draft.
+      if(command.action==='priority'&&result.impact){
+        const select=$('detail-content').querySelector('.deck-controls select[name=priority]'),wrap=select?.parentElement,shown=wrap?.firstChild,before=[select?.value,shown?.textContent,wrap?.dataset.p];
+        previewSlot.restore=()=>{if(select?.isConnected){[select.value,shown.textContent,wrap.dataset.p]=before;}previewSlot.restore=null;};
+        if(select){select.value=command.priority||'';shown.textContent=priorityName(command.priority||'');wrap.dataset.p=command.priority||'';select.closest('.deck-action-row').after(previewSlot);}
+        previewSlot.classList.add('priority-preview');previewSlot.replaceChildren(n('span','fact',priorityChange(x,command.priority)));
+        // The receipt and Deshacer leave the controls, which apply() redraws.
+        const confirm=workControl(b(t('Confirm'),()=>{previewSlot.restore=null;previewSlot.classList.remove('priority-preview');$('detail-content').append(previewSlot);apply(x,request,previewSlot);},'primary'),can(x,'priority'));
+        add(previewSlot,confirm,b(t('Cancel'),()=>{previewSlot.restore?.();previewSlot.remove();}));return;}
       if(command.action!=='dependency-add' && result.impact){ui.busy=false;await apply(x,request,previewSlot);return;}
       const confirm=b(t('Confirm change'),()=>apply(x,{...request,preview:result.token || result.preview_token},previewSlot));
       workControl(confirm,!!result.impact);add(previewSlot,confirm,b(t('Cancel'),()=>previewSlot.remove()));

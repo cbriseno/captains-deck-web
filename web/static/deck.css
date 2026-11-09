@@ -639,3 +639,4 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
  #project-tree .mix .mix-meta>.mix-sub{flex:1 1 150px;flex-wrap:nowrap}#project-tree .mix .mix-meta .minibar{flex:0 0 56px}#project-tree .mix .mix-meta .mix-pct{flex:1 1 auto}#project-tree .mix>.pause-control{flex-basis:auto;max-width:150px;margin-left:0}
  /* As on the board's request headers: no idle button or explanation beside the title. */
  #project-tree .mix .pause-explanation,#project-tree .mix .mix-pause[data-idle=true]{display:none}}
+.priority-preview{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin:6px 0}.priority-preview .fact{margin:0}.priority-preview button{margin:0}
