@@ -128,7 +128,7 @@ def main(argv=None):
     if directory.is_symlink():
         raise ValueError('runtime directory must not be a symlink')
     if args.command == 'start':
-        if sys.version_info < (3, 11):
+        if sys.version_info < (3, 9):
             import fm_diagnostics as diagnostics
             try:
                 logger = diagnostics.Logger('deck', diagnostics.PRODUCT_VERSION, 'unknown')
@@ -136,7 +136,7 @@ def main(argv=None):
                 logger.flush()
             except OSError:
                 pass
-            print(f'Python 3.11 or newer is required; log: {directory / "server.log"}.')
+            print(f'Python 3.9 or newer is required; log: {directory / "server.log"}.')
             return 1
         try:
             current = request(directory, 'status')

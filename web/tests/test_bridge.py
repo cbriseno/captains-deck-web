@@ -697,7 +697,7 @@ class WebTests(unittest.TestCase):
             'echo \'{"error":{"code":"agent_blocked","message":"busy"}}\' >&2; exit 1\n' if refuse else
             'python3 -c \'import json,sys;open(sys.argv[1],"a").write(json.dumps(sys.argv[2:])+"\\n")\' "'+str(log)+'" "$@"\n'))
         script.chmod(0o755)
-        self.enterContext(patch.object(bridge.fm,'HERDR_BIN',str(script)))
+        herdr=patch.object(bridge.fm,'HERDR_BIN',str(script));herdr.start();self.addCleanup(herdr.stop)
         return log
 
     def sends(self,log):
@@ -709,7 +709,7 @@ class WebTests(unittest.TestCase):
     def test_main_owned_answer_points_the_idle_primary_at_the_record_with_split_root(self):
         code=self.root/'firstmate code';code.mkdir()
         (Path(self.home.path)/'bin').rename(code/'bin')
-        self.enterContext(patch.dict(os.environ,FM_ROOT_OVERRIDE=str(code)))
+        root=patch.dict(os.environ,FM_ROOT_OVERRIDE=str(code));root.start();self.addCleanup(root.stop)
         log=self.herdr();self.primary();key,body=self.call()
         status,receipt=self.req('/api/ticket/'+key+'/answer',body)
         self.assertEqual(status,200);self.assertIs(receipt['saved'],True);self.assertEqual(receipt['primary'],'sent')

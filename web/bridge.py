@@ -24,7 +24,10 @@ import subprocess
 import sys
 import threading
 import time
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python < 3.11, such as macOS's own 3.9
+    tomllib = None
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from socketserver import TCPServer
 from urllib.parse import parse_qs, unquote, urlencode, urlsplit
@@ -244,6 +247,34 @@ def file_mark(path):
     return info.st_ino, info.st_size, info.st_mtime_ns, info.st_ctime_ns
 
 
+TOML_TABLE = re.compile(r'\[([A-Za-z0-9_-]+)\]\s*(?:#.*)?')
+TOML_PAIR = re.compile(r"""([A-Za-z0-9_-]+)\s*=\s*(?:"([^"\\]*)"|'([^']*)'|([+-]?[0-9]+)|(true|false))\s*(?:#.*)?""")
+
+
+def read_toml(text):
+    """The parsed TOML, or None when it can't be read. Without tomllib only
+    plain tables and string, integer and boolean keys are read."""
+    if tomllib:
+        try:
+            return tomllib.loads(text)
+        except tomllib.TOMLDecodeError:
+            return None
+    cfg = table = {}
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        if match := TOML_TABLE.fullmatch(line):
+            table = cfg.setdefault(match[1], {})
+        elif match := TOML_PAIR.fullmatch(line):
+            key, basic, literal, number, flag = match.groups()
+            table[key] = (int(number) if number else flag == 'true' if flag
+                          else basic if basic is not None else literal)
+        else:
+            return None
+    return cfg
+
+
 def backlog_sources(home):
     """The home's task config and its Markdown backlog and archive, as Firstmate
     reads them (an absent .tasks.toml means the defaults). None when the home is
@@ -258,9 +289,8 @@ def backlog_sources(home):
         config = ''
     except (OSError, ValueError):
         return None
-    try:
-        cfg = tomllib.loads(config)
-    except tomllib.TOMLDecodeError:
+    cfg = read_toml(config)
+    if cfg is None:
         return None
     markdown = cfg.get('markdown') if isinstance(cfg.get('markdown'), dict) else {}
     if cfg.get('backend', 'markdown') != 'markdown':

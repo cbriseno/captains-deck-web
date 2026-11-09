@@ -1,7 +1,7 @@
 # Captain’s Deck web
 
 A private, responsive view and control surface for existing Firstmate work.
-Python 3.11+ is the only runtime dependency.
+Python 3.9+ is the only runtime dependency.
 Firstmate remains the request intake and owns every change to work.
 
 The board shows the owner’s project → subproject → task hierarchy, including public counterparts grouped as ordinary subprojects while their repository identities remain distinct.
@@ -47,7 +47,7 @@ The earlier Compact control was superseded by this approved layout.
 
 ## Run locally
 
-Python 3.11+ and its standard library are enough to start the web server.
+Python 3.9+ and its standard library are enough to start the web server.
 From the checkout, run:
 
 ```sh

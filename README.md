@@ -7,10 +7,10 @@ It contains no image assets, bundled fonts or installation-specific data.
 
 ## Required versus optional tools
 
-The standalone board requires an already approved Python 3.11+ with its standard
-library. A modern browser is needed to use the UI; Safari is normally supplied
-by macOS but its minimum version is unknown. Python of the required version is
-not assured on a managed Mac. Firstmate supplies live data and controls; Herdr
+The standalone board requires an already approved Python 3.9+ with its standard
+library; the `python3` that macOS Command Line Tools supply is 3.9. A modern
+browser is needed to use the UI; Safari is normally supplied by macOS but its
+minimum version is unknown. Firstmate supplies live data and controls; Herdr
 and the relay extension are optional integrations. Node and pytest are only
 needed for the development checks below, which also use existing locked Node test
 dependencies. Exact lower versions are unknown unless stated below.
@@ -34,7 +34,7 @@ Native integration, permissions and producer behavior still need Mac validation.
 
 ## Install and run
 
-Production requires Python 3.11 or newer; it uses only the standard library and requires no Node packages or build step.
+Production requires Python 3.9 or newer; it uses only the standard library and requires no Node packages or build step.
 Extract or clone this distribution into a directory you own and open a terminal at its root.
 Run the empty standalone board:
 
@@ -97,7 +97,7 @@ The board reads producer data and uses documented guarded intakes; it does not s
 
 ## Development checks
 
-Tested development runtimes: Python 3.11 and Python 3.13; Node.js 22 for JavaScript checks and the locked history reader.
+Tested development runtimes: Python 3.9, Python 3.11 and Python 3.13; Node.js 22 for JavaScript checks and the locked history reader.
 The optional terminal plugin declares Herdr 0.9.0 or newer, Bash and Python 3.11 or newer.
 Its source and manifest are included; live plugin activation is outside the web distribution’s acceptance tests.
 It uses the same plugin ID as upstream, so install only one variant.

@@ -19,8 +19,8 @@ def optional(name, minimum, factory, impact):
 
 
 def main():
-    ready = sys.version_info >= (3, 11)
-    print(f'Required Python: {platform.python_version()}; minimum 3.11; macOS availability not assured; without it: board unavailable')
+    ready = sys.version_info >= (3, 9)
+    print(f'Required Python: {platform.python_version()}; minimum 3.9; macOS Command Line Tools supply 3.9; without it: board unavailable')
     try:
         version = importlib.metadata.version('pytest')
     except importlib.metadata.PackageNotFoundError:

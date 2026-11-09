@@ -14,7 +14,7 @@ spec.loader.exec_module(check_tools)
 class InventoryTests(unittest.TestCase):
     def test_old_python_is_missing_even_without_optional_tools(self):
         output = io.StringIO()
-        with mock.patch.object(check_tools.sys, 'version_info', (3, 10)), mock.patch.object(check_tools.shutil, 'which', return_value=None), contextlib.redirect_stdout(output):
+        with mock.patch.object(check_tools.sys, 'version_info', (3, 8)), mock.patch.object(check_tools.shutil, 'which', return_value=None), contextlib.redirect_stdout(output):
             self.assertEqual(check_tools.main(), 1)
         self.assertTrue(output.getvalue().rstrip().endswith('MISSING required tools or capabilities'))
         self.assertIn('Optional node: missing', output.getvalue())

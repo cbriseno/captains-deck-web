@@ -1,6 +1,6 @@
 # Platform setup and boundaries
 
-The web server and process launcher use Python 3.11+ standard library APIs.
+The web server and process launcher use Python 3.9+ standard library APIs.
 The terminal board and live Firstmate producer still require POSIX process, shell and filesystem capabilities.
 The web and terminal share `scripts/flow_tui.py`, including owner resolution, event provenance, calls, progress and retained deliveries.
 
