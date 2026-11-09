@@ -104,7 +104,9 @@ class AnswerFiles:
         said = answer.get('value') or ''
         for option in self.fm.decision_card_for(str(answer.get('task_id') or ''), home).get('options') or []:
             value = option.get('value') if isinstance(option, dict) else None
-            label = option.get('label') or value if value else None
+            if not isinstance(value, str) or not isinstance(option.get('label', ''), str):
+                continue
+            label = option.get('label') or value
             if value and said == value:
                 return label
             if value and said.startswith(value + ' - '):

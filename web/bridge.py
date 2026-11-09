@@ -1567,10 +1567,10 @@ class Handler(BaseHTTPRequestHandler):
                 if unsafe and operation == 'upload':
                     data = board.answer_files.upload('control/' + parts[2], body, actor)
                 elif (unsafe and operation in ('preview', 'apply', 'review')) or (not unsafe and operation == 'receipt'):
-                    if unsafe and body.get('action') == 'scope-removal' and 'attachments' in body:
+                    if unsafe and body.get('action') == 'scope-removal' and 'attachments' in body and isinstance(body.get('reason', ''), str):
                         # Firstmate's removal note is text: name each attached file on its own line.
                         paths = board.answer_files.paths(body.pop('attachments'), actor, 'control/' + parts[2])
-                        body['reason'] = str(body.get('reason') or '').strip() + ''.join('\nAdjunto: ' + str(p) for p in paths)
+                        body['reason'] = body.get('reason', '').strip() + ''.join('\nAdjunto: ' + str(p) for p in paths)
                     data = board.deck_controls.request(owner, operation,
                         body if unsafe else {'request_id': value('request_id')}, actor)
                 else:
