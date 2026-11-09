@@ -376,6 +376,9 @@ class Board:
         self.history_lock = threading.Lock()
         self.history_cache = {}
         self.repo_cache = {}
+        # Last built history per home selection; reads serve it while one rebuild runs.
+        self.histories, self.history_rebuilding = {}, set()
+        self.history_build_lock = threading.Lock()
         # Firstmate's identity for a call is kept until its backlog row
         # changes; until then an open reads the row, and answering always asks
         # Firstmate again.
@@ -812,7 +815,8 @@ class Board:
     def delivered_project(self, home, rows, record, human):
         """A delivery's tag: the project it declared, else its repository's.
         Both are recorded fields; a task id never names a project."""
-        source = self.deck_controls.source(home) if not fm.is_remote_home(home) else {}
+        # The board's last Firstmate read; history never asks Firstmate again.
+        source = self.deck_controls.peek(home) if not fm.is_remote_home(home) else {}
         if source.get('available'):
             nodes = source['snapshot']['nodes']
             repo = str(record.get('repo') or '')
@@ -842,6 +846,42 @@ class Board:
         return project_tag(names.get(repo, repo))
 
     def history(self, selected='', query=''):
+        """The last history built for this selection at once; only a read with
+        none waits for a build. A search filters that history."""
+        with self.history_lock:
+            built = self.histories.get(selected)
+            rebuild = built is not None and selected not in self.history_rebuilding
+            if rebuild:
+                self.history_rebuilding.add(selected)
+        if rebuild:
+            threading.Thread(target=self.rebuild_history, args=(selected,), daemon=True).start()
+        if built is None:
+            with self.history_build_lock:
+                # A read that waited here takes the history the previous one built.
+                with self.history_lock:
+                    built = self.histories.get(selected)
+                if built is None:
+                    built = self.build_history(selected)
+        rows, details = built
+        result = [row for row, text in rows if query.casefold() in text]
+        return {'records': result[:1000], 'omitted': max(0, len(result) - 1000),
+                'details': details, 'scope': self.t('Includes everything Firstmate still keeps, not just recent ones.')}
+
+    def rebuild_history(self, selected):
+        try:
+            with self.history_build_lock:
+                self.build_history(selected)
+        except Exception:  # A failed rebuild keeps serving the last history.
+            pass
+        finally:
+            with self.history_lock:
+                self.history_rebuilding.discard(selected)
+
+    def build_history(self, selected):
+        """Build and keep one selection's history with each row's search text;
+        the caller holds history_build_lock."""
+        # Before the collector loads there are no homes yet; that empty history is never kept.
+        loading = self.collector.snapshot().loading
         homes = [self.home(selected)] if selected else self.homes()
         result, details = [], []
         listed = [(home, *self.records(home)) for home in homes]
@@ -852,20 +892,21 @@ class Board:
                 human = record_presentation(home, row)
                 project = self.delivered_project(home, rows, row, human)
                 title = card_field(human.get('card_title'), 'card_title') or record_title(row, self.t, titles)
-                if query.casefold() not in ' '.join([str(row.get(k) or '') for k in ('id', 'title', 'body', 'artifact')]
-                                                    + [title, project['label'] if project else '', (human.get('request') or {}).get('label', '')]).casefold():
-                    continue
+                text = ' '.join([str(row.get(k) or '') for k in ('id', 'title', 'body', 'artifact')]
+                                + [title, project['label'] if project else '', (human.get('request') or {}).get('label', '')]).casefold()
                 event = fm.producer_card_time(row.get('card_time'), 'landed',
                                               fm.CardTime('Delivered', row.get('closed')))
-                result.append({'task': row['id'], 'title': title,
+                result.append(({'task': row['id'], 'title': title,
                                'home': home_id(home), 'owner': home.label, 'project': project,
                                'request': human.get('request'), 'outcome': human.get('outcome'),
                                'summary': excerpt(human.get('summary') or ''),
-                               'time': self.event_json(event), 'closed': row.get('closed') or ''})
+                               'time': self.event_json(event), 'closed': row.get('closed') or ''}, text))
         # The order follows the time each row shows, not the raw closing text.
-        result.sort(key=lambda row: (newest_first(row['time']), row['task'], row['home']), reverse=True)
-        return {'records': result[:1000], 'omitted': max(0, len(result) - 1000),
-                'details': details, 'scope': self.t('Includes everything Firstmate still keeps, not just recent ones.')}
+        result.sort(key=lambda item: (newest_first(item[0]['time']), item[0]['task'], item[0]['home']), reverse=True)
+        if not loading:
+            with self.history_lock:
+                self.histories[selected] = result, details
+        return result, details
 
     def delivery(self, identity, task):
         home = self.home(identity)

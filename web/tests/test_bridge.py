@@ -106,6 +106,21 @@ class WebTests(unittest.TestCase):
                 time.sleep(0.1)
             else:self.fail('The rebuilt board was never served.')
 
+    def test_a_slow_history_rebuild_never_holds_the_last_history(self):
+        self.init();_,first=self.req('/api/history')
+        release=threading.Event();records=self.board.records
+        def slow(home,**kw):
+            release.wait(10);rows,note=records(home,**kw);return [dict(r,title='Rebuilt') for r in rows],note
+        with patch.object(self.board,'records',side_effect=slow):
+            started=time.monotonic();status,last=self.req('/api/history')
+            self.assertEqual(status,200);self.assertLess(time.monotonic()-started,2)
+            self.assertEqual(last['records'],first['records'])
+            release.set()
+            for _ in range(50):
+                if self.req('/api/history?q=Rebuilt')[1]['records']:break
+                time.sleep(0.1)
+            else:self.fail('The rebuilt history was never served.')
+
     def test_call_report_link_opens_a_bounded_local_file_only(self):
         board=self.init();key=next(c for c in board['columns'] if c['id']=='captains_call')['cards'][0]['key']
         card=self.board.collector.snap.cols['captains_call'][0]
