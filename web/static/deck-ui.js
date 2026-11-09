@@ -56,7 +56,7 @@ window.createDeckUI = function (host) {
   // subgroup and never contributes to the confirmed work count.
   const isStopping = x => x.kind === 'task' && x.state === 'stopping';
   const colOf = x => x.state === 'done' ? 'done' : x.state === 'paused' ? 'paused' : ['ready','active','stopping','unknown'].includes(x.state) ? 'now' : 'waiting';
-  const visible = x => (!ui.scope || ancestors(x).some(y => y.id === ui.scope)) && (!app.query || [label(x), pathOf(x), x.reason, x.task].join(' ').toLocaleLowerCase().includes(app.query));
+  const visible = x => (!ui.scope || ancestors(x).some(y => y.id === ui.scope)) && (!app.query || [label(x), pathOf(x), x.reason, x.task, objectId(x)].join(' ').toLocaleLowerCase().includes(app.query));
   const hueKey=x=>x.color_key || x.owner_id || x.id;
   const hueFor=key=>hues.get(key) ?? host.hashOf(key)%11;
   function assignHues(){const used=new Set();hues=new Map();for(const key of [...new Set(model.nodes.filter(x=>x.kind==='project').map(hueKey))].sort()){let h=Number.isInteger(savedHues[key])?savedHues[key]:host.hashOf(key)%11;for(let i=0;i<11&&used.has(h);i++)h=(h+1)%11;hues.set(key,h);used.add(h);savedHues[key]=h;}save('deck-project-hues',savedHues);}
