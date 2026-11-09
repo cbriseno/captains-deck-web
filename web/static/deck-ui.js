@@ -479,14 +479,38 @@ window.createDeckUI = function (host) {
   const CARD_ICONS={ask:['M7.9 20A9 9 0 1 0 4 16.1L2 22Z','M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3','M12 17h.01'],ext:['M15 3h6v6','M10 14 21 3','M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],file:['M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z','M14 2v4a2 2 0 0 0 2 2h4','M16 13H8','M16 17H8'],check:['M20 6 9 17l-5-5'],chevronDown:['m6 9 6 6 6-6'],more:['M5 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0','M10.8 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0','M16.6 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0']};
   function cardIcon(name){const ns='http://www.w3.org/2000/svg',s=document.createElementNS(ns,'svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','ci');s.setAttribute('aria-hidden','true');for(const d of CARD_ICONS[name]){const p=document.createElementNS(ns,'path');p.setAttribute('d',d);s.append(p);}return s;}
   const withCardIcon=(el,name)=>{el.prepend(cardIcon(name));return el;};
-  function cardKind(kind,name,text,x,own,items){
-    const badge=idBadge(own||x);if(badge.tagName==='BUTTON'){const id=badge.textContent.slice(4);badge.replaceChildren(n('span','sr-only','ID: '),id);}
-    const r=own&&requestFor(own),encargo=r?label(r):(own&&projectOf(own)?.title)||'';
-    const menu=n('div','card-menu');menu.hidden=true;menu.setAttribute('role','menu');menu.append(n('div','card-menu-h',label(own||x)),...[badge.tagName==='BUTTON'&&b(t('Copy ID'),()=>badge.click(),'more'),...items].filter(Boolean));
+  // Short inline ID («T-BB») that still copies on click.
+  function inlineId(x){const badge=idBadge(x);if(badge.tagName==='BUTTON'){const id=badge.textContent.slice(4);badge.replaceChildren(n('span','sr-only','ID: '),id);}return badge;}
+  // «…» menu: Copy ID first, then the given items.
+  function moreMenu(x,badge,items){
+    const menu=n('div','card-menu');menu.hidden=true;menu.setAttribute('role','menu');menu.append(n('div','card-menu-h',label(x)),...[badge.tagName==='BUTTON'&&b(t('Copy ID'),()=>badge.click(),'more'),...items].filter(Boolean));
     for(const item of menu.querySelectorAll('button')){item.setAttribute('role','menuitem');item.addEventListener('click',()=>{menu.hidden=true;open.setAttribute('aria-expanded','false');});}
     const open=b('',e=>{e.stopPropagation();const show=menu.hidden;document.querySelectorAll('.card-menu:not([hidden])').forEach(m=>m.hidden=true);menu.hidden=!show;open.setAttribute('aria-expanded',String(show));},'card-menu-btn');
     open.append(cardIcon('more'));open.setAttribute('aria-label',t('More actions'));open.title=t('More actions');open.setAttribute('aria-haspopup','menu');open.setAttribute('aria-expanded','false');
-    return add(n('div','cmeta '+kind),add(n('span','kind'),cardIcon(name),text),badge,encargo?Object.assign(n('span','req',encargo),{title:encargo}):null,open,menu);
+    return [open,menu];
+  }
+  function cardKind(kind,name,text,x,own,items){
+    const badge=inlineId(own||x);
+    const r=own&&requestFor(own),encargo=r?label(r):(own&&projectOf(own)?.title)||'';
+    return add(n('div','cmeta '+kind),add(n('span','kind'),cardIcon(name),text),badge,encargo?Object.assign(n('span','req',encargo),{title:encargo}):null,...moreMenu(own||x,badge,items));
+  }
+  // Task inside an opened request, as the approved v11b demo row(): status dot,
+  // title with inline ID and pills, one summary line, progress and Pause on the
+  // right, and «…». Priority shows only when it is High or Critical.
+  function requestTaskRow(x){
+    const outcome=x.outcome||x.raw?.outcome||x.card?.outcome||{},result=['final','partial'].includes(outcome.role);
+    const row=setColor(n('article','task-card card task-row'+(result?' result':'')),x);row.dataset.node=x.id;row.dataset.key=x.card?.key||x.id;row.dataset.state=x.state;row.dataset.open=String(ui.selected===x.id);
+    const face=b('',()=>{if(row.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}openNode(x,face);},'card-open');face.dataset.key=row.dataset.key;face.setAttribute('aria-expanded',String(ui.selected===x.id));face.setAttribute('aria-controls','detail');face.append(n('span','title',label(x)));
+    const badge=inlineId(x),pill=(text,cls='')=>n('span','rtag'+cls,text);
+    const line=add(n('div','rt'),face,badge,result?pill(t(outcome.role==='partial'?'Progress update':outcome.review==='needed'?'Result · not reviewed':'Result')):null,['P0','P1'].includes(x.priority)?pill(t(x.priority==='P0'?'Critical priority':'High priority'),' prio'):null);
+    const sub=n('div','rs'),text=x.card?.summary||x.raw?.summary||x.summary;
+    if(x.state==='done'){sub.textContent=[x.card?.validation_pending||x.raw?.validation_pending||x.validation_pending,text].filter(Boolean).join(' · ');const pending=questions().filter(c=>byId.get(taskNodeId(c.home,c.task))?.question?.origin_task===x.owner_id);if(pending.length)sub.append(structural(n('span','deck-origin',t('Origin delivered · {count} open decisions',{count:pending.length}))));}
+    else{sub.textContent=pauseText(x)||(x.state==='active'&&text)||waitingText(x);if(questions().some(c=>questionNode(c)?.id===x.id))sub.append(n('span','has-q',t('Has a question for you')));}
+    const ctl=n('div','card-ctl rctl');if(x.state==='active')ctl.append(progress(x));if(x.state!=='done')ctl.append(pauseButton(x));
+    const chain=new Set(ancestors(x).map(y=>y.id)),related=relationshipEdges().some(e=>chain.has(e.from)||e.to===x.id);
+    add(row,n('span','dot'),add(n('div','card-face rmain'),line,sub.childNodes.length?sub:null),ctl,...moreMenu(x,badge,[related&&b(t('View recorded relationships'),()=>showRelations(x),'more')]),add(n('div','card-more'),n('div','card-more-inner')));
+    const saved=host.answerTools?.summary(x,()=>openNode(x,face));if(saved)row.append(saved);
+    wireEvents(row,x.id);return row;
   }
   document.addEventListener('click',e=>{if(!e.target.closest?.('.card-menu,.card-menu-btn'))document.querySelectorAll('.card-menu:not([hidden])').forEach(m=>{m.hidden=true;m.parentElement.querySelector('.card-menu-btn')?.setAttribute('aria-expanded','false');});});
   function actionLink(c){
@@ -609,8 +633,8 @@ window.createDeckUI = function (host) {
     }
     if(opened){
       const body=n('div','request-tasks'),done=work.filter(x=>x.state==='done'&&!['final','partial'].includes((x.outcome||x.raw?.outcome||x.card?.outcome)?.role)&&visible(x)),rank={active:0,stopping:1,unknown:2,ready:3,waiting:4,paused:5,done:6};
-      body.append(...work.filter(x=>!done.includes(x)&&visible(x)).sort((a,b)=>rank[a.state]-rank[b.state]).map(x=>taskCard(x)));
-      if(done.length){const show=ui.steps.has(r.id),fold=b(t(show?'Hide {count} finished tasks':'View {count} finished tasks',{count:done.length}),()=>{show?ui.steps.delete(r.id):ui.steps.add(r.id);render(true,'filter');},'more');fold.setAttribute('aria-expanded',String(show));body.append(structural(fold));if(show)body.append(...done.map(x=>taskCard(x)));}
+      body.append(...work.filter(x=>!done.includes(x)&&visible(x)).sort((a,b)=>rank[a.state]-rank[b.state]).map(requestTaskRow));
+      if(done.length){const show=ui.steps.has(r.id),fold=b(t(show?'Hide {count} finished tasks':'View {count} finished tasks',{count:done.length}),()=>{show?ui.steps.delete(r.id):ui.steps.add(r.id);render(true,'filter');},'more');fold.setAttribute('aria-expanded',String(show));body.append(structural(fold));if(show)body.append(...done.map(requestTaskRow));}
       if(!body.children.length)body.append(n('p','meta',t('What remains is in Needs you.')));wrap.append(body);
     }
     const latest=ui.log.find(entry=>entry.home===r.home&&(entry.command.node===r.order_id||entry.command.node===r.owner_id)&&(entry.command.action==='move'||entry.command.undo_operation?.op==='move'));if(latest?.undo)wrap.append(add(n('div','request-order-result'),n('span','meta',receiptLabel(latest)),workControl(b(t('Undo'),()=>undo(latest),'more'),true)));
@@ -845,12 +869,13 @@ window.createDeckUI = function (host) {
     for(const c of calls){const own=byId.get(taskNodeId(c.home,c.task)),origin=own?.question?.origin_task || c.question_origin,question='question:'+c.key,source=origin?keyOf(c.home,origin):'';if(source&&!edges.some(e=>e.from===source&&e.to===question||e.from===question&&e.to===source))edges.push({from:question,to:source,question:true});}
     return edges;
   }
+  function showRelations(x){ui.focus=true;save('deck-focus',true);$('focus-effects').checked=true;delayInput.disabled=false;ui.pin=x.id;ui.hover='';highlight();announceFocus(x.id,label(x));}
   function relationshipDetail(x) {
     const content=$('detail-content');content.querySelector('.deck-relationships')?.remove();
     const chain=new Set(ancestors(x).map(y=>y.id)),edges=relationshipEdges().filter(e=>chain.has(e.from)||e.to===x.id);
     if(!edges.length)return;
     const section=n('section','deck-relationships'),list=n('ul','deps');
-    section.append(n('h3','',t('Recorded relationships')),b(t('View recorded relationships'),()=>{ui.focus=true;save('deck-focus',true);$('focus-effects').checked=true;delayInput.disabled=false;ui.pin=x.id;ui.hover='';highlight();announceFocus(x.id,label(x));},'more'));
+    section.append(n('h3','',t('Recorded relationships')),b(t('View recorded relationships'),()=>showRelations(x),'more'));
     for(const edge of edges){
       const outgoing=chain.has(edge.from),id=outgoing?edge.to:edge.from,call=questions().find(c=>'question:'+c.key===id),other=byId.get(id);
       const role=edge.question?t(outgoing?'Task asking this question':'Question from this task'):edge.completed?t(outgoing?'Released by this':'Already released this'):t(outgoing?'Waits for this':'Blocks this');
