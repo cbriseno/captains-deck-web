@@ -234,9 +234,11 @@ window.createDeckUI = function (host) {
   function pauseSignals(){
     const capacity=$('agents-capacity');capacity.replaceChildren();
     for(const source of model.sources){
-      const crew=source.snapshot?.crew;
-      const chip=structural(n('span','agents-count',crew?t('Agents {running} of {cap}',{running:crew.agents_running??t('Not reported'),cap:crew.agents_cap??t('Not reported')}):t('Agents · not reported')));
-      chip.title=app.board.homes?.find(h=>h.id===source.home)?.label||chip.textContent;chip.dataset.stale=String(!source.available);capacity.append(chip);
+      // Same rule as «En curso»: agents are the tasks Firstmate reports with a live worker.
+      const crew=source.snapshot?.crew,live=model.nodes.filter(x=>x.home===source.home&&x.kind==='task'&&['active','stopping'].includes(x.state)).length;
+      const chip=structural(n('span','agents-count',crew?t('Agents {running} of {cap}',{running:live,cap:crew.agents_cap??t('Not reported')}):t('Agents · not reported')));
+      const home=app.board.homes?.find(h=>h.id===source.home)?.label||chip.textContent;
+      chip.title=crew&&Number.isInteger(crew.agents_running)&&crew.agents_running!==live?home+' · '+t('Firstmate counts {count} lanes in use',{count:crew.agents_running}):home;chip.dataset.stale=String(!source.available);capacity.append(chip);
     }
     for(const source of model.sources)for(const e of source.snapshot?.events||[]){
       const key=JSON.stringify([source.home,e]);if(pauseEventsSeen.has(key))continue;pauseEventsSeen.add(key);
@@ -546,7 +548,9 @@ window.createDeckUI = function (host) {
     for(const c of attentionCards()){const own=byId.get(taskNodeId(c.home,c.task)),r=own&&(requestFor(own)||requestFor(questionNode(c))||groups.get(legacyId(own)));if(r)groups.get(r.id)?.calls.push(c);}
     return [...groups.values()].filter(r=>r.tasks.length||r.calls.length);
   }
-  function requestState(r){if(ownPause(r)||['pending','paused','queued','unconfirmed','failed'].includes(r.pause?.state))return 'paused';return r.tasks.some(x=>['active','ready','unknown'].includes(x.state))?'now':r.tasks.some(x=>['stopping','paused'].includes(x.state))?'paused':r.calls.some(x=>!x.answered)||r.tasks.some(x=>x.state!=='done')?'waiting':'done';}
+  // Approved demo situation(): «En curso» only while a task has a live agent.
+  // Queued (ready), held or unconfirmed work is waiting, never in progress.
+  function requestState(r){if(ownPause(r)||['pending','paused','queued','unconfirmed','failed'].includes(r.pause?.state))return 'paused';return r.tasks.some(x=>x.state==='active')?'now':r.tasks.some(x=>['stopping','paused'].includes(x.state))?'paused':r.calls.some(x=>!x.answered)||r.tasks.some(x=>x.state!=='done')?'waiting':'done';}
   function orderedRequests(rows){return [...rows].sort(ui.order==='mine'?(a,b)=>a.home.localeCompare(b.home)||(a.manual??Infinity)-(b.manual??Infinity): (a,b)=>activityEpoch(b.updated_at)-activityEpoch(a.updated_at));}
   function jumpAttention(x){
     if(ui.view!=='board')host.setView('board');
