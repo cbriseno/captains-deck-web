@@ -171,7 +171,7 @@ def project_snapshot(raw):
             node['pause'].update(controls[node['id']])
     return {'nodes': nodes, 'edges': edges, 'generated_at': raw.get('generated_at'), 'sigue': raw.get('sigue', []),
             'rev': raw.get('rev'), 'requests': raw.get('requests', []), 'pause_controls': raw.get('pause_controls', []),
-            'crew': raw.get('crew'), 'events': raw.get('events', [])}
+            'crew': raw.get('crew'), 'yields': raw.get('yields'), 'events': raw.get('events', [])}
 
 
 class DeckControls:

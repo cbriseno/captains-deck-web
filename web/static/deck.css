@@ -644,3 +644,5 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .answer-attach{display:inline-grid;place-items:center;flex:none;width:30px;height:30px;min-height:0;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted)}
 .answer-attach:hover:enabled{background:var(--soft);color:var(--ink)}
 .answer-attach .ci{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.request-chip.turn-chip{--role:var(--accent);cursor:default}.request-chip.yield-chip{--role:var(--warn);cursor:default}
+.order-note{flex-basis:100%;margin:6px 0 0;color:var(--muted);font-size:13px;max-width:72ch}

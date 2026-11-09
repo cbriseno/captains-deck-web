@@ -631,6 +631,7 @@ window.createDeckUI = function (host) {
     add(card,cardKind('rev','file',t(outcome.role==='partial'?'Progress update':'Review'),x,x,[]),add(n('div','card-face'),face),add(n('div','card-more'),n('div','card-more-inner')),add(n('div','cacts'),view,mark));
     const saved=host.answerTools?.summary(x,()=>openNode(x,face));if(saved)card.append(saved);wireEvents(card,x.id);return card;
   }
+  let peersAll=[];
   function requestRow(r,peers){
     const opened=ui.expanded.has(r.id)||!!app.query,wrap=setColor(n('section','request-row'),r);wrap.dataset.node=r.id;wrap.dataset.kind='request';wrap.dataset.relationScope=r.id;
     const toggle=()=>{opened?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');};
@@ -641,6 +642,8 @@ window.createDeckUI = function (host) {
     if(r.calls.some(c=>c.answered)||r.tasks.some(x=>(x.raw?.recorded_answers||[]).some(a=>a.application?.state==='pending')||x.question?.answer?.application?.state==='pending'))meta.append(n('span','reading-note',t('Reading your answer')));
     if(reviews.length)meta.append(structural(b(t('Review · {count}',{count:reviews.length}),()=>jumpAttention(reviews[0].id),'request-chip review-chip')));
     if(r.project_group)meta.querySelector('.request-project').textContent=t('Grouped by project');
+    if(ui.order==='mine'){const turn=ui.turns?.get(r.id);if(turn)meta.append(structural(n('span','request-chip turn-chip',t('Next · #{count}',{count:turn}))));
+      const y=r.source?.snapshot?.yields;if(y&&y.request===r.order_id){const to=peersAll.find(q=>q.home===r.home&&q.order_id===y.for_request);meta.append(n('span','request-chip yield-chip',t(y.room?'If room runs out, gives way to «{name}»':'No room: gives way at its safe point to «{name}»',{name:to?label(to):y.for_request})));}}
     meta.append(event(r.updated_at)?time('ago',r.updated_at):n('span','dates',t('Last activity not recorded')));
     const head=add(n('div','request-head'),title,r.owner_id?pauseButton(r):null,meta);wrap.append(head);
     if(ui.order==='mine'&&r.owner_id){
@@ -665,6 +668,8 @@ window.createDeckUI = function (host) {
     const nav=$('columns-nav');nav.className='request-tools';nav.removeAttribute('role');
     for(const [value,text]of [['recent','Recent first'],['mine','My order']]){const btn=b(t(text),()=>{ui.order=value;save('deck-request-sort',value);render(true,'filter');});btn.setAttribute('aria-pressed',String(ui.order===value));nav.append(btn);}
     const rows=orderedRequests(requestRows(model.nodes.filter(x=>x.kind==='task')).filter(r=>r.tasks.some(x=>tasks.some(y=>y.id===x.id))||r.calls.some(c=>asks.some(q=>q.key===c.key)||act.some(q=>q.key===c.key)))),allOpen=rows.length&&rows.every(r=>ui.expanded.has(r.id));nav.append(b(t(allOpen?'Collapse requests':'Expand requests'),()=>{for(const r of rows)allOpen?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');}));
+    peersAll=rows;ui.turns=new Map();document.querySelectorAll('.order-note').forEach(x=>x.remove());if(ui.order==='mine'){let k=0;for(const source of model.sources||[])for(const key of source.snapshot?.sigue||[]){const row=rows.find(r=>r.home===source.home&&r.tasks.some(x=>x.owner_id===key));if(row&&!ui.turns.has(row.id))ui.turns.set(row.id,++k);}
+      nav.after(n('p','order-note',t('Firstmate starts at the top: it dispatches first whatever is ready highest in your order. If room runs out, it pauses only the lowest running request, at its safe point, and only to make way for one you put above it.')));}
     const side=n('section','attention-list'),reviews=tasks.filter(reviewNeeded);side.setAttribute('aria-label',t('Needs you'));const needsToggle=b('',()=>{ui.needsClosed=!ui.needsClosed;save('deck-needs-closed',ui.needsClosed);render(true,'filter');});add(needsToggle,n('span','fold'),n('span','dot'),n('span','',t('Needs you')));needsToggle.dataset.control='needs-fold';needsToggle.setAttribute('aria-expanded',String(!ui.needsClosed));side.append(add(n('div','request-group-head'),needsToggle,structural(n('span','n',String(asks.length+act.length+reviews.length)))));
     const feedback=reviewFeedback();if(feedback)side.append(feedback);
     // Keep owner attention order; card kinds are labels, never separate stacks.
@@ -683,7 +688,7 @@ window.createDeckUI = function (host) {
     const traceStart=performance.now(), oldColumns=new Map();
     for(const el of document.querySelectorAll('#board .task-card[data-key]')){const actual=el.closest('.col')?.dataset.k;oldColumns.set(el.dataset.key,actual);const x=byId.get(el.dataset.node);if(!el.closest('.request-board')&&x&&actual&&!el.classList.contains('qcard')&&!el.classList.contains('action-card')&&(colOf(x)!==actual||x.state!==el.dataset.state))window.DeckTrace?.mismatch(el.dataset.key,actual,colOf(x));}
     const cardSignature=app.board.columns.map(c=>[c.id,c.cards.map(x=>[x.key,x.title,x.question,x.question_summary,x.attention_kind,x.action,x.answered,x.project,host.cardLine(x),host.phaseText(x),x.dependencies,x.time?.epoch,x.time?.date])]);
-    const workSignature=app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.requests,s.snapshot?.rev,s.snapshot?.sigue,s.snapshot?.pause_controls,s.snapshot?.crew,s.snapshot?.events,s.retained_at && Date.now()/1000-s.retained_at>=30,s.snapshot?.nodes?.map(x=>x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30)]);
+    const workSignature=app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.requests,s.snapshot?.rev,s.snapshot?.sigue,s.snapshot?.yields,s.snapshot?.pause_controls,s.snapshot?.crew,s.snapshot?.events,s.retained_at && Date.now()/1000-s.retained_at>=30,s.snapshot?.nodes?.map(x=>x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30)]);
     const signature=JSON.stringify([cardSignature,workSignature,app.board.diagnostics,app.historyRows,app.query,ui.scope,ui.view,ui.column,ui.done,ui.pausedOpen,ui.order,ui.needsClosed,ui.density,[...ui.expanded],[...ui.groups],[...ui.steps],ui.mixer,[...ui.closed],[...ui.stacks],[...ui.tree],app.online]);
     if(!force&&signature===ui.signature){refreshAges();highlight();return;}ui.signature=signature;
     // A refresh may rebuild rows for unrelated detail/focus changes. Preserve
