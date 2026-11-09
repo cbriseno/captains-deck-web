@@ -888,15 +888,19 @@ class Board:
         titles = self.titles()
         for home, rows, note in listed:
             details.append({'home': home.label, 'source': note})
+            # The short ID the board shows (T-…), from the board's last Firstmate snapshot, even a stale one.
+            source = self.deck_controls.peek(home) if not fm.is_remote_home(home) else {}
+            aliases = {x.get('task'): x.get('alias') for x in (source.get('snapshot') or {}).get('nodes', [])
+                       if x.get('kind') == 'task' and x.get('alias')}
             for row in rows:
                 human = record_presentation(home, row)
                 project = self.delivered_project(home, rows, row, human)
                 title = card_field(human.get('card_title'), 'card_title') or record_title(row, self.t, titles)
                 text = ' '.join([str(row.get(k) or '') for k in ('id', 'title', 'body', 'artifact')]
-                                + [title, project['label'] if project else '', (human.get('request') or {}).get('label', '')]).casefold()
+                                + [title, aliases.get(row['id'], ''), project['label'] if project else '', (human.get('request') or {}).get('label', '')]).casefold()
                 event = fm.producer_card_time(row.get('card_time'), 'landed',
                                               fm.CardTime('Delivered', row.get('closed')))
-                result.append(({'task': row['id'], 'title': title,
+                result.append(({'task': row['id'], 'title': title, 'alias': aliases.get(row['id']),
                                'home': home_id(home), 'owner': home.label, 'project': project,
                                'request': human.get('request'), 'outcome': human.get('outcome'),
                                'summary': excerpt(human.get('summary') or ''),
