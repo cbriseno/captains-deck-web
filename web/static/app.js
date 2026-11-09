@@ -178,11 +178,11 @@ function sourceStatus() {
   const read = {label: 'Source read', epoch: S.lastRead / 1000};
   const retained = (S.board.deck?.sources || []).map(s => s.retained_at).filter(Boolean);
   const staleAt = retained.length ? Math.min(...retained) : at || S.lastRead / 1000;
-  const connectionText = (failed || disconnected || stale) && S.board ? t("Out of date since {time}", {time: exactTime({epoch: staleAt})}) : S.board.loading ? t("Loading…") : t('updated {ago}', {ago: ago(read)});
+  const connectionText = (failed || disconnected || stale) && S.board ? t("Out of date since {time}", {time: exactTime({epoch: staleAt})}) : S.board.loading ? t("Loading…") : t('Up to date');
   if ($('connection').textContent !== connectionText) $('connection').textContent = connectionText;
   $('connection').dataset.level = disconnected || failed ? 'error' : stale ? 'warning' : 'ok';
   structural($('connection'), 'time');
-  $('connection').title = S.lastRead ? t('Source read') + ' · ' + exactTime(read) : '';
+  $('connection').title = S.lastRead ? t('Source read') + ' · ' + exactTime(read) + ' · ' + t('updated {ago}', {ago: ago(read)}) : '';
   if (disconnected) notice(t("You’re offline. Your draft is safe. Check the question again once you’re back."));
   else if (failed) notice(t("Couldn’t refresh one source. Some cards may be out of date."));
   else if (!S.board.loading && !S.board.homes.length) notice(t('Standalone mode. Connect Firstmate to show tasks and enable controls.'));

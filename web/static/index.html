@@ -23,14 +23,12 @@
 <a class="skip" href="#workspace" data-i18n="Skip to board">Skip to board</a>
 <div class="shell app">
 <header class="topbar top">
-  <nav class="tabs" role="tablist" aria-label="Views" data-i18n-aria-label="Views"><button id="board-view" role="tab" aria-controls="board-view-panel" tabindex="0" aria-selected="true" data-i18n="Board">Board</button><button id="projects-view" role="tab" aria-controls="projects-panel" tabindex="-1" aria-selected="false" data-i18n="Projects">Projects</button><button id="history-tab" role="tab" aria-controls="history-panel" tabindex="-1" aria-selected="false" data-i18n="History">History</button></nav>
-  <span id="agents-capacity" aria-live="polite"></span><p class="overview"><span id="overview" class="overview-counts"></span><span id="connection" role="status" data-i18n="Connecting…">Connecting…</span></p>
+  <nav class="tabs seg" role="tablist" aria-label="Views" data-i18n-aria-label="Views"><button id="board-view" role="tab" aria-controls="board-view-panel" tabindex="0" aria-selected="true" data-i18n="Board">Board</button><button id="projects-view" role="tab" aria-controls="projects-panel" tabindex="-1" aria-selected="false" data-i18n="Projects">Projects</button><button id="history-tab" role="tab" aria-controls="history-panel" tabindex="-1" aria-selected="false" data-i18n="History">History</button></nav>
+  <span id="agents-capacity" aria-live="polite"></span><p class="overview"><span id="overview" class="overview-counts"></span><button id="refresh" class="fresh" type="button" title="Refresh" data-i18n-title="Refresh"><span id="connection" role="status" data-i18n="Connecting…">Connecting…</span></button></p>
   <label class="crew-label" hidden><span class="sr-only" data-i18n="Coordinating space">Coordinating space</span><select id="crew" aria-label="Coordinating space" data-i18n-aria-label="Coordinating space"><option value="" data-i18n="All">All</option></select></label>
-  <input id="board-search" class="board-search" aria-label="Search board" data-i18n-aria-label="Search board" type="search" placeholder="Search…" data-i18n-placeholder="Search…" autocomplete="off">
 
   <button id="history-view" class="tool" type="button" aria-pressed="false" title="History" data-i18n-title="History"><svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16"><circle cx="8" cy="8" r="6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 4.6V8l2.4 1.6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg><span class="tool-label" data-i18n="History">History</span></button>
-  <button id="settings-open" class="tool" type="button" aria-haspopup="dialog" data-i18n="Settings">Settings</button>
-  <button id="refresh" class="tool" type="button" aria-label="Refresh" data-i18n-aria-label="Refresh" title="Refresh" data-i18n-title="Refresh"><span aria-hidden="true">↻</span></button>
+  <button id="settings-open" class="tool" type="button" aria-haspopup="dialog"><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M20 7h-9M14 17H5M17 14a3 3 0 1 0 0 6 3 3 0 0 0 0-6zM7 4a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"/></svg><span data-i18n="Settings">Settings</span></button>
 </header>
 <main id="workspace">
   <div id="pause-events" class="pause-events" role="status" aria-live="polite"></div>
@@ -40,7 +38,7 @@
       <section id="board-view-panel" aria-label="Board" data-i18n-aria-label="Board">
         <header class="hero row-hero" hidden><div><h1 id="deck-lead"></h1><p id="deck-next"></p></div></header>
         <section id="deck-diagnostics" class="notice" aria-live="polite" hidden></section>
-        <nav id="columns-nav" class="columns-nav" aria-label="Work states" data-i18n-aria-label="Work states"></nav>
+        <div class="tools"><label class="search"><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm10 18-4.3-4.3"/></svg><input id="board-search" class="board-search" aria-label="Search task, request or ID" data-i18n-aria-label="Search task, request or ID" type="search" placeholder="Search task, request or ID" data-i18n-placeholder="Search task, request or ID" autocomplete="off"></label><span class="olbl" data-i18n="Order">Order</span><nav id="columns-nav" class="columns-nav" aria-label="Work states" data-i18n-aria-label="Work states"></nav></div>
         <button id="projects-toggle" class="mix-toggle" aria-expanded="false" data-i18n="Projects and priorities">Projects and priorities</button>
         <div class="deck"><nav id="project-mixer" class="mixer" aria-label="Projects and subprojects" data-i18n-aria-label="Projects and subprojects"></nav><div class="main"><p id="connector-key" class="arrow-key" hidden></p><div id="board" class="board"><p class="placeholder" data-i18n="Loading board…">Loading board…</p></div></div></div>
       </section>
