@@ -1123,5 +1123,8 @@
   "Review mark restored.": "Marca de revisión restaurada.",
   "The result has changed. Refresh before reviewing.": "El resultado cambió. Actualiza antes de revisarlo.",
   "The review mark has changed. Refresh before reviewing.": "La marca de revisión cambió. Actualiza antes de revisarla.",
-  "No reviewable outcome.": "Este resultado no tiene una revisión pendiente o registrada."
+  "No reviewable outcome.": "Este resultado no tiene una revisión pendiente o registrada.",
+  "More actions": "Más acciones",
+  "Or write your answer…": "O escribe tu respuesta…",
+  "Write your answer…": "Escribe tu respuesta…"
 }

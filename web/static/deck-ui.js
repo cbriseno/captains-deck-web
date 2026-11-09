@@ -470,6 +470,20 @@ window.createDeckUI = function (host) {
     wireEvents(card,x.id);return card;
   }
   const actionWhere=c=>c.action?.where==='chat'?t('Act in the chat with {name}.',{name:c.owner}):t('Action instructions need confirmation.');
+  // «Te necesita» cards follow the approved v11b demo: kind line (icon, type, ID, encargo, «…» menu), title, context, actions.
+  const CARD_ICONS={ask:['M7.9 20A9 9 0 1 0 4 16.1L2 22Z','M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3','M12 17h.01'],ext:['M15 3h6v6','M10 14 21 3','M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],file:['M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z','M14 2v4a2 2 0 0 0 2 2h4','M16 13H8','M16 17H8'],check:['M20 6 9 17l-5-5'],chevronDown:['m6 9 6 6 6-6'],more:['M5 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0','M10.8 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0','M16.6 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0']};
+  function cardIcon(name){const ns='http://www.w3.org/2000/svg',s=document.createElementNS(ns,'svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','ci');s.setAttribute('aria-hidden','true');for(const d of CARD_ICONS[name]){const p=document.createElementNS(ns,'path');p.setAttribute('d',d);s.append(p);}return s;}
+  const withCardIcon=(el,name)=>{el.prepend(cardIcon(name));return el;};
+  function cardKind(kind,name,text,x,own,items){
+    const badge=idBadge(own||x);if(badge.tagName==='BUTTON'){const id=badge.textContent.slice(4);badge.replaceChildren(n('span','sr-only','ID: '),id);}
+    const r=own&&requestFor(own),encargo=r?label(r):(own&&projectOf(own)?.title)||'';
+    const menu=n('div','card-menu');menu.hidden=true;menu.setAttribute('role','menu');menu.append(n('div','card-menu-h',label(own||x)),...[badge.tagName==='BUTTON'&&b(t('Copy ID'),()=>badge.click(),'more'),...items].filter(Boolean));
+    for(const item of menu.querySelectorAll('button')){item.setAttribute('role','menuitem');item.addEventListener('click',()=>{menu.hidden=true;open.setAttribute('aria-expanded','false');});}
+    const open=b('',e=>{e.stopPropagation();const show=menu.hidden;document.querySelectorAll('.card-menu:not([hidden])').forEach(m=>m.hidden=true);menu.hidden=!show;open.setAttribute('aria-expanded',String(show));},'card-menu-btn');
+    open.append(cardIcon('more'));open.setAttribute('aria-label',t('More actions'));open.title=t('More actions');open.setAttribute('aria-haspopup','menu');open.setAttribute('aria-expanded','false');
+    return add(n('div','cmeta '+kind),add(n('span','kind'),cardIcon(name),text),badge,encargo?Object.assign(n('span','req',encargo),{title:encargo}):null,open,menu);
+  }
+  document.addEventListener('click',e=>{if(!e.target.closest?.('.card-menu,.card-menu-btn'))document.querySelectorAll('.card-menu:not([hidden])').forEach(m=>{m.hidden=true;m.parentElement.querySelector('.card-menu-btn')?.setAttribute('aria-expanded','false');});});
   function actionLink(c){
     const link=c.action?.link&&host.reportLink?.(c.action.link,c.key);if(!link)return null;
     const control=link.tagName==='A'?link:link.querySelector('button');
@@ -488,14 +502,17 @@ window.createDeckUI = function (host) {
     const own=byId.get(taskNodeId(c.home,c.task)),origin=originOf(own),card=setColor(n('article','task-card card action-card'),origin||own||{id:c.key});
     card.dataset.node=own?.id||taskNodeId(c.home,c.task);card.dataset.key=c.key;card.dataset.state=own?.state||'unknown';
     const face=b('',()=>{if(ui.selected===card.dataset.node&&detailOpen()){clearFocus(true);return;}ui.selected=card.dataset.node;ui.pin=ui.focus?ui.selected:'';showDetail(c.title,'',t('Action required'),face);actionDetail(c);highlight();},'card-open');face.dataset.key=c.key;face.setAttribute('aria-controls','detail');face.setAttribute('aria-expanded',String(ui.selected===card.dataset.node&&detailOpen()));
-    add(face,n('span','where',t('Do')),n('span','title',c.title),n('span','action-instruction',c.action?.instruction),n('span','meta',actionWhere(c)));
-    if(event(own?.created_at))face.append(time('Created',own.created_at));
+    const instruction=c.action?.instruction&&c.action.instruction!==c.title?c.action.instruction+' ':'';
+    add(face,n('span','title',c.title),n('span','cctx',instruction+actionWhere(c)+(c.action?.context?' '+c.action.context:'')));
     if(c.action?.error)face.append(n('span','notice error',c.action.error));
-    card.append(cardFace(face,own||{}),add(n('div','card-more'),n('div','card-more-inner')));if(c.action?.link&&host.reportLink)card.append(actionLink(c));wireEvents(card,card.dataset.node);return card;
+    const source=b(t('Go to source task'),()=>revealQuestionOrigin(c),'more');source.disabled=!canRevealOrigin(own);
+    card.append(cardKind('act','ext',t('Do'),{id:c.key},own,[source]),add(n('div','card-face'),face),add(n('div','card-more'),n('div','card-more-inner')));
+    const link=c.action?.link&&host.reportLink&&actionLink(c),control=link&&(link.tagName==='A'?link:link.querySelector('button'));if(control){control.classList.add('primary');withCardIcon(control,'ext');}
+    if(link)card.append(add(n('div','cacts'),link));wireEvents(card,card.dataset.node);return card;
   }
   function questionCard(c) {
     const x=questionNode(c),own=byId.get(taskNodeId(c.home,c.task)),card=setColor(n('article','task-card card qcard'),x||{id:c.key});card.dataset.node='question:'+c.key;card.dataset.key='question:'+c.key;card.dataset.state=own?.state||'waiting';
-    const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}if(ui.selected==='question:'+c.key&&detailOpen()){clearFocus(true);return;}ui.selected='question:'+c.key;ui.pin=ui.focus?'question:'+c.key:'';announceFocus(ui.pin,c.title);openCard(c,face);highlight();},'card-open');face.dataset.key='question:'+c.key;face.setAttribute('aria-controls','detail');face.setAttribute('aria-expanded',String(ui.selected==='question:'+c.key));add(face,n('span','title',c.question||c.title),time('Asked',own?.question?.asked || own?.raw?.asked || own?.raw?.question?.asked || c.question_at || (c.time?.label === 'Asked' || c.time?.label === t('Asked') ? c.time : null)));const q=c.question_summary;if(q){if(q.question&&q.question!==(c.question||c.title))face.append(n('span','question',q.question));if(q.context)face.append(n('span','meta question-context',q.context));if(!q.options?.length)face.append(n('span','meta',t('Answer in your own words')));} face.prepend(n('span','where',t('Decide')));if(event(own?.created_at))face.append(time('Created',own.created_at));if(x?.state==='done')face.append(n('span','deck-origin',t('Origin delivered · decision still open')));add(card,cardFace(face,own||{kind:'task',task:c.task,home:c.home}),add(n('div','card-more'),n('div','card-more-inner')));const origin=b(t('Go to source task'),e=>{e.stopPropagation();revealQuestionOrigin(c);},'more');origin.disabled=!canRevealOrigin(own);card.append(origin);host.inlineAnswer(c,face,card);host.answerTools?.dropCard(card,c.key,()=>openCard(c,face));wireEvents(card,'question:'+c.key);return card;
+    const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}if(ui.selected==='question:'+c.key&&detailOpen()){clearFocus(true);return;}ui.selected='question:'+c.key;ui.pin=ui.focus?'question:'+c.key:'';announceFocus(ui.pin,c.title);openCard(c,face);highlight();},'card-open');face.dataset.key='question:'+c.key;face.setAttribute('aria-controls','detail');face.setAttribute('aria-expanded',String(ui.selected==='question:'+c.key));add(face,n('span','title',c.question||c.title));const q=c.question_summary;if(q){if(q.question&&q.question!==(c.question||c.title))face.append(n('span','cctx question',q.question));if(q.context)face.append(n('span','cctx question-context',q.context));} if(x?.state==='done')face.append(n('span','deck-origin',t('Origin delivered · decision still open')));const origin=b(t('Go to source task'),e=>{e.stopPropagation();revealQuestionOrigin(c);},'more');origin.disabled=!canRevealOrigin(own);add(card,cardKind('ask','ask',t('Decide'),{id:c.key},own||{kind:'task',task:c.task,home:c.home},[origin]),add(n('div','card-face'),face),add(n('div','card-more'),n('div','card-more-inner')));host.inlineAnswer(c,face,card);host.answerTools?.dropCard(card,c.key,()=>openCard(c,face));wireEvents(card,'question:'+c.key);return card;
   }
   function needs(cards) {
     const groups=new Map();for(const c of cards){const key=projectOf(questionNode(c))?.id || c.project?.id || c.home; if(!groups.has(key))groups.set(key,[]);groups.get(key).push(c);}
@@ -535,7 +552,7 @@ window.createDeckUI = function (host) {
     if(ui.view!=='board')host.setView('board');
     if(ui.needsClosed){ui.needsClosed=false;save('deck-needs-closed',false);render(true,'filter');}
     const el=[...$('board').querySelectorAll('.attention-list .task-card')].find(el=>el.dataset.key===x||el.dataset.node===x);
-    if(!el)return;el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.remove('attention-flash');void el.offsetWidth;el.classList.add('attention-flash');el.querySelector('button')?.focus({preventScroll:true});
+    if(!el)return;el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.remove('attention-flash');void el.offsetWidth;el.classList.add('attention-flash');el.querySelector('.card-open')?.focus({preventScroll:true});
   }
   // Review uses the owner's occurrence guard, independently of work revisions.
   async function changeReview(x,payload) {
@@ -556,8 +573,13 @@ window.createDeckUI = function (host) {
     return box;
   }
   function reviewCard(x){
-    const card=taskCard(x),face=card.querySelector('.card-open');card.classList.add('review-card');face.prepend(n('span','where',t('Review')));
-    const view=b(t('View result'),()=>openNode(x,face)),mark=workControl(b(t('I have reviewed it'),()=>changeReview(x),'review-mark'),can(x,'review'));if(mark.disabled)mark.title=t('Shared review is not available from this Firstmate yet.');card.append(view,mark);return card;
+    const card=setColor(n('article','task-card card review-card'),x);card.dataset.node=x.id;card.dataset.key=x.card?.key||x.id;card.dataset.state=x.state;card.dataset.open=String(ui.selected===x.id);
+    const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}openNode(x,face);},'card-open');face.dataset.key=card.dataset.key;face.setAttribute('aria-expanded',String(ui.selected===x.id));face.setAttribute('aria-controls','detail');
+    const outcome=x.outcome||x.raw?.outcome||x.card?.outcome||{},validation=x.card?.validation_pending||x.raw?.validation_pending||x.validation_pending,summary=x.card?.summary||x.raw?.summary||x.summary;
+    add(face,n('span','title',label(x)),validation||summary?n('span','cctx',[validation,summary].filter(Boolean).join(' ')):null);
+    const view=withCardIcon(b(t('View result'),()=>openNode(x,face)),'chevronDown'),mark=workControl(withCardIcon(b(t('I have reviewed it'),()=>changeReview(x),'review-mark'),'check'),can(x,'review'));if(mark.disabled)mark.title=t('Shared review is not available from this Firstmate yet.');
+    add(card,cardKind('rev','file',t(outcome.role==='partial'?'Progress update':'Review'),x,x,[]),add(n('div','card-face'),face),add(n('div','card-more'),n('div','card-more-inner')),add(n('div','cacts'),view,mark));
+    const saved=host.answerTools?.summary(x,()=>openNode(x,face));if(saved)card.append(saved);wireEvents(card,x.id);return card;
   }
   function requestRow(r,peers){
     const opened=ui.expanded.has(r.id)||!!app.query,wrap=setColor(n('section','request-row'),r);wrap.dataset.node=r.id;wrap.dataset.kind='request';wrap.dataset.relationScope=r.id;
@@ -595,7 +617,7 @@ window.createDeckUI = function (host) {
     const side=n('section','attention-list'),reviews=tasks.filter(reviewNeeded);side.setAttribute('aria-label',t('Needs you'));const needsToggle=b('',()=>{ui.needsClosed=!ui.needsClosed;save('deck-needs-closed',ui.needsClosed);render(true,'filter');});add(needsToggle,n('span','fold'),n('span','dot'),n('span','',t('Needs you')));needsToggle.dataset.control='needs-fold';needsToggle.setAttribute('aria-expanded',String(!ui.needsClosed));side.append(add(n('div','request-group-head'),needsToggle,structural(n('span','n',String(asks.length+act.length+reviews.length)))));
     const feedback=reviewFeedback();if(feedback)side.append(feedback);
     // Keep owner attention order; card kinds are labels, never separate stacks.
-    const pending=new Set([...asks,...act].map(c=>c.key));if(!ui.needsClosed){for(const c of attentionCards().filter(c=>pending.has(c.key)))side.append(c.attention_kind==='action'?actionCard(c):questionCard(c));side.append(...reviews.map(reviewCard));if(!pending.size&&!reviews.length)side.append(n('p','meta',t('Nothing needs you right now.')));}
+    const pending=new Set([...asks,...act].map(c=>c.key));if(!ui.needsClosed){for(const c of attentionCards().filter(c=>pending.has(c.key)).sort((a,b)=>(b.attention_kind==='action')-(a.attention_kind==='action')))side.append(c.attention_kind==='action'?actionCard(c):questionCard(c));side.append(...reviews.map(reviewCard));if(!pending.size&&!reviews.length)side.append(n('p','meta',t('Nothing needs you right now.')));}
     const list=n('div','request-list');
     for(const [state,title]of [['now','In progress'],['waiting','Waiting'],['paused','Paused'],['done','Finished requests']]){
       const peers=rows.filter(r=>requestState(r)===state);if(!peers.length)continue;

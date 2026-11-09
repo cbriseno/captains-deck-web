@@ -25,8 +25,9 @@ window.createAnswerTools = ({t,node,button,api,state,syncSubmit}) => {
   }
   function composer(container,uploadPath,items,changed,active=()=>true) {
     const picker=node('input');picker.type='file';picker.multiple=true;picker.accept=accept;picker.hidden=true;
-    const attach=button('📎',()=>picker.click(),'answer-attach');attach.setAttribute('aria-label',t('Attach files'));
-    const hint=node('small','meta',t('Paste a screenshot or drop files here · up to 8 files, 5 MB each'));
+    const attach=button('',()=>picker.click(),'answer-attach');attach.setAttribute('aria-label',t('Attach files'));
+    const hint=node('small','meta',t('Paste a screenshot or drop files here · up to 8 files, 5 MB each'));attach.title=t('Attach files')+' · '+hint.textContent;
+    attach.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true" class="ci"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>';
     const list=node('div'),status=node('p','notice');status.hidden=true;status.setAttribute('role','status');
     const draw=()=>{list.replaceChildren(files(items,index=>{if(blocked()||!active())return;items.splice(index,1);draw();changed();}));};
     let uploading=false;
