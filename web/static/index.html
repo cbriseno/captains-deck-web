@@ -44,7 +44,9 @@
       </section>
       <section id="projects-panel" hidden><header class="hero"><h1 data-i18n="Your projects">Your projects</h1><p data-i18n="Open a project to see its subprojects and tasks.">Open a project to see its subprojects and tasks.</p></header><div id="project-tree"></div></section>
       <section id="history-panel" aria-labelledby="history-heading" hidden>
-        <div class="history-intro"><h2 id="history-heading" data-i18n="History">History</h2><p id="history-status" class="muted" role="status"></p><input id="history-search" type="search" aria-label="Search deliveries" data-i18n-aria-label="Search deliveries" placeholder="Search deliveries…" data-i18n-placeholder="Search deliveries…" autocomplete="off"></div>
+        <h2 id="history-heading" class="sr-only" data-i18n="History">History</h2>
+        <div class="tools"><label class="search"><svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M11 3a8 8 0 1 0 0 16 8 8 0 0 0 0-16zm10 18-4.3-4.3"/></svg><input id="history-search" type="search" aria-label="Search history" data-i18n-aria-label="Search history" placeholder="Search history" data-i18n-placeholder="Search history" autocomplete="off"></label></div>
+        <div class="history-tools"><div id="history-filters" class="seg history-filters"></div><p id="history-status" class="muted" role="status"></p></div>
         <div id="history-results" class="history-results"></div>
         <details class="source-details"><summary data-i18n="Where history comes from">Where history comes from</summary><div id="history-sources"></div></details>
       </section>

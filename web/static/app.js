@@ -63,19 +63,9 @@ function projectTag(project) {
   const n = node('span', 'project-tag', project.label); const hue=deckUI?.hueFor?.(project.id) ?? hashOf(project.id)%11;n.dataset.hue=String(hue);n.style.setProperty('--pc', `var(--h${hue})`);
   return window.DeckAnonymize.project(n,project.id);
 }
-// A card's age: compact text, the exact date on hover and in the detail.
-function agoView(event) {
-  const n = structural(node('span', 'card-ago', ago(event)), 'time');
-  n.dataset.event = JSON.stringify(event || null); n.title = t(event?.label || 'Event') + ' · ' + exactTime(event);
-  return n;
-}
 function refreshTimes() {
   for (const n of document.querySelectorAll('.relative-time')) {
     const text = eventTime(JSON.parse(n.dataset.event));
-    if (n.textContent !== text) n.textContent = text;
-  }
-  for (const n of document.querySelectorAll('.card-ago')) {
-    const text = ago(JSON.parse(n.dataset.event));
     if (n.textContent !== text) n.textContent = text;
   }
 }
@@ -302,28 +292,35 @@ async function loadHistory() {
     const data = await api('api/history?' + query);
     if (generation !== S.historyGeneration) return;
     const records=data.records.filter(row=>S.historyFilter!=='final'||row.outcome?.role==='final');
-    const count = records.length === 1 ? t('1 delivery') : t('{count} deliveries', {count: records.length});
+    // The count goes beside the filters, as in the approved v11b demo; screen readers hear the phrase.
     structural($('history-status'));
-    $('history-status').textContent = count + (data.omitted ? t(' · {count} more results; refine your search', {count: data.omitted}) : '');
+    $('history-status').replaceChildren(Object.assign(node('span', '', String(records.length)), {inert: true}), node('span', 'sr-only', records.length === 1 ? t('1 delivery') : t('{count} deliveries', {count: records.length})), data.omitted ? t(' · {count} more results; refine your search', {count: data.omitted}) : '');
     rescueDetail($('history-results'));
-    // One line per delivery, newest first as the bridge sorts it: project,
-    // crew tag when there are several, the full title, then how long ago.
+    // Grouped by request as the approved v11b demo: chevron, title, count and
+    // project; each row with title, ID, «Result» pill, summary, date and «…».
     const groups=new Map();
-    records.slice().sort((a,b)=>(b.outcome?.role==='final')-(a.outcome?.role==='final')).slice(0,S.historyLimit || 40).map(row => {
-      const key = 'history:' + row.home + ':' + row.task;
+    for (const row of records.slice().sort((a,b)=>(b.outcome?.role==='final')-(a.outcome?.role==='final')).slice(0,S.historyLimit || 40)) {
+      const key = 'history:' + row.home + ':' + row.task, alias = row.alias||deckUI?.aliasFor?.(row.home,row.task)||'', role = row.outcome?.role;
       const b = button('', () => detailOpen() && S.openerKey === key ? closeDetail() : openDelivery(row.home, row.task, b), 'card-open history-row');
-      b.dataset.key = key; b.setAttribute('aria-expanded', 'false'); b.setAttribute('aria-controls', 'detail');
-      append(b, projectTag(row.project), manyHomes() ? node('span', 'card-tag', row.owner) : null, node('h3', 't', row.title), node('span','node-id',row.alias||deckUI?.aliasFor?.(row.home,row.task)||t('ID pending')), agoView(row.time), structural(node('time','',row.time?.date||(Number.isFinite(row.time?.epoch)?new Date(row.time.epoch*1000).toLocaleString(document.documentElement.lang):t('Not reported'))),'time'));
-      if(row.summary)b.append(node('span','result-summary',row.summary));
-      if(row.outcome?.role)b.append(node('span','outcome-badge',t({final:'Result',partial:'Progress update',step:'Finished step'}[row.outcome.role]||'Delivered work')));
-      const article = append(node('article', 'task-card'+(row.outcome?.role==='final'?' history-result':'')), b, append(node('div', 'card-more'), node('div', 'card-more-inner')));
+      b.dataset.key = key; b.setAttribute('aria-expanded', 'false'); b.setAttribute('aria-controls', 'detail'); b.append(node('span', 'title', row.title));
+      const line = append(node('div', 'rt'), b, node('span', 'node-id', alias || t('ID pending')), role === 'final' || role === 'partial' ? node('span', 'rtag', t(role === 'final' ? 'Result' : 'Progress update')) : null, manyHomes() ? node('span', 'card-tag', row.owner) : null);
+      const when = structural(node('span', 'hm', row.time?.date ? shortDate(row.time.date) : Number.isFinite(row.time?.epoch) ? creationAge(row.time) + ' · ' + shortDate(new Date(row.time.epoch * 1000).toISOString()) : t('Not reported')), 'time');
+      when.title = exactTime(row.time);
+      const menu = deckUI?.historyMenu?.({title: row.title, alias}, async () => { if (!(detailOpen() && S.openerKey === key)) await openDelivery(row.home, row.task, b); $('explain-request')?.click(); }) || [];
+      const article = append(node('article', 'task-card task-row history-item' + (role === 'final' ? ' result' : '')), append(node('div', 'rmain'), line, row.summary ? node('div', 'rs', row.summary) : null), when, ...menu, append(node('div', 'card-more'), node('div', 'card-more-inner')));
       article.dataset.key = key;
       const groupKey=row.home+':'+(row.request?.id||'legacy');
-      if(!groups.has(groupKey)){const group=node('details','history-request');group.open=!S.historyClosed?.has(groupKey);group.addEventListener('toggle',()=>{S.historyClosed??=new Set();group.open?S.historyClosed.delete(groupKey):S.historyClosed.add(groupKey);});append(group,node('summary','',row.request?.label||t('Request not recorded')));groups.set(groupKey,group);}
-      groups.get(groupKey).append(article);return article;
-    });
-    const filters=node('div','history-filters');for(const [value,text] of [['all','All history'],['final','Results only']]){const filter=button(t(text),()=>{S.historyFilter=value;S.historyLimit=40;loadHistory();});filter.setAttribute('aria-pressed',String((S.historyFilter||'all')===value));filters.append(filter);}
-    $('history-results').replaceChildren(filters,...groups.values());
+      if(!groups.has(groupKey)){
+        const group=node('details','history-request'),head=node('summary','history-head');group.open=!S.historyClosed?.has(groupKey);
+        group.addEventListener('toggle',()=>{S.historyClosed??=new Set();group.open?S.historyClosed.delete(groupKey):S.historyClosed.add(groupKey);});
+        append(head,node('span','fold'),node('span','dot'),node('span','st',row.request?.label||t('Request not recorded')),structural(node('span','cnt')),node('span','meta'));
+        groups.set(groupKey,{group,head,list:node('div','history-list'),projects:new Map()});append(group,head,groups.get(groupKey).list);
+      }
+      const g=groups.get(groupKey);g.list.append(article);if(row.project?.label)g.projects.set(row.project.id,row.project.label);
+    }
+    for (const g of groups.values()) { g.head.querySelector('.cnt').textContent = String(g.list.children.length); g.head.querySelector('.meta').append(...[...g.projects].map(([id, label]) => window.DeckAnonymize?.project(node('span', '', label), id) ?? node('span', '', label))); }
+    $('history-filters').replaceChildren(...[['all','All history'],['final','Results only']].map(([value,text])=>{const filter=button(t(text),()=>{S.historyFilter=value;S.historyLimit=40;loadHistory();});filter.setAttribute('aria-pressed',String((S.historyFilter||'all')===value));return filter;}));
+    $('history-results').replaceChildren(...[...groups.values()].map(g=>g.group));
     if (records.length > (S.historyLimit || 40)) $('history-results').append(structural(button(t('View {count} more', {count:Math.min(40,records.length-(S.historyLimit || 40))}), () => { S.historyLimit = (S.historyLimit || 40) + 40; loadHistory(); }, 'more')));
     if (!records.length) $('history-results').append(node('p', 'empty', t("No matches.")));
     $('history-sources').replaceChildren(node('p', 'muted', data.scope), ...data.details.map(d => contextRow(d.home, d.source)));
