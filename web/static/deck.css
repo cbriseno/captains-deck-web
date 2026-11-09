@@ -393,7 +393,7 @@ footer{margin:0;padding:10px 24px 18px;font-size:11px}footer .theme-label{displa
 /* Reserve whitespace for independently routed links and paired endpoint labels. */
 @media(min-width:641px){#board.board{gap:48px}#connector-key,#connector-key[hidden]{display:flex!important;visibility:visible;min-height:64px;box-sizing:border-box;padding:0 0 44px;margin:0;align-content:flex-start;align-items:flex-start;gap:4px 12px;flex-wrap:wrap}#connector-key[hidden]{visibility:hidden}.col[data-k=paused].rail{width:38px;min-width:38px}.col[data-k=paused].rail .rail-t{color:var(--pause)}}
 .deck-routed-links{pointer-events:none;overflow:hidden!important}.deck-routed-links path{stroke-linejoin:round;stroke-linecap:round;fill:none}.deck-routed-links .route-halo{stroke:var(--canvas);stroke-width:7;fill:none}.deck-routed-links .route-port{fill:var(--surface);stroke-width:1.5}.deck-routed-links .route-number{fill:var(--ink);font:700 8px/1 Inter,system-ui,sans-serif;text-anchor:middle;dominant-baseline:central;stroke:none}.deck-route-status{font-size:11px;color:var(--muted)}
-@media(min-width:1251px){#board[data-paused=closed][data-done=open]{grid-template-columns:repeat(3,minmax(0,1fr)) 38px minmax(0,1fr)}#board[data-paused=closed][data-done=closed]{grid-template-columns:repeat(3,minmax(0,1fr)) 38px 38px}}
+@media(min-width:1251px){#board:not(.request-board)[data-paused=closed][data-done=open]{grid-template-columns:repeat(3,minmax(0,1fr)) 38px minmax(0,1fr)}#board:not(.request-board)[data-paused=closed][data-done=closed]{grid-template-columns:repeat(3,minmax(0,1fr)) 38px 38px}}
 .focus-delay{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font-size:12px;color:var(--muted)}.focus-delay input{width:3.7em;min-width:0;padding:4px;border:1px solid var(--line);border-radius:6px;background:var(--canvas);color:var(--ink);font:inherit}.focus-delay:has(input:disabled){opacity:.55}
 .node-id{display:block;min-width:0;overflow-wrap:anywhere;white-space:normal;color:var(--muted);font:11px/1.45 ui-monospace,SFMono-Regular,monospace;user-select:text}
 .deck-object-tools{min-width:0;margin:8px 0;padding:8px 0;border-bottom:1px solid var(--line)}.deck-object-id-row{display:flex;flex-wrap:wrap;align-items:center;gap:8px;min-width:0}.deck-object-id-row .node-id{flex:1 1 100%}.deck-object-tools [hidden]{display:none!important}.deck-removal-panel{margin-top:10px;min-width:0}.deck-removal-panel h3{font-size:14px}.deck-removal-panel textarea{box-sizing:border-box;width:100%;min-width:0;resize:vertical}.deck-removal-context,.deck-removal-panel li{overflow-wrap:anywhere}.deck-object-tools p:empty{display:none}
@@ -454,6 +454,7 @@ footer{margin:0;padding:10px 24px 18px;font-size:11px}footer .theme-label{displa
 .request-tools [aria-pressed=true]{background:var(--sel);color:var(--ink)}
 .request-tools button:last-child{margin-left:auto}
 .attention-list,.request-list{display:grid;gap:10px;min-width:0}
+.request-list{padding:0 28px 24px}@media(max-width:640px){.request-list{padding:0}}
 /* Filas y secciones (v11b): section head = chevron box, state dot, title, count;
    each section is one rounded group; each request row has two lines. */
 .request-list,.attention-list{--tint:12%;--row-chev:url("icon-chevron-down.svg")}
@@ -513,6 +514,7 @@ footer{margin:0;padding:10px 24px 18px;font-size:11px}footer .theme-label{displa
 .task-row .rtag.prio{background:color-mix(in srgb,var(--warn) 18%,var(--surface));color:var(--warn)}
 .task-row .rs{display:block;margin-top:2px;font-size:12px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}.task-row .rs>span{margin-left:8px}
 .request-tasks .task-row>.rctl{display:inline-flex;flex-wrap:nowrap;align-items:center;gap:12px;align-self:center;justify-self:end;position:static;padding:0;border:0;max-width:none}
+.request-tasks>.task-row{container-type:inline-size}@container (max-width:520px){.request-tasks .task-row>.rctl{grid-column:2;justify-self:start;margin-top:6px}}
 .task-row .rctl .prog{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:12px;color:var(--muted);white-space:nowrap}.task-row .rctl .prog-phase{display:none}.task-row .rctl>*,.task-row .rctl .prog>*{flex:none}.task-row .rctl .prog-bar{width:64px;height:4px;background:var(--line)}.task-row .rctl .prog-bar i{background:var(--ok)}.task-row .rctl .prog-txt{font-size:12px}
 .task-row .rctl .pause-control{display:flex;align-items:center;gap:8px}.task-row .rctl .pause-explanation{display:none}
 .task-row>.card-menu-btn{position:static;grid-column:4;align-self:center}.task-row>.card-more,.task-row>:not(.dot,.rmain,.rctl,.card-menu-btn,.card-menu){grid-column:1/-1}
@@ -545,7 +547,8 @@ button.node-id{display:block;max-width:100%;width:fit-content;border:0;backgroun
 .pause-owner{border:0;background:transparent;color:var(--pause);font-size:12px;padding:3px 0;text-align:left;overflow-wrap:anywhere}
 
 html[data-animations=false] *,html[data-animations=false] *::before,html[data-animations=false] *::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
-@media(min-width:1100px){#board.request-board:has(.attention-list [data-open=true]){grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}}
+/* Reading mode as the demo: only a result opened with «Ver resultado» from Te necesita widens that column. */
+@media(min-width:1100px){#board.request-board:has(.attention-list .review-card[data-open=true]){grid-template-columns:minmax(0,1.2fr) minmax(0,1fr)}}
 @media(max-width:640px){
  .topbar .tabs button{padding:5px 8px;font-size:13px}.topbar #settings-open{font-size:13px;padding:5px 8px}.topbar #refresh{width:30px;min-width:30px}
  .topbar #agents-capacity{order:3}.topbar .overview{order:4;flex-basis:auto;margin-left:auto}.topbar .board-search{order:5;flex-basis:100%;width:100%}
