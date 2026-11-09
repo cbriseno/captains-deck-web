@@ -636,9 +636,13 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 @media(max-width:640px){#project-tree .mix{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto auto;align-items:center;gap:2px 6px}
  #project-tree .mix>.mix-info{display:contents}#project-tree .mix .mix-name{grid-column:2;grid-row:1}
  #project-tree .mix .mix-meta{grid-column:2/-1;grid-row:2;display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;min-width:0;font-size:11px}
- #project-tree .mix .mix-meta>.mix-sub{flex:1 1 150px;flex-wrap:nowrap}#project-tree .mix .mix-meta .minibar{flex:0 0 56px}#project-tree .mix .mix-meta .mix-pct{flex:1 1 auto}#project-tree .mix>.pause-control{flex-basis:auto;max-width:150px;margin-left:0}
- /* As on the board's request headers: no idle button or explanation beside the title. */
- #project-tree .mix .pause-explanation,#project-tree .mix .mix-pause[data-idle=true]{display:none}}
+ #project-tree .mix .mix-meta>.mix-sub{flex:1 1 150px;flex-wrap:nowrap}#project-tree .mix .mix-meta .minibar{flex:0 0 56px}#project-tree .mix .mix-meta .mix-pct{flex:1 1 auto}#project-tree .mix>.pause-control{flex-basis:auto;max-width:150px;margin-left:0}}
+/* Projects at desktop width, as the approved v11b demo: one line with name, counts and waits; bar, date, visibility and ID follow as secondary text, then priority, Pause and ⋯. */
+@media(min-width:641px){#project-tree .mix>.mix-info{display:flex;flex-wrap:wrap;align-items:center;gap:2px 12px;flex:0 1 auto}#project-tree .mix .mix-name{align-content:center}
+ #project-tree .mix .mix-meta>.mix-sub{order:1;flex-wrap:nowrap}#project-tree .mix .mix-meta .minibar{flex:0 0 56px}#project-tree .mix .mix-meta>.mix-wait:not(.mix-role){order:2}
+ #project-tree .mix .mix-meta>.dates{order:3}#project-tree .mix .mix-meta>.mix-role{order:4}#project-tree .mix .mix-meta>.node-id{order:5}#project-tree .mix>.mix-pause{margin-left:auto}}
+/* As on the board's request headers: no idle button or explanation beside the title. */
+#project-tree .mix .pause-explanation,#project-tree .mix .mix-pause[data-idle=true]{display:none}
 .priority-preview{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin:6px 0}.priority-preview .fact{margin:0}.priority-preview button{margin:0}
 /* The clip reads the same wherever an answer, correction or removal note takes files. */
 .answer-attach{display:inline-grid;place-items:center;flex:none;width:30px;height:30px;min-height:0;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted)}
