@@ -569,6 +569,31 @@ class Board:
                 'collector_at': snap.collected_at, 'loading': bool(snap.loading),
                 'error': snap.error}
 
+    def event_view(self, identity):
+        """Part 1: explicitly read published calls/presentations, without a snapshot."""
+        owner = self.home(identity)
+        if fm.is_remote_home(owner):
+            raise Refusal('This view requires a local owner.', 403)
+        try:
+            text = fm.delivery_read(owner.path, 'state/fleet-ledger.jsonl', fm.DELIVERY_INDEX_LIMIT)
+        except FileNotFoundError:
+            text = ''
+        calls, presentations = {}, {}
+        for line in text.splitlines(keepends=True):
+            if not line.endswith('\n'):
+                break
+            event = json.loads(line)
+            if event.get('home') != fm.delivery_home_identity(owner):
+                continue
+            name, task, value = event.get('event'), event.get('task'), event.get('value')
+            if name in ('call.opened', 'call.resolved'):
+                calls[(task, value['call']['hold_set'])] = dict(value, task=task,
+                    state='open' if name == 'call.opened' else 'resolved')
+            elif name == 'task.presentation':
+                presentations[task] = value
+        return dict(calls=list(calls.values()), presentations=presentations,
+                    scope='Published events only; no canonical bootstrap or continuity guarantee.')
+
     def home(self, identity):
         matches = [h for h in self.homes() if home_id(h) == identity]
         if len(matches) != 1:
@@ -1642,6 +1667,8 @@ class Handler(BaseHTTPRequestHandler):
                 status = 200 if data['ok'] else 503
             elif not unsafe and path == '/api/locale':
                 data = self.server.i18n.client()
+            elif not unsafe and path == '/api/events':
+                data = board.event_view(value('home'))
             elif not unsafe and path == '/api/board':
                 data = dict(self.server.last_board(value('home')))
                 data['csrf'] = csrf
