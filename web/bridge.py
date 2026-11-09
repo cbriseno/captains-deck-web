@@ -570,7 +570,7 @@ class Board:
                 'error': snap.error}
 
     def event_view(self, identity):
-        """Part 1: explicitly read published calls/presentations, without a snapshot."""
+        """Explicitly read published events, without a canonical snapshot."""
         owner = self.home(identity)
         if fm.is_remote_home(owner):
             raise Refusal('This view requires a local owner.', 403)
@@ -578,7 +578,7 @@ class Board:
             text = fm.delivery_read(owner.path, 'state/fleet-ledger.jsonl', fm.DELIVERY_INDEX_LIMIT)
         except FileNotFoundError:
             text = ''
-        calls, presentations = {}, {}
+        calls, presentations, agents, tasks, messages = {}, {}, {}, {}, []
         for line in text.splitlines(keepends=True):
             if not line.endswith('\n'):
                 break
@@ -589,9 +589,23 @@ class Board:
             if name in ('call.opened', 'call.resolved'):
                 calls[(task, value['call']['hold_set'])] = dict(value, task=task,
                     state='open' if name == 'call.opened' else 'resolved')
-            elif name == 'task.presentation':
+            elif name == 'call.application':
+                key = (task, value['call']['hold_set'])
+                if key in calls:
+                    calls[key]['answer'] = value['answer']
+            elif name == 'primary.final':
+                messages.append(value)
+            elif name == 'agent.activity':
+                agents[task] = value
+            elif name == 'agent.retired':
+                if agents.get(task, {}).get('gen') == value['gen']:
+                    agents.pop(task, None)
+            elif name == 'task.changed':
+                tasks[task] = value['task']
+            elif name in ('task.presentation', 'task.review'):
                 presentations[task] = value
         return dict(calls=list(calls.values()), presentations=presentations,
+                    primary_finals=messages, agents=agents, tasks=tasks,
                     scope='Published events only; no canonical bootstrap or continuity guarantee.')
 
     def home(self, identity):

@@ -11,6 +11,16 @@ async function refresh() {
     const response = await fetch('/api/events?home=' + encodeURIComponent(home));
     const data = await response.json();
     if (!response.ok) throw new Error(data.error);
+    el('messages').replaceChildren();
+    for (const value of data.primary_finals || []) {
+      const article = add(el('messages'), 'article', '');
+      add(article, 'p', value.text);
+    }
+    el('agents').replaceChildren();
+    const states = {busy: 'Turno activo', idle: 'Turno terminado', unknown: 'Actividad desconocida'};
+    for (const value of Object.values(data.agents || {})) {
+      add(el('agents'), 'p', states[value.state] || 'Actividad desconocida');
+    }
     el('calls').replaceChildren();
     for (const value of data.calls) {
       const article = add(el('calls'), 'article', '');
