@@ -1187,5 +1187,21 @@
   "{count} tokens": "{count} tokens",
   "Your decision: no agent spend": "Decisión tuya: sin gasto de agente",
   "Your decision: {task} — no agent spend.": "Decisión tuya: «{task}» — sin gasto de agente.",
-  "{count} of your decisions: no agent spend.": "{count} decisiones tuyas: sin gasto de agente."
+  "{count} of your decisions: no agent spend.": "{count} decisiones tuyas: sin gasto de agente.",
+  "Agent started": "Empezó el agente",
+  "Progress": "Avance",
+  "Asked you": "Te preguntó",
+  "Blocked": "Se bloqueó",
+  "Failed": "Falló",
+  "Resolved": "Se resolvió",
+  "Closed": "Cerrada",
+  "Integrated": "Integrada",
+  "Report delivered": "Informe entregado",
+  "View chat": "Ver chat",
+  "View activity log": "Ver bitácora",
+  "Hide activity log": "Ocultar bitácora",
+  "Reading the activity log…": "Leyendo la bitácora…",
+  "No recorded activity yet.": "Aún no hay actividad registrada.",
+  "The activity log needs a local crew.": "La bitácora necesita una tripulación local.",
+  "Task created": "Se creó la tarea"
 }

@@ -41,6 +41,7 @@ from deck_platform import LOOPBACK, local_origin, endpoint_path, private_directo
 
 from deck_control import CHANGE_GAP, FULL_READ, DeckControls, ControlError
 from relay_settings import RelaySettings
+import timeline
 import fm_diagnostics as diagnostics
 
 STATIC = HERE / 'static'
@@ -1792,6 +1793,11 @@ class Handler(BaseHTTPRequestHandler):
                     data = board.explanation(parts[2], parts[3], status=not unsafe)
                 else:
                     raise Refusal('Route unavailable.', 404)
+            elif not unsafe and path == '/api/timeline':
+                owner = board.home(value('home'))
+                if fm.is_remote_home(owner):
+                    raise Refusal('The activity log needs a local crew.', 403)
+                data = timeline.timeline(owner.path, value('tasks').split(',')[:300])
             elif not unsafe and not path.startswith('/api/'):
                 rel = path.lstrip('/') or 'index.html'
                 try:

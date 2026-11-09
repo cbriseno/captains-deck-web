@@ -8,7 +8,7 @@ window.createDeckUI = function (host) {
   const pref = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Current page still works. */ } };
   const ui = {pin:'',view:'board', scope:'', selected:'', hover:'', column:'', closed:new Set(pref('deck-closed', [])), hasClosedPreference:pref('deck-closed',null)!==null, initialized:false, tree:new Set(),
-    order:pref('deck-request-sort','recent'),expanded:new Set(pref('deck-expanded-requests',[])),needsClosed:pref('deck-needs-closed',false),density:pref('deck-density','auto'),animations:pref('deck-animations',true),groups:new Set(['done']),steps:new Set(), reordering:false, pausedOpen:pref('deck-paused-open',true),done:pref('deck-done', true), focus:pref('deck-focus', true), hoverDelay:Math.max(0,Math.min(10,Number(pref('deck-hover-delay',1))||0)), mixer:false, stacks:new Set(), log:[], busy:false, drag:null, signature:'', generation:0,renderedQuery:null,nextRenderMode:''};
+    order:pref('deck-request-sort','recent'),expanded:new Set(pref('deck-expanded-requests',[])),needsClosed:pref('deck-needs-closed',false),density:pref('deck-density','auto'),animations:pref('deck-animations',true),groups:new Set(['done']),steps:new Set(),logOpen:new Set(),logs:new Map(), reordering:false, pausedOpen:pref('deck-paused-open',true),done:pref('deck-done', true), focus:pref('deck-focus', true), hoverDelay:Math.max(0,Math.min(10,Number(pref('deck-hover-delay',1))||0)), mixer:false, stacks:new Set(), log:[], busy:false, drag:null, signature:'', generation:0,renderedQuery:null,nextRenderMode:''};
   const motion=window.createDeckMotion({t,settled:highlight});
   const announceFocus=(_id,text='')=>{const status=$('focus-status');if(status)status.textContent=ui.focus?(text?t('Focused: {name}',{name:text}):t('Focus cleared')):t('Focus disabled');};
   let hoverTimer=0, hoverTarget=null, keyboardFocus=false;
@@ -684,6 +684,31 @@ window.createDeckUI = function (host) {
   }
 
   let peersAll=[];
+  // Bitácora: what each agent did for this request, newest first, from Firstmate's records (web/timeline.py).
+  const LOG_LABEL={created:'Task created',started:'Agent started',working:'Progress',['needs-decision']:'Asked you',blocked:'Blocked',paused:'Waiting',done:'Reported done',failed:'Failed',resolved:'Resolved','closed-done':'Closed','closed-merged':'Integrated','closed-reported':'Report delivered'};
+  function chatLink(x){
+    const live=x&&x.state!=='done'&&x.card?.herdr_url;
+    if(!live)return null;
+    const a=n('a','log-chat',t('View chat'));a.href=live;a.target='_blank';a.rel='noopener noreferrer';return a;
+  }
+
+  function activityLog(r){
+    const box=n('div','activity-log'),tasks=r.tasks.map(x=>x.task).filter(Boolean);let entry=ui.logs.get(r.id);
+    if(!entry||(!entry.loading&&Date.now()-entry.at>60000)){const next={at:Date.now(),loading:true,data:entry?.data,error:''};ui.logs.set(r.id,next);entry=next;
+      api('api/timeline?home='+encodeURIComponent(r.home)+'&tasks='+encodeURIComponent(tasks.join(','))).then(d=>{next.data=d;}).catch(e=>{next.error=e.message;}).finally(()=>{next.loading=false;next.at=Date.now();if(ui.logOpen.has(r.id))render(true,'filter');});}
+    if(!entry.data){box.append(n('p','meta',entry.error||t('Reading the activity log…')));return box;}
+    const byTask=new Map(r.tasks.map(x=>[x.task,x])),lang=document.documentElement.lang||undefined;let day='';
+    for(const e of [...entry.data.events].reverse()){
+      const at=new Date(e.at*1000),dayText=window.DeckAnonymize.formatted(at.toLocaleDateString(lang,{weekday:'short',day:'numeric',month:'short'}));
+      if(dayText!==day){day=dayText;box.append(structural(n('p','log-day',dayText),'time'));}
+      const x=byTask.get(e.task),kind=e.kind==='closed'?'closed-'+e.text:e.kind,row=n('div','log-row');row.dataset.kind=kind;
+      const what=add(n('span','log-what'),n('b','log-kind',t(LOG_LABEL[kind]||kind)),n('span','log-task',x?label(x):e.task));
+      const detail=e.kind==='started'?e.agent:e.kind==='closed'?e.summary:e.text;if(detail)what.append(n('span','log-text',detail));
+      add(row,structural(n('time','log-time',window.DeckAnonymize.formatted(at.toLocaleTimeString(lang,{hour:'2-digit',minute:'2-digit',hour12:false}))),'time'),what,chatLink(x));box.append(row);
+    }
+    if(!entry.data.events.length)box.append(n('p','meta',t('No recorded activity yet.')));
+    return box;
+  }
   function requestRow(r,peers){
     const opened=ui.expanded.has(r.id)||!!app.query,wrap=setColor(n('section','request-row'),r);wrap.dataset.node=r.id;wrap.dataset.kind='request';wrap.dataset.relationScope=r.id;
     const toggle=()=>{opened?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');};
@@ -711,7 +736,8 @@ window.createDeckUI = function (host) {
       const asking=new Set(r.calls.filter(c=>!c.answered).map(c=>keyOf(c.home,c.task)));
       body.append(...work.filter(x=>!done.includes(x)&&!asking.has(keyOf(x.home,x.task))&&visible(x)).sort((a,b)=>rank[a.state]-rank[b.state]).map(requestTaskRow));
       if(done.length){const show=ui.steps.has(r.id),fold=b(t(show?'Hide {count} finished tasks':'View {count} finished tasks',{count:done.length}),()=>{show?ui.steps.delete(r.id):ui.steps.add(r.id);render(true,'filter');},'more');fold.setAttribute('aria-expanded',String(show));body.append(structural(fold));if(show)body.append(...done.map(requestTaskRow));}
-      if(!body.children.length)body.append(n('p','meta',t('What remains is in Needs you.')));const spend=usageDetail(r);if(spend)body.prepend(spend);wrap.append(body);
+      if(!body.children.length)body.append(n('p','meta',t('What remains is in Needs you.')));const spend=usageDetail(r);if(spend)body.prepend(spend);const logOpen=ui.logOpen.has(r.id),logFold=b(t(logOpen?'Hide activity log':'View activity log'),()=>{logOpen?ui.logOpen.delete(r.id):ui.logOpen.add(r.id);render(true,'filter');},'more log-fold');logFold.setAttribute('aria-expanded',String(logOpen));body.append(logFold);if(logOpen)body.append(activityLog(r));
+      wrap.append(body);
     }
     const latest=ui.log.find(entry=>entry.home===r.home&&(entry.command.node===r.order_id||entry.command.node===r.owner_id)&&(entry.command.action==='move'||entry.command.undo_operation?.op==='move'));if(latest?.undo)wrap.append(add(n('div','request-order-result'),n('span','meta',receiptLabel(latest)),workControl(b(t('Undo'),()=>undo(latest),'more'),true)));
     wireEvents(wrap,r.id);return wrap;

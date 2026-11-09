@@ -1187,5 +1187,21 @@
   "{count} tokens": "{count} tokens",
   "Your decision: no agent spend": "Your decision: no agent spend",
   "Your decision: {task} — no agent spend.": "Your decision: {task} — no agent spend.",
-  "{count} of your decisions: no agent spend.": "{count} of your decisions: no agent spend."
+  "{count} of your decisions: no agent spend.": "{count} of your decisions: no agent spend.",
+  "Agent started": "Agent started",
+  "Progress": "Progress",
+  "Asked you": "Asked you",
+  "Blocked": "Blocked",
+  "Failed": "Failed",
+  "Resolved": "Resolved",
+  "Closed": "Closed",
+  "Integrated": "Integrated",
+  "Report delivered": "Report delivered",
+  "View chat": "View chat",
+  "View activity log": "View activity log",
+  "Hide activity log": "Hide activity log",
+  "Reading the activity log…": "Reading the activity log…",
+  "No recorded activity yet.": "No recorded activity yet.",
+  "The activity log needs a local crew.": "The activity log needs a local crew.",
+  "Task created": "Task created"
 }

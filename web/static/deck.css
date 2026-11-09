@@ -674,3 +674,16 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 @media(max-width:640px){#history-results .history-item{grid-template-columns:minmax(0,1fr) 28px}#history-results .history-item>.hm{grid-column:1;grid-row:2;margin-top:2px}#history-results .history-item>.card-menu-btn{grid-column:2;grid-row:1/3}.history-head .meta{margin-left:0}}
 .usage-line{font-variant-numeric:tabular-nums;color:var(--ink)}.usage-line.unknown{color:var(--muted);font-style:italic}
 .usage-detail{margin:2px 0 10px;padding:8px 12px;border-left:3px solid var(--line, #8884);font-size:12px;color:var(--muted)}.usage-detail p{margin:2px 0;overflow-wrap:anywhere}.usage-h{font-weight:600;color:var(--ink)}.usage-row{font-variant-numeric:tabular-nums;color:var(--ink)}.usage-note.unknown{font-style:italic}
+
+/* Bitácora del encargo: one quiet line per recorded event, newest first. */
+.request-tasks>.log-fold{margin-top:8px}
+.activity-log{display:grid;gap:0;padding:4px 4px 2px;border-top:1px solid var(--line);margin-top:6px}
+.log-day{margin:10px 0 2px;font-size:11px;font-weight:600;color:var(--muted)}.log-day::first-letter{text-transform:uppercase}
+.log-row{display:grid;grid-template-columns:44px minmax(0,1fr) auto;gap:10px;align-items:baseline;padding:5px 0;font-size:13px}
+.log-time{color:var(--muted);font-variant-numeric:tabular-nums;font-size:12px}
+.log-what{display:flex;flex-wrap:wrap;gap:2px 8px;min-width:0}.log-kind{font-weight:600}
+.log-task{color:var(--ink);min-width:0;overflow-wrap:anywhere}.log-text{flex-basis:100%;color:var(--muted);overflow-wrap:anywhere}
+.log-row[data-kind=needs-decision] .log-kind,.log-row[data-kind=blocked] .log-kind,.log-row[data-kind=failed] .log-kind{color:var(--warn)}
+.log-row[data-kind^=closed] .log-kind,.log-row[data-kind=done] .log-kind{color:var(--ok)}
+.log-chat{font-size:12px;color:var(--accent);white-space:nowrap}
+@media(max-width:640px){.log-row{grid-template-columns:40px minmax(0,1fr)}.log-chat{grid-column:2}}

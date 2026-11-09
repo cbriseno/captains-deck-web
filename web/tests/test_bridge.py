@@ -82,6 +82,15 @@ class WebTests(unittest.TestCase):
         status,ticket=self.req('/api/ticket/'+key);self.assertEqual(status,200)
         return key,dict(value='scope',note='Mi respuesta real de prueba',occurrence=ticket['call']['occurrence'],request_id='a'*32)
 
+    def test_timeline_reads_records_through_authenticated_route(self):
+        self.init()
+        (Path(self.home.path)/'state/web.status').write_text('working [at=1794096010]: fixture activity\n')
+        with patch.object(bridge.timeline, '_transcripts', return_value=iter([])):
+            status, data = self.req('/api/timeline?home='+bridge.home_id(self.home)+'&tasks=web')
+        self.assertEqual(status, 200)
+        self.assertEqual(data['events'][0]['text'], 'fixture activity')
+        self.assertFalse((Path(self.home.path)/'mutations.jsonl').exists())
+
     def test_board_serializes_model_time_four_columns_and_does_not_mutate(self):
         board=self.init()
         self.assertEqual([c['id'] for c in board['columns']],['captains_call','underway','charted','landed'])
