@@ -56,7 +56,9 @@ class WebTests(unittest.TestCase):
     def stop(self):
         self.server.shutdown();self.server.server_close();self.thread.join(timeout=2)
 
-    def req(self,path,body=None,headers=None,method=None):
+    def req(self,path,body=None,headers=None,method=None,last=False):
+        # Tests change the fixture in place; a read sees it unless it asks for the last board.
+        if path.startswith('/api/board') and not last:self.server.forget_boards()
         connection=http.client.HTTPConnection(bridge.LOOPBACK,self.port,timeout=10)
         h={'Host':f'{bridge.LOOPBACK}:{self.port}'}
         if self.cookie:h['Cookie']=self.cookie
@@ -87,6 +89,22 @@ class WebTests(unittest.TestCase):
         self.assertEqual(board['columns'][1]['cards'][2]['context']['phase'],'integration')
         self.assertFalse((Path(self.home.path)/'mutations.jsonl').exists())
         self.assertTrue(all('home_path' not in c for col in board['columns'] for c in col['cards']))
+
+    def test_a_slow_rebuild_never_holds_the_last_board(self):
+        first=self.init()
+        release=threading.Event();build=self.board.board
+        def slow(selected=''):
+            release.wait(10);return dict(build(selected),seq=first['seq']+1)
+        with patch.object(self.board,'board',side_effect=slow):
+            started=time.monotonic()
+            status,last=self.req('/api/board',last=True)
+            self.assertEqual(status,200);self.assertLess(time.monotonic()-started,2)
+            self.assertEqual(last['seq'],first['seq']);self.assertEqual(last['csrf'],first['csrf'])
+            release.set()
+            for _ in range(50):
+                if self.req('/api/board',last=True)[1]['seq']==first['seq']+1:break
+                time.sleep(0.1)
+            else:self.fail('The rebuilt board was never served.')
 
     def test_call_report_link_opens_a_bounded_local_file_only(self):
         board=self.init();key=next(c for c in board['columns'] if c['id']=='captains_call')['cards'][0]['key']

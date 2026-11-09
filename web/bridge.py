@@ -70,9 +70,6 @@ def diagnostic(event, **fields):
         except OSError:
             pass
 
-def card_count(snapshot):
-    return sum(len(cards) for cards in snapshot.cols.values())
-
 
 class Refusal(Exception):
     def __init__(self, message, status=409):
@@ -1360,6 +1357,71 @@ class Server(ThreadingHTTPServer):
         super().__init__(address, Handler)
         self.board, self.security = board, security
         self.i18n = board.i18n if board is not None else Localization('en')
+        # Last built board per home selection; reads serve it while one rebuild runs.
+        # A POST changes what the board shows, so it drops them (generation).
+        self.boards, self.rebuilding, self.generation = {}, set(), 0
+        self.boards_lock = threading.Lock()
+
+    def last_board(self, selected):
+        """The last built board at once; only a read with none waits for a build."""
+        with self.boards_lock:
+            data = self.boards.get(selected)
+            rebuild = data is not None and selected not in self.rebuilding
+            if rebuild:
+                self.rebuilding.add(selected)
+        if rebuild:
+            threading.Thread(target=self.rebuild_board, args=(selected,), daemon=True).start()
+        if data is not None:
+            return data
+        with READ_LOCK:
+            # A read that waited here takes the board the previous one built.
+            with self.boards_lock:
+                data = self.boards.get(selected)
+            return data if data is not None else self.build_board(selected)
+
+    def rebuild_board(self, selected):
+        try:
+            with READ_LOCK:
+                self.build_board(selected)
+        except Exception:
+            diagnostic('snapshot.error', cause='parse', duration_ms=0, streak=FAILURES)
+        finally:
+            with self.boards_lock:
+                self.rebuilding.discard(selected)
+
+    def forget_boards(self):
+        with self.boards_lock:
+            self.boards.clear()
+            self.generation += 1
+
+    def build_board(self, selected):
+        """Build and keep one board; the caller holds READ_LOCK."""
+        global FAILURES
+        started = time.monotonic()
+        generation = self.generation
+        data = self.board.board(selected)
+        with self.boards_lock:
+            # A board still loading is cheap and never kept past the first read.
+            if generation == self.generation and not data.get('loading'):
+                self.boards[selected] = data
+        sources = data.get('deck', {}).get('sources', [])
+        errors = [x for x in sources if not x.get('available')]
+        duration = round((time.monotonic() - started) * 1000)
+        if errors or data.get('error') or any(x.get('error') for x in data.get('sources', [])):
+            FAILURES += 1
+            code = errors[0].get('code') if errors else 'parse'
+            cause = code if code in ('timeout', 'missing-source', 'busy') else 'parse'
+            diagnostic('snapshot.error', cause=cause, duration_ms=duration, streak=FAILURES)
+        else:
+            FAILURES = 0
+            columns = {x['id']: len(x.get('cards', [])) for x in data.get('columns', [])}
+            nodes = [n for x in sources for n in x.get('snapshot', {}).get('nodes', [])]
+            projects = sum(n.get('kind') == 'project' for n in nodes)
+            diagnostic('snapshot.read', tasks=sum(columns.values()), duration_ms=duration,
+                       underway=columns.get('underway', 0), awaiting_closure=sum(n.get('state') == 'awaiting-closure' for n in nodes),
+                       needs_you=columns.get('captains_call', 0), done=columns.get('landed', 0),
+                       projects_received=projects, projects_shown=projects)
+        return data
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1404,36 +1466,7 @@ class Handler(BaseHTTPRequestHandler):
             elif not unsafe and path == '/api/locale':
                 data = self.server.i18n.client()
             elif not unsafe and path == '/api/board':
-                global FAILURES
-                started = time.monotonic()
-                before = card_count(board.collector.snapshot())
-                concurrent = not READ_LOCK.acquire(blocking=False)
-                if concurrent:
-                    READ_LOCK.acquire()
-                try:
-                    after = card_count(board.collector.snapshot())
-                    if concurrent and before != after:
-                        diagnostic('snapshot.concurrent_difference', tasks_before=before, tasks_after=after)
-                    data = board.board(value('home'))
-                    sources = data.get('deck', {}).get('sources', [])
-                    errors = [x for x in sources if not x.get('available')]
-                    duration = round((time.monotonic() - started) * 1000)
-                    if errors or data.get('error') or any(x.get('error') for x in data.get('sources', [])):
-                        FAILURES += 1
-                        code = errors[0].get('code') if errors else 'parse'
-                        cause = code if code in ('timeout', 'missing-source', 'busy') else 'parse'
-                        diagnostic('snapshot.error', cause=cause, duration_ms=duration, streak=FAILURES)
-                    else:
-                        FAILURES = 0
-                        columns = {x['id']: len(x.get('cards', [])) for x in data.get('columns', [])}
-                        nodes = [n for x in sources for n in x.get('snapshot', {}).get('nodes', [])]
-                        projects = sum(n.get('kind') == 'project' for n in nodes)
-                        diagnostic('snapshot.read', tasks=sum(columns.values()), duration_ms=duration,
-                                   underway=columns.get('underway', 0), awaiting_closure=sum(n.get('state') == 'awaiting-closure' for n in nodes),
-                                   needs_you=columns.get('captains_call', 0), done=columns.get('landed', 0),
-                                   projects_received=projects, projects_shown=projects)
-                finally:
-                    READ_LOCK.release()
+                data = dict(self.server.last_board(value('home')))
                 data['csrf'] = csrf
             elif not unsafe and path == '/api/diagnostics/preview':
                 data = {'preview': diagnostics.export(['deck'], preview=True)}
@@ -1543,6 +1576,8 @@ class Handler(BaseHTTPRequestHandler):
                 return
             else:
                 raise Refusal('Route unavailable.', 404)
+            if unsafe and not path.startswith('/api/diagnostics/'):
+                self.server.forget_boards()
             self.respond(status, json.dumps(data, ensure_ascii=False).encode(), 'application/json; charset=utf-8', sid, secure)
         except ControlError as exc:
             self.respond(exc.status, json.dumps({'error': self.server.i18n.t(str(exc)), 'code': exc.code,
@@ -1618,6 +1653,13 @@ def main(argv=None, *, stop_event=None, on_ready=None):
             diagnostic('board.heartbeat')
     threading.Thread(target=heartbeat, daemon=True).start()
     board.start()
+    def prepare():
+        # The first page read after a start finds a board already built.
+        while board.collector.snapshot().loading:
+            if board.stopping.wait(0.5):
+                return
+        server.rebuild_board('')
+    threading.Thread(target=prepare, daemon=True).start()
     stop_reason = {'cause': 'shutdown'}
     def stop(signum, frame):
         stop_reason['cause'] = 'signal'
