@@ -387,9 +387,11 @@ function closeDetail(restoreFocus = true) {
 function readDraft(key) { try { return JSON.parse(sessionStorage.getItem('deck-draft-' + key)) || {}; } catch { return S.drafts.get(key) || {}; } }
 function saveDraft(event) {
   if (window.DeckAnonymize?.enabled) return;
-  if (S.modal?.type !== 'call' || !$('answer-note') || S.receipt?.saved) return;
+  // In a «Te necesita» card the card's own editor holds the note and files.
+  const own = $('answer-note') ? null : hostCard()?.matches('.qcard') ? readDraft(S.modal?.key) : undefined;
+  if (S.modal?.type !== 'call' || own === undefined || S.receipt?.saved) return;
   if (event && ['input', 'change'].includes(event.type)) S.modal.draftNeedsReview = false;
-  const draft = { note: $('answer-note').value, value: S.modal.value || '', request: S.modal.request || crypto.randomUUID().replaceAll('-', ''), attachments: S.modal.attachments || [], occurrence: S.modal.draftNeedsReview ? S.modal.previousOccurrence : S.modal.ticket.call.occurrence };
+  const draft = { note: own ? own.note || '' : $('answer-note').value, value: S.modal.value || '', request: S.modal.request || crypto.randomUUID().replaceAll('-', ''), attachments: own ? own.attachments || [] : S.modal.attachments || [], occurrence: S.modal.draftNeedsReview ? S.modal.previousOccurrence : S.modal.ticket.call.occurrence };
   S.modal.request = draft.request; S.drafts.set(S.modal.key, draft);
   try { sessionStorage.setItem('deck-draft-' + S.modal.key, JSON.stringify(draft)); } catch { /* In-memory draft remains available. */ }
   syncSubmit();
@@ -440,12 +442,13 @@ function addTechnical(ticket, ...extra) {
   $('detail-content').append(details);
 }
 function addHerdr(ticket) { if (!ticket.herdr_url) return; const a = node('a', 'herdr-link', t("Open this agent in Herdr Web ↗")); a.href = ticket.herdr_url; a.target = '_blank'; a.rel = 'noopener noreferrer'; $('detail-content').append(a); }
-function addStableLink(home, task, view) {
-  if (!home) return;
+function stableLink(home, task, view) {
+  if (!home) return null;
   const url = new URL(location.href); url.search = new URLSearchParams({ home, task, view }).toString(); url.hash = '';
   const a = node('a', 'herdr-link', t("Link to this task ↗")); a.href = url.href;
-  $('detail-content').append(a);
+  return a;
 }
+function addStableLink(home, task, view) { const a = stableLink(home, task, view); if (a) $('detail-content').append(a); }
 async function openStableLink(params) {
   const home = params.get('home') || '', task = params.get('task') || '', view = params.get('view') || '';
   showDetail(t("Opening task"), '', t("FIRSTMATE LINK"));
@@ -500,12 +503,14 @@ function reportLink(link, key) {
 }
 // Card editors share the guarded ticket intake and its durable drafts.
 async function inlineAnswer(card, opener, container) {
-  const editor=node('div','inline-answer');container.append(editor);
+  // Options and free answer stay on the card when it opens, as the demo; its detail follows them.
+  const editor=node('div','inline-answer'),more=container.querySelector('.card-more');more?more.before(editor):container.append(editor);
   try {
     const ticket=await api('api/ticket/'+encodeURIComponent(card.key));
     if(!editor.isConnected||ticket.answered||!ticket.call)return;
     const c=ticket.call,draft=readDraft(card.key),items=draft.attachments||[];
     const offered=c.options.filter(o=>o.value!=='reconcile');
+    if(c.options.some(o=>o.value==='reconcile'))deckUI?.addMenuItem?.(container,'redo',t('Ask to check it again'),()=>sendAnswer('reconcile'));
     const note=node('input');note.type='text';note.value=draft.note||'';note.placeholder=t(offered.length?'Or write your answer…':'Write your answer…');note.setAttribute('aria-label',t('Answer in my own words'));
     const status=node('p','notice');status.hidden=true;status.setAttribute('role','status');
     let edited=false;
@@ -561,6 +566,15 @@ function renderCall(ticket, draftOverride) {
     addTechnical(ticket, ...technical); addHerdr(ticket); addStableLink(ticket.home, ticket.task, 'call'); return;
   }
   const error = node('p', 'notice', c.error || (staleDraft ? staleDraftNote : '')); error.id = 'call-change'; error.hidden = !c.error && !staleDraft; content.append(error);
+  // A «Te necesita» card already shows the question, its options and the free
+  // answer, as the approved v11b demo; opened, it adds only the report, the
+  // answer status and folded provenance. Re-check and origin are in its «…» menu.
+  if (hostCard()?.matches('.qcard')) {
+    if (instructions) content.append(instructions);
+    const link = reportLink(c.link, key); if (link) content.append(link);
+    const state = node('div'); state.id = 'answer-status'; state.setAttribute('role', 'status'); content.append(state);
+    addTechnical(ticket, ...technical, stableLink(ticket.home, ticket.task, 'call')); addHerdr(ticket); return;
+  }
   const about = c.presentation?.about || c.about, question = c.presentation?.decide || c.decide;
   // The title already asks it when the two read the same.
   if (flatten(question) !== flatten(S.opener?.querySelector?.('.title')?.textContent || ticket.title)) content.append(node('p', 'question', question));

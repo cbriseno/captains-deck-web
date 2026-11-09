@@ -560,7 +560,6 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .inline-answer{padding:0 14px 12px;display:grid;gap:8px}
 .inline-answer textarea{width:100%;min-width:0;resize:vertical;box-sizing:border-box}
 .inline-answer .option-list{margin:0}.inline-answer .recommended{margin-left:8px}
-.qcard:has(#detail[data-open="true"])>.inline-answer{display:none}
 .outcome-badge,.review-badge{display:inline-block;font-size:11px;font-weight:600;margin-right:8px}
 .result-summary{display:block;margin-top:8px}.reading-note{color:var(--accent);font-size:12px}
 .review-card>button:not(.card-open){margin:4px 12px 10px}
@@ -606,6 +605,8 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .attention-list .answer-compose .answer-send{width:auto;height:30px;min-height:30px;padding:0 12px;border:1px solid var(--control);border-radius:6px;background:var(--surface);color:var(--ink);font-size:13px;font-weight:500}
 .attention-list .inline-answer .own-words>small.meta,.attention-list .answer-files:empty{display:none}
 .attention-list>.card>.card-more .detail{padding:8px 0 0}
+/* An open question card shows no asked time; it is in its folded provenance. */
+.attention-list .qcard #detail-meta{display:none}
 @media(max-width:640px){.attention-list .cmeta .req{display:none}}
 /* v11b header, search, order and full width (deck-redesign-v11b-estable.html .bar/.seg/.tools/.search). */
 .shell,.top,.foot{max-width:none}
