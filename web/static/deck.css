@@ -457,7 +457,7 @@ footer{margin:0;padding:10px 24px 18px;font-size:11px}footer .theme-label{displa
 .attention-list,.request-list{display:grid;gap:10px;min-width:0}
 /* Filas y secciones (v11b): section head = chevron box, state dot, title, count;
    each section is one rounded group; each request row has two lines. */
-.request-list,.attention-list{--tint:12%;--row-chev:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E")}
+.request-list,.attention-list{--tint:12%;--row-chev:url("icon-chevron-down.svg")}
 :root[data-theme=dark] .request-list,:root[data-theme=dark] .attention-list{--tint:16%}
 .request-group{min-width:0}.request-group+.request-group{margin-top:14px}
 .request-group-head{display:flex!important;align-items:center;gap:8px;min-height:36px;margin:0;padding:0}
@@ -492,9 +492,9 @@ footer{margin:0;padding:10px 24px 18px;font-size:11px}footer .theme-label{displa
 /* The approved row offers Pausar only when there is work to pause; a status is not a button. */
 .request-head .mix-pause[data-idle=true]{display:none}
 .request-head .mix-pause[data-action]::before{content:"";flex:none;width:13px;height:13px;background:currentColor;-webkit-mask:var(--act-i) center/13px no-repeat;mask:var(--act-i) center/13px no-repeat}
-.request-head .mix-pause[data-action=pause]{--act-i:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linejoin='round'%3E%3Cpath d='M6 4h4v16H6z'/%3E%3Cpath d='M14 4h4v16h-4z'/%3E%3C/svg%3E")}
-.request-head .mix-pause[data-action=resume]{--act-i:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linejoin='round'%3E%3Cpath d='M6 3l14 9-14 9z'/%3E%3C/svg%3E")}
-.request-head .mix-pause:is([data-action=cancel-pause],[data-action=dequeue-resume]){--act-i:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='1.75' stroke-linecap='round'%3E%3Cpath d='M18 6 6 18'/%3E%3Cpath d='m6 6 12 12'/%3E%3C/svg%3E")}
+.request-head .mix-pause[data-action=pause]{--act-i:url("icon-pause.svg")}
+.request-head .mix-pause[data-action=resume]{--act-i:url("icon-play.svg")}
+.request-head .mix-pause:is([data-action=cancel-pause],[data-action=dequeue-resume]){--act-i:url("icon-x.svg")}
 .request-handle{grid-area:h;align-self:center;background:transparent;border:0;color:var(--muted);cursor:grab;padding:4px}
 .request-head:has(.request-handle){grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"h t a" ". m m"}
 .request-tasks{display:grid;padding:0 16px 12px 56px;gap:0;min-width:0}
