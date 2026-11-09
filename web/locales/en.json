@@ -1141,5 +1141,7 @@
   "It will have {name} priority.": "It will have {name} priority.",
   "Firstmate will handle it sooner.": "Firstmate will handle it sooner.",
   "Firstmate will handle it later.": "Firstmate will handle it later.",
-  "From {from} to {to}: {effect}": "From {from} to {to}: {effect}"
+  "From {from} to {to}: {effect}": "From {from} to {to}: {effect}",
+  "1 request": "1 request",
+  "{count} requests": "{count} requests"
 }

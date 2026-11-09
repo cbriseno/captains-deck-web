@@ -459,8 +459,18 @@ window.createDeckUI = function (host) {
   }
   function tree() {
     const root=$('project-tree'), active=n('div','list tree-list'),empty=add(n('details','source-details'),n('summary','',t('No open tasks')));
-    const requests=requestRows(model.nodes.filter(x=>x.kind==='task'));
-    const descend=(x,depth,target)=>{if(x.kind==='request'){const row=requests.find(r=>r.id===x.id);if(row){const entry=n('div','tree-entry');entry.dataset.depth=depth;entry.append(requestRow(row,orderedRequests(requests)));target.append(entry);}return;}if(x.kind==='task'&&allQuestions().some(c=>c.home===x.home&&c.task===x.task&&c.answered))return;const wrap=n('div','tree-entry');wrap.dataset.depth=depth;const action=x.kind==='task'&&actions().find(c=>c.home===x.home&&c.task===x.task),question=x.kind==='task'&&questions().find(c=>c.home===x.home&&c.task===x.task);wrap.append(action?actionCard(action):question?questionCard(question):x.kind==='task'?taskCard(x):groupRow(x,true,depth));target.append(wrap);if(ui.tree.has(x.id))for(const child of model.nodes.filter(y=>y.parent===x.id))descend(child,depth+1,target);};
+    const requests=requestRows(model.nodes.filter(x=>x.kind==='task')),peers=orderedRequests(requests),rank={now:0,waiting:1,paused:2};
+    const entry=(depth,...items)=>{const e=n('div','tree-entry');e.dataset.depth=depth;e.append(...items);return e;};
+    // Open requests first in the board's order (state, then the chosen sort); finished ones fold under «Terminados».
+    const children=(x,depth,target)=>{
+      const kids=model.nodes.filter(y=>y.parent===x.id),rows=peers.filter(r=>kids.some(y=>y.id===r.id)),open=rows.filter(r=>requestState(r)!=='done').sort((a,c)=>rank[requestState(a)]-rank[requestState(c)]),done=rows.filter(r=>requestState(r)==='done');
+      for(const r of open)target.append(entry(depth,requestRow(r,peers)));
+      for(const y of kids)if(y.kind!=='request')descend(y,depth,target);
+      if(done.length){const key='done:'+x.id,show=ui.tree.has(key),fold=b(t('Finished requests')+' · '+done.length,()=>{show?ui.tree.delete(key):ui.tree.add(key);render(true,'filter');},'more');fold.setAttribute('aria-expanded',String(show));fold.dataset.control='fold:tree:'+key;target.append(entry(depth,structural(fold)));if(show)for(const r of done)target.append(entry(depth,requestRow(r,peers)));}
+    };
+    const descend=(x,depth,target)=>{if(x.kind==='request')return;if(x.kind==='task'&&allQuestions().some(c=>c.home===x.home&&c.task===x.task&&c.answered))return;const action=x.kind==='task'&&actions().find(c=>c.home===x.home&&c.task===x.task),question=x.kind==='task'&&questions().find(c=>c.home===x.home&&c.task===x.task),row=action?actionCard(action):question?questionCard(question):x.kind==='task'?taskCard(x):groupRow(x,true,depth);
+      if(x.kind==='project'){const count=requests.filter(r=>ancestors(r).some(z=>z.id===x.id)).length;const pct=row.querySelector('.mix-pct');if(count&&pct)pct.textContent=t(count===1?'1 request':'{count} requests',{count})+' · '+pct.textContent;}
+      target.append(entry(depth,row));if(ui.tree.has(x.id))children(x,depth+1,target);};
     for(const p of model.nodes.filter(x=>x.kind==='project'))descend(p,0,tasksOf(p).some(t=>t.state!=='done')?active:empty);
     for(const x of model.nodes.filter(x=>!x.parent&&x.kind==='task'))descend(x,0,active);root.replaceChildren(active,empty);
   }
