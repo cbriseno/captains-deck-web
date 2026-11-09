@@ -91,6 +91,23 @@ class WebTests(unittest.TestCase):
         self.assertEqual(data['events'][0]['text'], 'fixture activity')
         self.assertFalse((Path(self.home.path)/'mutations.jsonl').exists())
 
+    def test_conversation_route_validates_link_missing_record_and_escapes_html(self):
+        self.init()
+        link = '/conversation?home='+bridge.home_id(self.home)+'&task='
+        for query in ('../bad&n=0', '..&n=0', 'web&n=-1', 'web&n=x', 'web'):
+            self.assertEqual(self.req(link+query)[0], 400)
+        with patch.object(bridge.timeline, '_transcripts', return_value=iter([])):
+            self.assertEqual(self.req(link+'web&n=0')[0], 404)
+        chat = {'harness':'claude', 'turns':[{'role':'assistant', 'text':'<script>alert("x")</script> & text', 'at':None}]}
+        with patch.object(bridge.timeline, 'conversation', return_value=chat):
+            status, content = self.req(link+'web&n=0')
+        self.assertEqual(status, 200)
+        self.assertIn(b'&lt;script&gt;', content)
+        self.assertIn(b'&amp; text', content)
+        self.assertNotIn(b'<script>alert', content)
+        self.assertIn(b'conversation.css', content)
+        self.assertFalse((Path(self.home.path)/'mutations.jsonl').exists())
+
     def test_board_serializes_model_time_four_columns_and_does_not_mutate(self):
         board=self.init()
         self.assertEqual([c['id'] for c in board['columns']],['captains_call','underway','charted','landed'])

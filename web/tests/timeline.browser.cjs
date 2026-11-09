@@ -12,6 +12,8 @@ test('activity fold reads records, links live chat and anonymizes at narrow widt
   try{
     const url=await new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('fixture startup: '+output)),15000);child.stdout.on('data',chunk=>{output+=chunk;const m=output.match(/Fixture at (http:\/\/127\.0\.0\.1:\d+)/);if(m){clearTimeout(timer);resolve(m[1]);}});child.on('exit',code=>{clearTimeout(timer);reject(Error('fixture exit '+code));});});
     fs.mkdirSync(path.join(proof,'home/state'),{recursive:true});
+    fs.mkdirSync(path.join(proof,'claude/projects/fixture'),{recursive:true});
+    fs.writeFileSync(path.join(proof,'claude/projects/fixture/closed.jsonl'),[JSON.stringify({timestamp:'2026-11-08T00:00:00Z',text:'steering inbox is `'+proof+'/home/state/phone.inbox`'}),JSON.stringify({type:'assistant',message:{role:'assistant',content:[{type:'text',text:'CLOSED_CHAT_TEXT'}]}})].join('\n'));
     fs.writeFileSync(path.join(proof,'home/state/web.status'),'working [at=1794096010]: CANARY_LOG_DETAIL\n');
     run('open',[url]);
     evaluate(`async () => {for(let i=0;i<100;i++){if(document.querySelector('.request-row'))break;await new Promise(r=>setTimeout(r,50));}document.querySelector('.request-group[data-k=done] .col-h button[aria-expanded=false]')?.click();for(const b of document.querySelectorAll('.request-title[aria-expanded=false]'))b.click();return true;}`);
@@ -19,6 +21,8 @@ test('activity fold reads records, links live chat and anonymizes at narrow widt
     evaluate(`() => {for(const b of document.querySelectorAll('.log-fold'))b.click();return true;}`);
     const content=evaluate(`async () => {for(let i=0;i<100;i++){if(document.querySelector('.log-row'))break;await new Promise(r=>setTimeout(r,50));}return {text:[...document.querySelectorAll('.activity-log')].map(x=>x.textContent).join(' '),links:[...document.querySelectorAll('.log-chat')].map(x=>x.href)};}`);
     assert.match(content.text,/CANARY_LOG_DETAIL/);assert.ok(content.links.some(x=>x.startsWith('https://')));
+    const closedLink=content.links.find(x=>x.includes('/conversation?'));assert.ok(closedLink);
+    const closed=await (await fetch(closedLink)).text();assert.match(closed,/CLOSED_CHAT_TEXT/);
     const masked=evaluate(`async () => {const times=()=>[...document.querySelectorAll('.log-time,.log-day')].map(x=>x.textContent);const before=times();await DeckAnonymize.set(true);const leak=document.body.textContent.includes('CANARY_LOG_DETAIL');const after=times();await DeckAnonymize.set(false);return {before,after,leak};}`);
     assert.equal(masked.leak,false);assert.deepEqual(masked.after,masked.before);
     for(const width of [1970,1440,390]){run('resize',[String(width),'1250']);assert.equal(evaluate('() => document.documentElement.scrollWidth-innerWidth'),0);}

@@ -1,0 +1,10 @@
+/* Read-only conversation of one agent, opened from the request's activity log. */
+body{margin:0;background:var(--canvas,#f7f7f6);color:var(--ink,#1c1c1e);font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{position:sticky;top:0;background:var(--surface,#fff);border-bottom:1px solid var(--line,#e6e6e3);padding:12px 16px}
+h1{margin:0;font-size:15px;font-weight:600;overflow-wrap:anywhere}header p{margin:2px 0 0;color:var(--muted,#66666b);font-size:12px}
+main{max-width:860px;margin:0 auto;padding:12px 16px 40px;display:grid;gap:10px}
+.turn{background:var(--surface,#fff);border:1px solid var(--line,#e6e6e3);border-radius:10px;padding:8px 12px;min-width:0}
+.turn.user{background:var(--soft,#efefed)}
+.who{margin:0 0 4px;font-size:12px;font-weight:600;color:var(--muted,#66666b)}.who time{font-weight:400;margin-left:6px}
+pre{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:inherit}
+.turn.user pre{max-height:16em;overflow:auto}

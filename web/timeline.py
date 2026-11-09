@@ -153,6 +153,38 @@ def timeline(home_path, tasks):
     return {'events': unique, 'agents': agents}
 
 
+def conversation(home_path, task, number):
+    """Text turns of one recorded conversation: [{'role','text','at'}]."""
+    created = _epoch(_json(Path(home_path) / 'data' / task / 'creation.json').get('created_at')) or 0
+    rows = conversations({task}, created).get(task, [])
+    if not 0 <= number < len(rows):
+        return None
+    harness, path, _ = rows[number]
+    turns = []
+    with open(path, encoding='utf-8', errors='replace') as handle:
+        for line in handle:
+            try:
+                row = json.loads(line)
+            except ValueError:
+                continue
+            role, parts = None, []
+            if harness == 'claude' and row.get('type') in ('user', 'assistant') and not row.get('isMeta'):
+                message = row.get('message') or {}
+                role, content = message.get('role'), message.get('content')
+                parts = [content] if isinstance(content, str) else \
+                    [c.get('text', '') for c in content or [] if isinstance(c, dict) and c.get('type') == 'text']
+            elif harness == 'codex' and row.get('type') == 'response_item':
+                payload = row.get('payload') or {}
+                if payload.get('type') == 'message' and payload.get('role') in ('user', 'assistant'):
+                    role = payload['role']
+                    parts = [c.get('text', '') for c in payload.get('content') or [] if isinstance(c, dict)]
+            text = '\n'.join(p for p in parts if p).strip()
+            if role and text and not text.startswith(('<environment_context>', '# AGENTS.md', '<system-reminder>',
+                                                      '<command-', '<local-command')):
+                turns.append({'role': role, 'text': text, 'at': _epoch(row.get('timestamp'))})
+    return {'harness': harness, 'turns': turns}
+
+
 if __name__ == '__main__':  # python3 web/timeline.py <home> <task>...
     import sys
     result = timeline(sys.argv[1], sys.argv[2:])

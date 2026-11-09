@@ -1203,5 +1203,11 @@
   "Reading the activity log…": "Reading the activity log…",
   "No recorded activity yet.": "No recorded activity yet.",
   "The activity log needs a local crew.": "The activity log needs a local crew.",
-  "Task created": "Task created"
+  "Task created": "Task created",
+  "You (Firstmate)": "You (Firstmate)",
+  "Conversation": "Conversation",
+  "{count} messages": "{count} messages",
+  "Tool calls are not shown.": "Tool calls are not shown.",
+  "Invalid conversation link.": "Invalid conversation link.",
+  "This conversation isn’t recorded on this computer.": "This conversation isn’t recorded on this computer."
 }

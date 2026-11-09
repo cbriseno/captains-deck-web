@@ -37,3 +37,25 @@ class TimelineTests(unittest.TestCase):
             self.assertEqual(len([e for e in events if e['text']=='live']), 1)
             with patch.object(timeline, '_transcripts', return_value=iter([])):
                 self.assertEqual(timeline.timeline(home, ['absent']), {'events':[], 'agents':{}})
+
+    def test_conversation_reads_text_only_in_both_formats(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for harness in ('claude', 'codex'):
+                transcript = Path(tmp) / (harness + '.jsonl')
+                rows = [{'text': f'steering inbox is `{tmp}/state/task.inbox`'}]
+                for role, text in [('user', 'Pregunta <script>'), ('assistant', 'Respuesta & texto')]:
+                    message = {'role': role, 'content': [{'type': 'text' if harness == 'claude' else 'output_text', 'text': text}]}
+                    if harness == 'claude':
+                        message['content'].append({'type':'tool_use', 'name':'secret_tool'})
+                        rows.append({'type':role, 'message':message})
+                    else:
+                        rows.append({'type':'response_item', 'payload':dict(message, type='message')})
+                rows += [{'type':'response_item', 'payload':{'type':'function_call_output', 'output':'secret_output'}},
+                         {'type':'user','message':{'role':'user','content':[{'type':'tool_result','content':'secret_output'}]}}]
+                transcript.write_text('not json\n' + '\n'.join(json.dumps(row) for row in rows))
+                with patch.object(timeline, '_transcripts', side_effect=lambda: iter([(harness, str(transcript))])):
+                    chat = timeline.conversation(tmp, 'task', 0)
+                    self.assertEqual([turn['text'] for turn in chat['turns']], ['Pregunta <script>', 'Respuesta & texto'])
+                    self.assertEqual(chat['harness'], harness)
+                    self.assertIsNone(timeline.conversation(tmp, 'task', 1))
+                    self.assertIsNone(timeline.conversation(tmp, 'task', -1))

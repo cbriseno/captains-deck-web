@@ -1203,5 +1203,11 @@
   "Reading the activity log…": "Leyendo la bitácora…",
   "No recorded activity yet.": "Aún no hay actividad registrada.",
   "The activity log needs a local crew.": "La bitácora necesita una tripulación local.",
-  "Task created": "Se creó la tarea"
+  "Task created": "Se creó la tarea",
+  "You (Firstmate)": "Tú (Firstmate)",
+  "Conversation": "Conversación",
+  "{count} messages": "{count} mensajes",
+  "Tool calls are not shown.": "No se muestran las llamadas a herramientas.",
+  "Invalid conversation link.": "Enlace de conversación no válido.",
+  "This conversation isn’t recorded on this computer.": "Esta conversación no está guardada en esta computadora."
 }

@@ -686,10 +686,11 @@ window.createDeckUI = function (host) {
   let peersAll=[];
   // Bitácora: what each agent did for this request, newest first, from Firstmate's records (web/timeline.py).
   const LOG_LABEL={created:'Task created',started:'Agent started',working:'Progress',['needs-decision']:'Asked you',blocked:'Blocked',paused:'Waiting',done:'Reported done',failed:'Failed',resolved:'Resolved','closed-done':'Closed','closed-merged':'Integrated','closed-reported':'Report delivered'};
-  function chatLink(x){
+  function chatLink(home,task,number,x,agents){
     const live=x&&x.state!=='done'&&x.card?.herdr_url;
-    if(!live)return null;
-    const a=n('a','log-chat',t('View chat'));a.href=live;a.target='_blank';a.rel='noopener noreferrer';return a;
+    const last=agents?.length?agents.length-1:null;
+    if(!live&&last===null)return null;
+    const a=n('a','log-chat',t('View chat'));a.href=live||('conversation?home='+encodeURIComponent(home)+'&task='+encodeURIComponent(task)+'&n='+(number??last));a.target='_blank';a.rel='noopener noreferrer';return a;
   }
 
   function activityLog(r){
@@ -704,7 +705,7 @@ window.createDeckUI = function (host) {
       const x=byTask.get(e.task),kind=e.kind==='closed'?'closed-'+e.text:e.kind,row=n('div','log-row');row.dataset.kind=kind;
       const what=add(n('span','log-what'),n('b','log-kind',t(LOG_LABEL[kind]||kind)),n('span','log-task',x?label(x):e.task));
       const detail=e.kind==='started'?e.agent:e.kind==='closed'?e.summary:e.text;if(detail)what.append(n('span','log-text',detail));
-      add(row,structural(n('time','log-time',window.DeckAnonymize.formatted(at.toLocaleTimeString(lang,{hour:'2-digit',minute:'2-digit',hour12:false}))),'time'),what,chatLink(x));box.append(row);
+      add(row,structural(n('time','log-time',window.DeckAnonymize.formatted(at.toLocaleTimeString(lang,{hour:'2-digit',minute:'2-digit',hour12:false}))),'time'),what,chatLink(r.home,e.task,e.chat,x,entry.data.agents?.[e.task]));box.append(row);
     }
     if(!entry.data.events.length)box.append(n('p','meta',t('No recorded activity yet.')));
     return box;

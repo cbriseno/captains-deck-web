@@ -42,6 +42,7 @@ from deck_platform import LOOPBACK, local_origin, endpoint_path, private_directo
 from deck_control import CHANGE_GAP, FULL_READ, DeckControls, ControlError
 from relay_settings import RelaySettings
 import timeline
+from html import escape
 import fm_diagnostics as diagnostics
 
 STATIC = HERE / 'static'
@@ -355,6 +356,19 @@ def row_identity(row, section):
     count = sum(bool(re.fullmatch(r'Resolution recorded by fm-(?:captain|decision)-hold\.', line)) for line in body)
     return f'{stamp[1]}#{count}'
 
+
+def conversation_page(t, task, chat, locale="en"):
+    """Read-only text of one agent conversation; tool calls are left out."""
+    def when(epoch):
+        return time.strftime('%d/%m %H:%M', time.localtime(epoch)) if epoch else ''
+    turns = ''.join(
+        f'<article class="turn {escape(x["role"])}"><p class="who">{escape(t("You (Firstmate)") if x["role"] == "user" else t("Agent"))}'
+        f' <time>{escape(when(x["at"]))}</time></p><pre>{escape(x["text"])}</pre></article>' for x in chat['turns'])
+    return (f'<!doctype html><html lang="{escape(locale)}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">'
+            f'<title>{escape(t("Conversation"))} · {escape(task)}</title><script src="theme.js"></script>'
+            '<link rel="stylesheet" href="themes.css"><link rel="stylesheet" href="conversation.css"></head><body>'
+            f'<header><h1>{escape(task)}</h1><p>{escape(chat["harness"])} · {escape(t("{count} messages", count=len(chat["turns"])))}'
+            f' · {escape(t("Tool calls are not shown."))}</p></header><main>{turns}</main></body></html>')
 
 def history_mark(home):
     """The files Firstmate's delivery history reads, besides each task's
@@ -1798,6 +1812,15 @@ class Handler(BaseHTTPRequestHandler):
                 if fm.is_remote_home(owner):
                     raise Refusal('The activity log needs a local crew.', 403)
                 data = timeline.timeline(owner.path, value('tasks').split(',')[:300])
+            elif not unsafe and path == '/conversation':
+                owner, task = board.home(value('home')), value('task')
+                if fm.is_remote_home(owner) or (task in ('.', '..') or not fm.KEY_RE.fullmatch(task)) or not value('n').isdigit():
+                    raise Refusal('Invalid conversation link.', 400)
+                chat = timeline.conversation(owner.path, task, int(value('n')))
+                if not chat:
+                    raise Refusal('This conversation isn’t recorded on this computer.', 404)
+                self.respond(200, conversation_page(self.server.i18n.t, task, chat, self.server.i18n.locale).encode(), 'text/html; charset=utf-8', sid, secure)
+                return
             elif not unsafe and not path.startswith('/api/'):
                 rel = path.lstrip('/') or 'index.html'
                 try:
