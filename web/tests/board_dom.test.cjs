@@ -3,3 +3,4 @@
 require('./native_details.test.cjs');
 require('./approved_board.browser.cjs');
 require('./relay_settings.browser.cjs');
+require('./request_usage.browser.cjs');

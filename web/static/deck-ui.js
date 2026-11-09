@@ -648,6 +648,41 @@ window.createDeckUI = function (host) {
     add(card,cardKind('rev','file',t(outcome.role==='partial'?'Progress update':'Review'),x,x,[]),add(n('div','card-face'),face),add(n('div','card-more'),n('div','card-more-inner')),add(n('div','cacts'),view,mark));
     const saved=host.answerTools?.summary(x,()=>openNode(x,face));if(saved)card.append(saved);wireEvents(card,x.id);return card;
   }
+  // Spend per request: Firstmate's requests[].usage, priced at public API list rates.
+  // Unknown stays visible: never rendered as zero or hidden inside a total.
+  const money=v=>'US$'+(v>=100?Math.round(v).toLocaleString():v.toFixed(2));
+  const megaTokens=v=>v<1000?t('{count} tokens',{count:v}):v>=1e6?t('{count} M tokens',{count:(v/1e6).toLocaleString(undefined,{maximumFractionDigits:v>=1e8?0:1})}):t('{count} k tokens',{count:Math.round(v/1e3)});
+  const modelName=id=>({'claude-opus-5-5':'Opus 5.5','claude-sonnet-5-5':'Sonnet 5.5','claude-haiku-5-5':'Haiku 5.5','claude-fable-5-1':'Fable 5.1','gpt-6.1-sol':'GPT-6.1 Sol','gpt-6.1-terra':'GPT-6.1 Terra','gpt-6-luna':'GPT-6 Luna','gpt-6-astra':'GPT-6 Astra'})[id]||id||t('model not reported');
+  const harnessName=h=>({claude:'Claude Code',codex:'Codex'})[h]||h||t('harness not reported');
+  const effortLabels={low:'effort:low',medium:'effort:medium',high:'effort:high',xhigh:'effort:xhigh',max:'effort:max'};
+  function usageUnknown(r){
+    const captain=x=>x.reason==='captain'||model.nodes.some(task=>task.home===r.home&&([task.task,task.owner_id].includes(x.task)||task.owner_id==='task:'+x.task)&&(task.raw?.state==='captain'||task.pause?.condition?.kind==='captain'||task.raw?.pause?.own?.kind==='captain'));
+    const decisions=(r.usage.unknown||[]).filter(captain);
+    return {decisions,unknown:(r.usage.unknown||[]).filter(x=>!decisions.includes(x)),missing:Math.max(0,(r.usage.tasks?.unknown||0)-decisions.length)};
+  }
+  function usageChip(r){
+    const u=r.usage;if(!u)return n('span','usage-line unknown',t('Spend not recorded'));
+    const k=u.tasks||{},{missing,decisions}=usageUnknown(r);
+    if(!u.by?.length)return n('span','usage-line'+(missing?' unknown':''),missing?t('Spend unknown'):(k.no_agent||decisions.length)&&!k.not_started?t('Your decision: no agent spend'):t('No spend yet'));
+    const el=n('span','usage-line',(u.usd_complete||decisions.length&&!missing&&u.by.every(x=>x.usd_known)?'≈ ':'≥ ')+money(u.usd)+' · '+megaTokens(u.tokens)+(missing?' · '+t(missing===1?'{count} task unknown':'{count} tasks unknown',{count:missing}):'')+(k.running?' · '+t('in progress'):''));
+    el.title=t('API list-price equivalent. Not a charge to your subscription.');return structural(el);
+  }
+  function usageDetail(r){
+    const u=r.usage;if(!u)return null;const box=n('div','usage-detail');
+    box.append(n('p','usage-h',t('Spend by harness, model and effort')));
+    for(const x of u.by||[])box.append(structural(n('p','usage-row',harnessName(x.harness)+' · '+modelName(x.model)+' · '+t('effort {level}',{level:(effortLabels[x.effort]?t(effortLabels[x.effort]):x.effort||t('effort:unknown'))})+' — '+(x.usd_known?money(x.usd):t('price unknown'))+' · '+megaTokens(x.tokens)+' · '+t(x.sessions===1?'{count} session':'{count} sessions',{count:x.sessions}))));
+    const k=u.tasks||{};
+    if(k.running)box.append(n('p','usage-note',t(k.running===1?'{count} task still running: its figure keeps growing.':'{count} tasks still running: their figures keep growing.',{count:k.running})));
+    if(k.not_started)box.append(n('p','usage-note',t(k.not_started===1?'{count} task not started: no spend.':'{count} tasks not started: no spend.',{count:k.not_started})));
+    const {decisions,unknown}=usageUnknown(r);
+    for(const x of decisions)box.append(n('p','usage-note',t('Your decision: {task} — no agent spend.',{task:x.title||x.task})));
+    if(k.no_agent)box.append(n('p','usage-note',t('{count} of your decisions: no agent spend.',{count:k.no_agent})));
+    for(const x of unknown)box.append(n('p','usage-note unknown',t('Unknown: {task} has no identified agent session.',{task:x.title||x.task})));
+    if((u.excludes||[]).includes('coordinator'))box.append(n('p','usage-note unknown',t('Not included: Firstmate coordination, shared by every request.')));
+    box.append(n('p','usage-note',t('USD = tokens × public API list price of each model. Your Claude and Codex subscriptions are not charged this way.')));
+    return box;
+  }
+
   let peersAll=[];
   function requestRow(r,peers){
     const opened=ui.expanded.has(r.id)||!!app.query,wrap=setColor(n('section','request-row'),r);wrap.dataset.node=r.id;wrap.dataset.kind='request';wrap.dataset.relationScope=r.id;
@@ -662,6 +697,7 @@ window.createDeckUI = function (host) {
     if(ui.order==='mine'){const turn=ui.turns?.get(r.id);if(turn)meta.append(structural(n('span','request-chip turn-chip',t('Next · #{count}',{count:turn}))));
       const y=r.source?.snapshot?.yields;if(y&&y.request===r.order_id){const to=peersAll.find(q=>q.home===r.home&&q.order_id===y.for_request);meta.append(n('span','request-chip yield-chip',t(y.room?'If room runs out, gives way to «{name}»':'No room: gives way at its safe point to «{name}»',{name:to?label(to):y.for_request})));}}
     meta.append(event(r.updated_at)?time('ago',r.updated_at):n('span','dates',t('Last activity not recorded')));
+    if(!r.project_group)meta.append(usageChip(r));
     const head=add(n('div','request-head'),title,r.owner_id?pauseButton(r):null,meta);wrap.append(head);
     if(ui.order==='mine'&&r.owner_id){
       const handle=b('⠿',()=>feedback(t('Drag to move, or use ↑ and ↓')),'request-handle');handle.title=t('Drag to move, or use ↑ and ↓');handle.dataset.control='handle:'+r.id;handle.setAttribute('aria-label',t('Move {name} up or down',{name:label(r)}));workControl(handle,can(r,'move'));head.prepend(handle);
@@ -675,7 +711,7 @@ window.createDeckUI = function (host) {
       const asking=new Set(r.calls.filter(c=>!c.answered).map(c=>keyOf(c.home,c.task)));
       body.append(...work.filter(x=>!done.includes(x)&&!asking.has(keyOf(x.home,x.task))&&visible(x)).sort((a,b)=>rank[a.state]-rank[b.state]).map(requestTaskRow));
       if(done.length){const show=ui.steps.has(r.id),fold=b(t(show?'Hide {count} finished tasks':'View {count} finished tasks',{count:done.length}),()=>{show?ui.steps.delete(r.id):ui.steps.add(r.id);render(true,'filter');},'more');fold.setAttribute('aria-expanded',String(show));body.append(structural(fold));if(show)body.append(...done.map(requestTaskRow));}
-      if(!body.children.length)body.append(n('p','meta',t('What remains is in Needs you.')));wrap.append(body);
+      if(!body.children.length)body.append(n('p','meta',t('What remains is in Needs you.')));const spend=usageDetail(r);if(spend)body.prepend(spend);wrap.append(body);
     }
     const latest=ui.log.find(entry=>entry.home===r.home&&(entry.command.node===r.order_id||entry.command.node===r.owner_id)&&(entry.command.action==='move'||entry.command.undo_operation?.op==='move'));if(latest?.undo)wrap.append(add(n('div','request-order-result'),n('span','meta',receiptLabel(latest)),workControl(b(t('Undo'),()=>undo(latest),'more'),true)));
     wireEvents(wrap,r.id);return wrap;
