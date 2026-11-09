@@ -379,6 +379,9 @@ window.createDeckUI = function (host) {
     return add(wrap,bar,structural(n('span','mix-pct',text)));
   }
   const originOf=own=>{const origin=own?.question?.origin_task;if(!origin)return null;const recorded=own.question.origin;return byId.get(keyOf(own.home,origin))||(recorded?{...recorded,id:keyOf(own.home,recorded.key||origin),state:recorded.backlog_state==='done'?'done':'unknown'}:null);};
+  // A task that exists only to ask the captain carries its origin. Work the
+  // captain answered or released stays on the board.
+  const questionOnly=x=>!!(x.question?.origin_task||x.question?.origin);
   const questionNode=c=>{const own=byId.get(taskNodeId(c.home,c.task));return originOf(own)||own;};
   const attentionCards = () => app.board?.columns.find(c=>c.id==='captains_call')?.cards || [];
   const allQuestions = () => attentionCards().filter(c=>c.attention_kind!=='action');
@@ -388,7 +391,7 @@ window.createDeckUI = function (host) {
   // collapsed stacks and a selected scope must not change a group's activity.
   function kanbanRows() {
     const decisions=new Set(attentionCards().map(c=>keyOf(c.home,c.task)));
-    const tasks=model.nodes.filter(x=>x.kind==='task'&&!decisions.has(keyOf(x.home,x.task))&&!x.question?.answer?.recorded);
+    const tasks=model.nodes.filter(x=>x.kind==='task'&&!decisions.has(keyOf(x.home,x.task))&&!questionOnly(x));
     return {tasks,run:tasks.filter(x=>x.state==='active'&&!isStopping(x)),stopping:tasks.filter(isStopping),
       unconfirmed:tasks.filter(x=>x.state==='unknown'),ready:readyList(),asks:questions(),act:actions()};
   }
@@ -542,7 +545,7 @@ window.createDeckUI = function (host) {
         if(!groups.has(id))groups.set(id,{...r,tasks:[],calls:[]});
       }
       const group=groups.get(r.id);if(!group)continue;
-      if(!decisions.has(keyOf(x.home,x.task))&&!x.question?.answer?.recorded)group.tasks.push(x);
+      if(!decisions.has(keyOf(x.home,x.task))&&!questionOnly(x))group.tasks.push(x);
       if(activityEpoch(x.updated_at)>activityEpoch(group.updated_at))group.updated_at=x.updated_at;
     }
     for(const c of attentionCards()){const own=byId.get(taskNodeId(c.home,c.task)),r=own&&(requestFor(own)||requestFor(questionNode(c))||groups.get(legacyId(own)));if(r)groups.get(r.id)?.calls.push(c);}
