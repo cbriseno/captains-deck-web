@@ -1153,5 +1153,7 @@
   "Change priority…": "Change priority…",
   "Ask to remove it…": "Ask to remove it…",
   "Copy {id}": "Copy {id}",
-  "View relationships": "View relationships"
+  "View relationships": "View relationships",
+  "1 task waits for “{name}”": "1 task waits for “{name}”",
+  "{count} tasks wait for “{name}”": "{count} tasks wait for “{name}”"
 }

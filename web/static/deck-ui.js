@@ -435,6 +435,11 @@ window.createDeckUI = function (host) {
     }
     return groups;
   }
+  function projectWaits(project){
+    const projectOf=id=>ancestors(byId.get(id)||{}).find(a=>a.kind==='project'),out=new Map();
+    for(const e of model.edges){if(e.completed||byId.get(e.from)?.kind!=='task')continue;const to=projectOf(e.to);if(!to||to.id===project.id||projectOf(e.from)?.id!==project.id||model.edges.some(d=>d.from===project.id&&d.to===to.id&&!d.completed))continue;if(!out.has(to))out.set(to,new Set());out.get(to).add(e.from);}
+    return out;
+  }
   function groupRow(x, tree=false, depth=0) {
     const row=setColor(n('div','mix'),x);row.dataset.node=x.id;row.dataset.kind=x.kind==='subproject'?'sub':x.kind;row.dataset.paused=String(ownPause(x));row.dataset.on=String(ui.pin===x.id);row.dataset.filtered=String(ui.scope===x.id);row.style.setProperty('--d',depth);
     const activity=groupActivities.get(x.id);
@@ -448,6 +453,7 @@ window.createDeckUI = function (host) {
     const name=b('',()=>{if(tree){ui.tree.has(x.id)?ui.tree.delete(x.id):ui.tree.add(x.id);render(true,'filter');}else filterAction();},'mix-name');name.setAttribute('aria-pressed',String(ui.scope===x.id));name.title=tree?t(closed?'Expand {name}':'Collapse {name}',{name:label(x)}):t('Click to filter tasks. Keep the pointer still to focus.');if(tree)name.setAttribute('aria-expanded',String(!closed));name.append(n('span','mix-label',label(x)));const meta=add(n('span','mix-meta'),idBadge(x),summary(x),dates(x)),info=add(n('div','mix-info'),name,meta);
     if(x.kind==='project'){const role=x.role||'unknown',known=role!=='unknown';meta.append(n('span',known?'mix-wait':'mix-visibility',role==='public-fork'?t('Public fork'):role==='installed-private'?t('Installed private project'):role==='private'?t('Private project'):role==='unknown'?t('Visibility unknown'):role));}
     const deps=model.edges.filter(e=>e.from===x.id&&!e.completed);if(deps.length)meta.append(n('span','mix-wait',t('Waits for {name}',{name:deps.map(e=>label(byId.get(e.to))).join(', ')})));
+    if(x.kind==='project')for(const [to,tasks] of projectWaits(x))meta.append(n('span','mix-wait',t(tasks.size===1?'1 task waits for “{name}”':'{count} tasks wait for “{name}”',{count:tasks.size,name:label(to)})));
     const detail=b('⋯',()=>openNode(x,detail),'mix-pause');detail.setAttribute('aria-label',t('Details of {name}',{name:label(x)}));
     add(row,info,priority(x),pauseButton(x),detail);row.setAttribute('data-group-action','');wireEvents(row,x.id);return row;
   }
