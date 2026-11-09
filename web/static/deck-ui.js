@@ -129,9 +129,10 @@ window.createDeckUI = function (host) {
       const requests=new Map((source.snapshot?.requests||[]).map(r=>[r.id,r]));
       for(const x of nodes.filter(x=>x.home===source.home&&x.kind==='task')){const r=x.request||x.raw?.request||x.card?.request;if(r?.id&&!requests.has(r.id))requests.set(r.id,r);}
       for(const r of requests.values()){
-        const id=keyOf(source.home,'req:'+r.id),project=typeof r.project==='object'?r.project?.id:r.project;
+        // Firstmate's project_key names the shown group, which may be a logical subproject root.
+        const id=keyOf(source.home,'req:'+r.id),project=r.project_key||(typeof r.project==='object'?r.project?.id:r.project);
         const members=nodes.filter(x=>x.home===source.home&&x.kind==='task'&&((x.request||x.raw?.request||x.card?.request)?.id===r.id||r.tasks?.includes(x.owner_id)));
-        nodes.push({...r,id,owner_id:r.scope||'req:'+r.id,order_id:r.key||'request:'+r.id,scope:r.scope||'req:'+r.id,kind:'request',title:r.label,home:source.home,source,rev:source.snapshot.rev,parent:project?keyOf(source.home,project.startsWith('project:')?project:'project:'+project):members[0]?.parent||'',updated_at:r.updated_at,pause:{own:!!r.pause,can_resume:!!r.pause,can_pause:!r.pause,inherited:[],...source.snapshot.pause_controls?.find(p=>p.scope===(r.scope||'req:'+r.id))},manual:[...requests.keys()].indexOf(r.id)});
+        nodes.push({...r,id,owner_id:r.scope||'req:'+r.id,order_id:r.key||'request:'+r.id,scope:r.scope||'req:'+r.id,kind:'request',title:r.label,home:source.home,source,rev:source.snapshot.rev,parent:project?keyOf(source.home,/^(sub)?project:/.test(project)?project:'project:'+project):members[0]?.parent||'',updated_at:r.updated_at,pause:{own:!!r.pause,can_resume:!!r.pause,can_pause:!r.pause,inherited:[],...source.snapshot.pause_controls?.find(p=>p.scope===(r.scope||'req:'+r.id))},manual:[...requests.keys()].indexOf(r.id)});
         for(const x of members)x.parent=id;
       }
     }
