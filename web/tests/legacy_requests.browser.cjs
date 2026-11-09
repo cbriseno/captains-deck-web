@@ -37,7 +37,7 @@ test('legacy project groups retain all tasks, attention and recorded activity be
     const legacy = rows({count:1,text:'Agrupado por proyecto'});
     assert.match(legacy[0].title,/Deck privado/);
     assert.match(legacy[0].meta,/2 de 7 tareas hechas/); // Captain questions stay in Needs you and do not count as work.
-    assert.match(legacy[0].meta,/Te necesita · 1/);
+    assert.match(legacy[0].meta,/Te necesita(?! · )/); // One call reads «Te necesita», as in the approved demo.
     assert.ok(legacy[0].event.epoch>0);
     const file=path.join(proof,'home/work-snapshot.json'), snapshot=JSON.parse(fs.readFileSync(file));
     snapshot.requests=[{id:'delivery',label:'Recorded request',project:'project:deck',tasks:['task:web','task:next']}];
