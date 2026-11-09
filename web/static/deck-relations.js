@@ -202,7 +202,7 @@
   window.routeDeckRelations = function ({edges, members, focus, root, find, label, t, motion}) {
     const doc = root.ownerDocument;
     root.querySelectorAll('svg.deck-routed-links,.deck-route-status').forEach(el => el.remove());
-    if (motion?.animating || window.matchMedia('(max-width:640px)').matches) return;
+    if (motion?.animating) return;
     const board = root.querySelector('#board'); if (!board) return;
     const rr = root.getBoundingClientRect();
     // Absolute SVG coordinates start at the root's padding edge, including its own scroll offset.

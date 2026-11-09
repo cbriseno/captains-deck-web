@@ -1147,5 +1147,11 @@
   "Firstmate will handle it later.": "Firstmate will handle it later.",
   "From {from} to {to}: {effect}": "From {from} to {to}: {effect}",
   "1 request": "1 request",
-  "{count} requests": "{count} requests"
+  "{count} requests": "{count} requests",
+  "Open agent chat": "Open agent chat",
+  "Ask for an explanation": "Ask for an explanation",
+  "Change priority…": "Change priority…",
+  "Ask to remove it…": "Ask to remove it…",
+  "Copy {id}": "Copy {id}",
+  "View relationships": "View relationships"
 }

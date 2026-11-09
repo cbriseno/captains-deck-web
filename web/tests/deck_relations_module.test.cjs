@@ -141,12 +141,12 @@ test('perpendicular routes have explicit crossing gaps and labels stay on top', 
   const svg = f.descendants(f.root).find(el => el.tagName === 'svg'); assert.equal(svg.children.at(-1).tagName, 'text');
 });
 
-test('phone and motion suppress SVG; hidden, self and absent endpoints do not invent routes', () => {
+test('phone draws as the approved demo; motion suppresses SVG; hidden, self and absent endpoints do not invent routes', () => {
   const f = fixture([['a', 40, 120, 170, 90], ['b', 550, 260, 170, 90]]);
   const edges = [edge('a', 'b')]; f.draw({edges});
-  f.state.phone = true; assert.equal(f.draw({edges}), undefined);
-  assert.equal(f.descendants(f.root).filter(el => el.tagName === 'svg').length, 0);
+  f.state.phone = true; assert.equal(f.draw({edges}).routed, 1);
   f.state.phone = false; assert.equal(f.draw({edges, motion: {animating: true}}), undefined);
+  assert.equal(f.descendants(f.root).filter(el => el.tagName === 'svg').length, 0);
   f.nodes.get('b').hidden = true;
   const result = f.draw({edges: [...edges, edge('a', 'missing'), edge('a', 'a')]});
   assert.equal(result.visibleRoutes, 0); assert.equal(f.descendants(f.root).filter(el => el.tagName === 'svg').length, 0);
@@ -188,7 +188,7 @@ const loopbackAddress = Object.values(require('node:os').networkInterfaces()).fl
 const cli = process.env.CD_TEST_BROWSER || 'chrome-devtools-axi';
 const browserAvailable = spawnSync(cli, ['--version'], {encoding: 'utf8', timeout: 5000}).status === 0;
 
-test('real browser: SVG endpoints align after scroll, resize and card expansion; phone creates no SVG', {skip: !browserAvailable, timeout: 90000}, async () => {
+test('real browser: SVG endpoints align after scroll, resize and card expansion; phone draws too', {skip: !browserAvailable, timeout: 90000}, async () => {
   const html = `<!doctype html><meta charset="utf-8"><style>
     body{margin:0;min-height:1800px;padding-top:100px;background:#fafafa}
     #workspace{position:relative;box-sizing:border-box;width:1000px;height:500px;border:3px solid #aaa;padding:12px;overflow:auto;margin-left:30px}
@@ -260,7 +260,7 @@ test('real browser: SVG endpoints align after scroll, resize and card expansion;
     }`);
     assert.equal(headerCheck.routed,1);assert.equal(headerCheck.unrouted,0);assert.ok(Math.abs(headerCheck.port.x-headerCheck.expected)<.2,'header port uses the union of its visible overflowing parts');
     await run('resize', '390', '844');
-    assert.equal(await evaluate(`()=>{draw();return document.querySelectorAll('svg.links').length;}`), 0);
+    assert.equal(await evaluate(`()=>{draw();return document.querySelectorAll('svg.links').length;}`), 1);
     if (process.env.CD_TEST_EVIDENCE) {
       fs.mkdirSync(process.env.CD_TEST_EVIDENCE, {recursive: true});
       fs.writeFileSync(path.join(process.env.CD_TEST_EVIDENCE, 'relations-browser-checks.json'), JSON.stringify(checks, null, 2));

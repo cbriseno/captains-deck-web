@@ -496,14 +496,15 @@ window.createDeckUI = function (host) {
   }
   const actionWhere=c=>c.action?.where==='chat'?t('Act in the chat with {name}.',{name:c.owner}):t('Action instructions need confirmation.');
   // «Te necesita» cards follow the approved v11b demo: kind line (icon, type, ID, encargo, «…» menu), title, context, actions.
-  const CARD_ICONS={ask:['M7.9 20A9 9 0 1 0 4 16.1L2 22Z','M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3','M12 17h.01'],ext:['M15 3h6v6','M10 14 21 3','M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],file:['M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z','M14 2v4a2 2 0 0 0 2 2h4','M16 13H8','M16 17H8'],check:['M20 6 9 17l-5-5'],chevronDown:['m6 9 6 6 6-6'],more:['M5 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0','M10.8 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0','M16.6 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0']};
+  const CARD_ICONS={ask:['M7.9 20A9 9 0 1 0 4 16.1L2 22Z','M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3','M12 17h.01'],ext:['M15 3h6v6','M10 14 21 3','M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],file:['M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z','M14 2v4a2 2 0 0 0 2 2h4','M16 13H8','M16 17H8'],check:['M20 6 9 17l-5-5'],chevronDown:['m6 9 6 6 6-6'],copy:['M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z','M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2'],link:['M9 17H7A5 5 0 0 1 7 7h2','M15 7h2a5 5 0 1 1 0 10h-2','M8 12h8'],sort:['m21 16-4 4-4-4','M17 20V4','m3 8 4-4 4 4','M7 4v16'],trash:['M3 6h18','M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6','M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'],help:['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z','M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3','M12 17h.01'],chat:['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],more:['M5 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0','M10.8 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0','M16.6 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0']};
   function cardIcon(name){const ns='http://www.w3.org/2000/svg',s=document.createElementNS(ns,'svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','ci');s.setAttribute('aria-hidden','true');for(const d of CARD_ICONS[name]){const p=document.createElementNS(ns,'path');p.setAttribute('d',d);s.append(p);}return s;}
   const withCardIcon=(el,name)=>{el.prepend(cardIcon(name));return el;};
   // Short inline ID («T-BB») that still copies on click.
   function inlineId(x){const badge=idBadge(x);if(badge.tagName==='BUTTON'){const id=badge.textContent.slice(4);badge.replaceChildren(n('span','sr-only','ID: '),id);}return badge;}
   // «…» menu: Copy ID first, then the given items.
+  const menuItem=(icon,text,fn,cls='')=>add(b('',fn,'more '+cls),cardIcon(icon),n('span','',text));
   function moreMenu(x,badge,items){
-    const menu=n('div','card-menu');menu.hidden=true;menu.setAttribute('role','menu');menu.append(n('div','card-menu-h',label(x)),...[badge.tagName==='BUTTON'&&b(t('Copy ID'),()=>badge.click(),'more'),...items].filter(Boolean));
+    const menu=n('div','card-menu');menu.hidden=true;menu.setAttribute('role','menu');menu.append(n('div','card-menu-h',label(x)),...[badge.tagName==='BUTTON'&&menuItem('copy',t('Copy {id}',{id:objectId(x)}),()=>badge.click()),...items].filter(Boolean));
     for(const item of menu.querySelectorAll('button')){item.setAttribute('role','menuitem');item.addEventListener('click',()=>{menu.hidden=true;open.setAttribute('aria-expanded','false');});}
     const open=b('',e=>{e.stopPropagation();const show=menu.hidden;document.querySelectorAll('.card-menu:not([hidden])').forEach(m=>m.hidden=true);menu.hidden=!show;open.setAttribute('aria-expanded',String(show));},'card-menu-btn');
     open.append(cardIcon('more'));open.setAttribute('aria-label',t('More actions'));open.title=t('More actions');open.setAttribute('aria-haspopup','menu');open.setAttribute('aria-expanded','false');
@@ -528,7 +529,14 @@ window.createDeckUI = function (host) {
     else{sub.textContent=pauseText(x)||(x.state==='active'&&text)||waitingText(x);if(questions().some(c=>questionNode(c)?.id===x.id))sub.append(n('span','has-q',t('Has a question for you')));}
     const ctl=n('div','card-ctl rctl');if(x.state==='active')ctl.append(progress(x));if(x.state!=='done')ctl.append(pauseButton(x));
     const chain=new Set(ancestors(x).map(y=>y.id)),related=relationshipEdges().some(e=>chain.has(e.from)||e.to===x.id);
-    add(row,n('span','dot'),add(n('div','card-face rmain'),line,sub.childNodes.length?sub:null),ctl,...moreMenu(x,badge,[related&&b(t('View recorded relationships'),()=>showRelations(x),'more')]),add(n('div','card-more'),n('div','card-more-inner')));
+    // As the demo's menu: each entry only when its data or capability exists.
+    const chat=x.card?.herdr_url,inDetail=then=>async()=>{if(!(ui.selected===x.id&&detailOpen()))await openNode(x,face);if(ui.selected===x.id&&detailOpen())then($('detail-content'));};
+    const items=[chat&&menuItem('chat',t('Open agent chat'),()=>window.open(chat,'_blank','noopener')),
+      x.state==='done'&&x.home&&menuItem('help',t('Ask for an explanation'),inDetail(()=>$('explain-request')?.click())),
+      x.state!=='done'&&can(x,'priority')&&menuItem('sort',t('Change priority…'),inDetail(c=>c.querySelector('select[name=priority]')?.focus())),
+      related&&menuItem('link',t('View relationships'),()=>showRelations(x)),
+      can(x,'scope-removal')&&n('hr'),can(x,'scope-removal')&&menuItem('trash',t('Ask to remove it…'),inDetail(c=>c.querySelector('textarea[name=removal-reason]')?.focus()),'danger')];
+    add(row,n('span','dot'),add(n('div','card-face rmain'),line,sub.childNodes.length?sub:null),ctl,...moreMenu(x,badge,items),add(n('div','card-more'),n('div','card-more-inner')));
     const saved=host.answerTools?.summary(x,()=>openNode(x,face));if(saved)row.append(saved);
     wireEvents(row,x.id);return row;
   }
@@ -946,7 +954,7 @@ window.createDeckUI = function (host) {
     for(const el of document.querySelectorAll('[data-node]')){delete el.dataset.link;delete el.dataset.dim;if(focus&&edges.length){if(related.has(el.dataset.node)||[...anchors].some(anchor=>el.contains(anchor))){el.dataset.link='true';const edge=edges.find(e=>e.from===el.dataset.node||e.to===el.dataset.node);if(edge&&!members.has(el.dataset.node)){const text=edge.question?t(edge.from===el.dataset.node?'Question from this task':'Task asking this question'):edge.completed?t(edge.to===el.dataset.node?'Already released this':'Released by this'):t(edge.to===el.dataset.node?'Blocks this':'Waits for this');const badge=el.querySelector('.node-id');if(badge){badge.classList.add('relation-id');badge.append(n('span','relation-role',text));}}}else if(ui.focus)el.dataset.dim='true';}}
     window.DeckTrace?.focus?.(focus.startsWith('question:')&&!!document.querySelector('#board .task-card[data-dim]'));
     $('connector-key').hidden=!edges.length;$('connector-key').replaceChildren(...[[t('Blocks this'),'k-before',edges.some(e=>!e.question&&!e.completed&&members.has(e.from))],[t('Waits for this'),'k-after',edges.some(e=>!e.question&&!e.completed&&!members.has(e.from))],[t('Question from this task'),'k-ask',edges.some(e=>e.question)],[t('Already released this'),'k-freed',edges.some(e=>!e.question&&e.completed)]].filter(([, ,used])=>used).map(([s,c])=>n('span',c,'— '+s)));
-    document.querySelector('svg.links')?.remove();if(!edges.length||matchMedia('(max-width:640px)').matches){return;}
+    document.querySelector('svg.links')?.remove();if(!edges.length)return;
     const root=$('workspace'),find=findRelationNode;
     window.routeDeckRelations({edges,members,focus,root,find,label:id=>id.startsWith('question:')?(questions().find(c=>'question:'+c.key===id)?.question||questions().find(c=>'question:'+c.key===id)?.title||t('Decision pending')):label(byId.get(id)),t,motion});
   }
