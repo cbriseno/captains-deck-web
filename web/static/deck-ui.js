@@ -608,7 +608,7 @@ window.createDeckUI = function (host) {
       wrap.addEventListener('dragover',e=>{if(ui.drag&&ui.drag!==r.id)e.preventDefault();});wrap.addEventListener('drop',e=>{e.preventDefault();const x=byId.get(ui.drag);ui.drag=null;if(x?.home===r.home&&x.id!==r.id)preview(x,{action:'move',target:r.order_id,position:'before'});});
     }
     if(opened){
-      const body=n('div','request-tasks'),done=work.filter(x=>x.state==='done'&&(x.outcome||x.raw?.outcome||x.card?.outcome)?.role==='step'&&visible(x)),rank={active:0,stopping:1,unknown:2,ready:3,waiting:4,paused:5,done:6};
+      const body=n('div','request-tasks'),done=work.filter(x=>x.state==='done'&&!['final','partial'].includes((x.outcome||x.raw?.outcome||x.card?.outcome)?.role)&&visible(x)),rank={active:0,stopping:1,unknown:2,ready:3,waiting:4,paused:5,done:6};
       body.append(...work.filter(x=>!done.includes(x)&&visible(x)).sort((a,b)=>rank[a.state]-rank[b.state]).map(x=>taskCard(x)));
       if(done.length){const show=ui.steps.has(r.id),fold=b(t(show?'Hide {count} finished tasks':'View {count} finished tasks',{count:done.length}),()=>{show?ui.steps.delete(r.id):ui.steps.add(r.id);render(true,'filter');},'more');fold.setAttribute('aria-expanded',String(show));body.append(structural(fold));if(show)body.append(...done.map(x=>taskCard(x)));}
       if(!body.children.length)body.append(n('p','meta',t('What remains is in Needs you.')));wrap.append(body);
