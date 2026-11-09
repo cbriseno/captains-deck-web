@@ -174,18 +174,10 @@ def project_snapshot(raw):
             'crew': raw.get('crew'), 'yields': raw.get('yields'), 'events': raw.get('events', [])}
 
 
-# Firstmate's readers take seconds of CPU; a look at what they read takes
-# milliseconds. They read again only when that changed, at most every CHANGE_GAP
-# seconds, and every FULL_READ seconds for what files don't show (a stopped worker).
-CHANGE_GAP, FULL_READ = 5.0, 300.0
-
-
 class DeckControls:
-    def __init__(self, child_env, mark=lambda home: None, log=lambda *args, **fields: None):
-        # mark(home) changes when Firstmate's state does; None means unknown.
-        self.child_env, self.mark, self.log = child_env, mark, log
+    def __init__(self, child_env):
+        self.child_env = child_env
         self.cache = {}
-        self.marks = {}
         self.lock = threading.Lock()
 
     def invoke(self, home, command, payload=None):
@@ -201,7 +193,7 @@ class DeckControls:
         try:
             result = subprocess.run(shell_command(script, *args),
                                     input=json.dumps(payload, ensure_ascii=False) if payload is not None else None,
-                                    env=self.child_env(home), capture_output=True, text=True, timeout=60 if command == 'snapshot' else 8)
+                                    env=self.child_env(home), capture_output=True, text=True, timeout=120 if command == 'bootstrap' else 60 if command == 'snapshot' else 8)
         except subprocess.TimeoutExpired as exc:
             raise ControlError('Firstmate took too long.', 503, 'timeout') from exc
         except (OSError, subprocess.SubprocessError) as exc:
@@ -213,7 +205,7 @@ class DeckControls:
                 raise ControlError('Firstmate is busy.', 503, 'busy')
             if 'no such file' in detail or 'not found' in detail:
                 raise ControlError('A Firstmate source is missing.', 503, 'missing-source')
-        if len(result.stdout) > 2 * 1024 * 1024:
+        if len(result.stdout) > (32 if command == 'bootstrap' else 2) * 1024 * 1024:
             raise ControlError('Firstmate returned an oversized Deck response.', 502, 'invalid-response')
         try:
             data = json.loads(result.stdout)
@@ -235,46 +227,16 @@ class DeckControls:
         return self.cache.get(home.path, (0, {}))[1]
 
     def current(self, home):
-        """The last snapshot at once, read again in the background when due;
-        only a home never read waits for its first read."""
-        if home.path not in self.cache:
-            return self.source(home)
-        if not self.lock.locked():
-            threading.Thread(target=self.source, args=(home,), daemon=True).start()
         return self.peek(home)
 
-    def source(self, home):
-        with self.lock:
-            stamp, data = self.cache.get(home.path, (0, None))
-            mark, age = self.mark(home), time.monotonic() - stamp
-            if data is not None and (age < 3 or mark is not None and age < (FULL_READ if mark == self.marks.get(home.path) else CHANGE_GAP)):
-                return data
-            started = time.monotonic()
-            try:
-                capabilities = self.invoke(home, 'capabilities')
-                if not isinstance(capabilities.get('ops'), list):
-                    raise ControlError('Firstmate capabilities are incomplete.', 503, 'invalid-response')
-                raw = self.invoke(home, 'snapshot')
-                if any(not isinstance(raw.get(key), list) for key in ('projects', 'subprojects', 'tasks', 'sigue')):
-                    raise ControlError('Firstmate snapshot is incomplete.', 503, 'invalid-response')
-                # Unsupported operations disable their controls individually.
-                actions = [action for action, op in ACTION_OP.items()
-                           if (SIGNAL_ACTIONS[action][1] in capabilities.get('signals', [])
-                               if action in ('cancel-pause', 'dequeue-resume') else op in capabilities['ops'])]
-                if 'outcome.review' in capabilities.get('outcome_controls', []):
-                    actions.append('review')
-                data = {'available': True, 'capabilities': dict(capabilities, actions=actions), 'snapshot': retain_unconfirmed(project_snapshot(raw), (data or {}).get('snapshot'), time.time())}
-                self.marks[home.path] = mark
-                self.log('snapshot', started)
-            except (KeyError, TypeError, ValueError, ControlError) as exc:
-                data = {'available': False, 'error': str(exc) if isinstance(exc, ControlError) else 'Firstmate snapshot is incomplete.', 'code': exc.code if isinstance(exc, ControlError) else 'invalid-response'}
-                previous = self.cache.get(home.path, (0, {}))[1]
-                if previous.get('snapshot'):
-                    data['snapshot'] = previous['snapshot']
-                    data['retained_at'] = previous.get('retained_at') or time.time()
-                self.log('snapshot', started, False, data['code'])
-            self.cache[home.path] = time.monotonic(), data
-            return data
+    source = current
+
+    @staticmethod
+    def actions(capabilities):
+        actions = [action for action, op in ACTION_OP.items()
+                   if (SIGNAL_ACTIONS[action][1] in capabilities.get('signals', [])
+                       if action in ('cancel-pause', 'dequeue-resume') else op in capabilities.get('ops', []))]
+        return actions + (['review'] if 'outcome.review' in capabilities.get('outcome_controls', []) else [])
 
     @staticmethod
     def operation(body, actor):

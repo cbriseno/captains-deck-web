@@ -1,7 +1,7 @@
 /* English source messages are catalog keys. Never translate task data. */
 'use strict';
 DeckI18n.ready.then(({t, locale, dateFmt, relative, eventTime, exactTime, untilText, ago, creationAge, shortDate}) => {
-/* User content is text only. Polling reads; only explicit buttons can POST. */
+/* User content is text only. Events update views; explicit buttons can POST. */
 const $ = (id) => document.getElementById(id);
 const S = { board: null, home: '', online: false, view: 'board', query: '',
   busy: false, csrf: '', modal: null, opener: null, generation: 0, historyGeneration: 0,
@@ -169,7 +169,7 @@ function sourceStatus() {
   const at = latest.length ? Math.min(...latest) : 0;
   const stale = at && Date.now() / 1000 - at > 360;
   const failed = S.board.error || sources.some(s => s.error) || (S.board.deck?.sources || []).some(s => !s.available);
-  const disconnected = !S.online || Date.now() - S.lastRead > 30000;
+  const disconnected = !S.online;
   // Freshness is one short phrase; the exact read time is on hover.
   const read = {label: 'Source read', epoch: S.lastRead / 1000};
   const retained = (S.board.deck?.sources || []).map(s => s.retained_at).filter(Boolean);
@@ -235,16 +235,15 @@ function supervisorText(s) {
   const unknown = !Number.isFinite(epoch) || ttl <= 0 || s.freshness === 'unknown' || epoch > Date.now() / 1000 + 5;
   return t('{declaration} {summary} {time} Current model activity is unknown.', {declaration: stale ? t("Firstmate’s last update expired.") : unknown ? t("Freshness unconfirmed; current activity is unknown.") : t("Declared ") + state + '.', summary: s.summary || t("No purpose recorded."), time: Number.isFinite(epoch) ? dateFmt.format(new Date(epoch * 1000)) + ' · ' + relative(epoch) + '.' : t("Time cannot be verified.")});
 }
-async function poll() {
-  if (document.hidden) return;
-  const selected = S.home, request = ++S.boardRequest;
-  try {
-    const data = await api('api/board' + (selected ? '?home=' + encodeURIComponent(selected) : ''));
-    // Polls and manual refreshes can overlap. A delayed reply must not replay
-    // an old wait/progress after a newer read has already reached the board.
-    // Accept an earlier reply while newer reads are pending, avoiding starvation.
-    if (selected !== S.home || request < S.boardApplied) return;
-    S.boardApplied = request;
+function mergeChange(before, patch) {
+  if (Object.hasOwn(patch, 'value')) return patch.value;
+  if (patch.fields) return Object.fromEntries(Object.entries(before).map(([key,value]) => [key,patch.fields[key] ? mergeChange(value,patch.fields[key]) : value]));
+  const key = row => row.id || row.key || ('task' in row ? (row.home || '')+':'+row.task : row.home);
+  const rows = new Map((before || []).map(row => [key(row), row]));
+  return patch.rows.map(id => patch.values[id] ? mergeChange(rows.get(id),patch.values[id]) : rows.get(id));
+}
+let stream;
+function applyBoard(data) {
     const firstRead = !S.csrf;
     S.online = true; S.lastRead = Date.now(); S.csrf = data.csrf;
     if (firstRead) window.DeckTrace?.use('open', 'page');
@@ -260,30 +259,42 @@ async function poll() {
     // A single coordinating space needs no picker.
     const lone = data.homes.length < 2 && !S.home;
     if ($('crew').parentElement && $('crew').parentElement.hidden !== lone) $('crew').parentElement.hidden = lone;
+    S.historyRows = data.history || [];
     // An automatic update changes cards in place: no entrance or move animation.
     renderBoard('refresh');
-    loadReceipts();
-    loadBoardHistory();
+    if (S.view === 'history') loadHistory();
     if (!S.linkHandled && data.homes.length && !data.loading) {
       S.linkHandled = true;
       const params = new URLSearchParams(location.search);
       if (params.has('task')) openStableLink(params);
     }
-    if (S.modal?.type === 'call' && !S.busy && !S.receipt) checkCall();
-    if (S.modal?.type === 'delivery' && S.modal.explanation) refreshExplanation();
-  } catch (err) {
-    if (selected !== S.home || request < S.boardApplied) return;
-    S.boardApplied = request;
-    S.online = false; sourceStatus(); if (!S.board) { $('board').replaceChildren(node('p', 'empty', t("Could not load the board. ") + err.message)); notice(t("No read has been confirmed. Try Refresh."), true); $('connection').textContent = t("Unavailable"); }
-  }
+    sourceStatus();
 }
-async function loadBoardHistory() {
-  if (S.historyReading || Date.now() - (S.historyFetchedAt || 0) < 15000) return;
-  const home = S.home; S.historyReading = true;
-  try { const data = await api('api/history?' + new URLSearchParams({home}));
-    if (home === S.home) { S.historyRows = data.records; S.historyFetchedAt = Date.now(); renderBoard('refresh'); }
-  } catch { /* Board keeps current deliveries; the full history view shows read errors. */ }
-  finally { S.historyReading = false; }
+async function poll() {
+  const selected = S.home, request = ++S.boardRequest;
+  stream?.close();
+  try {
+    const data = await api('/api/board' + (selected ? '?home=' + encodeURIComponent(selected) : ''));
+    if (selected !== S.home || request !== S.boardRequest) return;
+    applyBoard(data);
+    stream = new EventSource('/api/stream?' + new URLSearchParams({home:selected, cursor:data.cursor}));
+    stream.addEventListener('base', event => {
+      if (selected === S.home) applyBoard({...JSON.parse(event.data), csrf:S.csrf});
+    });
+    stream.addEventListener('change', event => {
+      if (selected === S.home) applyBoard({...mergeChange(S.board, JSON.parse(event.data)), csrf:S.csrf});
+    });
+    stream.addEventListener('heartbeat', () => {
+      S.lastRead = Date.now();
+      for (const source of S.board?.sources || []) if (!source.error) source.checked_at = Date.now()/1000;
+      sourceStatus();
+    });
+    stream.onopen = () => { S.online = true; sourceStatus(); };
+    stream.onerror = () => { S.online = false; sourceStatus(); };
+  } catch (err) {
+    S.online = false; sourceStatus();
+    if (!S.board) notice(t("No read has been confirmed. Try Refresh."), true);
+  }
 }
 function setView(view) {
   window.DeckTrace?.use('view', view);
@@ -300,7 +311,8 @@ async function loadHistory() {
   $('history-status').textContent = t("Searching…");
   try {
     const query = new URLSearchParams({ home: S.home, q: window.DeckAnonymize?.value($('history-search')) ?? $('history-search').value });
-    const data = await api('api/history?' + query);
+    const needle = (query.get('q') || '').toLocaleLowerCase();
+    const data = {records:(S.historyRows || []).filter(row => JSON.stringify(row).toLocaleLowerCase().includes(needle)), omitted:0};
     if (generation !== S.historyGeneration) return;
     const records=data.records.filter(row=>S.historyFilter!=='final'||row.outcome?.role==='final');
     // The count goes beside the filters, as in the approved v11b demo; screen readers hear the phrase.
@@ -515,20 +527,12 @@ function reportLink(link, key) {
 }
 // Card editors share the guarded ticket intake and its durable drafts.
 // The last reading of each inline question, so a refresh repaints it at its height.
-const inlineTickets=new Map();
 async function inlineAnswer(card, opener, container) {
   // Options and free answer stay on the card when it opens, as the demo; its detail follows them.
   const editor=node('div','inline-answer'),more=container.querySelector('.card-more');more?more.before(editor):container.append(editor);
   // The card's menu item is added once and answers through the newest reading.
   let answer=null,recheck=false;
-  const known=inlineTickets.get(card.key);
-  if(known)fill(known);
-  try {
-    const ticket=await api('api/ticket/'+encodeURIComponent(card.key));
-    inlineTickets.set(card.key,ticket);
-    if(!editor.isConnected||known&&JSON.stringify(known)===JSON.stringify(ticket))return;
-    editor.replaceChildren();fill(ticket);
-  }catch(error){editor.append(node('p','notice error',error.message));}
+  if(card.inline_call) fill({call:card.inline_call});
   function fill(ticket){
     if(ticket.answered||!ticket.call)return;
     const c=ticket.call,draft=readDraft(card.key),items=draft.attachments||[];
@@ -541,7 +545,7 @@ async function inlineAnswer(card, opener, container) {
       if(S.busy||!S.online||window.DeckAnonymize?.enabled||editor.querySelector('[data-uploading]'))return;
       store();await openTicket(card.key,opener);
       if(S.modal?.key!==card.key||S.modal?.type!=='call'||S.receipt)return;
-      if(S.modal.ticket.call.occurrence!==c.occurrence||S.modal.draftNeedsReview)return;
+      if((c.identity && S.modal.ticket.call.identity!==c.identity)||S.modal.draftNeedsReview)return;
       if(value)choose(value);else {S.modal.value='';saveDraft();submitAnswer();}
     };
     const choices=node('div','option-list');
@@ -871,12 +875,13 @@ $('history-search').addEventListener('input', () => { S.historyLimit = 40; clear
 window.addEventListener('offline', () => { S.online = false; sourceStatus(); });
 window.addEventListener('online', poll);
 matchMedia('(max-width: 639px)').addEventListener('change', renderBoard);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) poll(); });
-setInterval(poll, 4000); setInterval(() => { sourceStatus(); refreshTimes(); deckUI?.refreshAges(); }, 15000);
+window.addEventListener('pagehide', () => stream?.close());
+window.addEventListener('pageshow', event => { if (event.persisted) poll(); });
+setInterval(() => { sourceStatus(); refreshTimes(); deckUI?.refreshAges(); }, 15000);
 // Retire an old Deck push/offline worker. It must never intercept actions or
 // show stale API success; offline honesty is handled by the visible live view.
 if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(regs => { for (const reg of regs) if (reg.scope === new URL('./', location.href).href) reg.unregister(); }).catch(() => {});
-poll();
+poll(); loadReceipts();
 
 window.DeckTrace?.setSender((events,exporting)=>api('/api/diagnostics/trace',{events,exporting}));
 for (const [id,target] of [['board-search','board'],['history-search','history']]) {

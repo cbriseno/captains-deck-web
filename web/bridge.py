@@ -2,11 +2,12 @@
 """Dependency-free HTTP projection of the Deck's existing model.
 
 No backlog, supervisor, shell-command API, push sender or model calls.
-The single collector always reads All; selecting a crew never changes another
+The single event projection maintains All; selecting a crew never changes another
 browser's view. Mutations go only through the owning home's public intakes; the
 one message the bridge sends is the Deck's fixed pointer to a recorded answer.
 """
 from __future__ import annotations
+from datetime import datetime
 
 import argparse
 import copy
@@ -39,7 +40,8 @@ from presentation import USER_PATH_STARTS, URL_RE, card_field, drop_links, excer
 import flow_tui as fm  # noqa: E402
 from deck_platform import LOOPBACK, local_origin, endpoint_path, private_directory, safe_file_reads, shell_command
 
-from deck_control import CHANGE_GAP, FULL_READ, DeckControls, ControlError
+from deck_control import DeckControls, ControlError
+from event_projection import EventProjection, delta
 from relay_settings import RelaySettings
 import timeline
 from html import escape
@@ -370,44 +372,6 @@ def conversation_page(t, task, chat, locale="en"):
             f'<header><h1>{escape(task)}</h1><p>{escape(chat["harness"])} · {escape(t("{count} messages", count=len(chat["turns"])))}'
             f' · {escape(t("Tool calls are not shown."))}</p></header><main>{turns}</main></body></html>')
 
-def history_mark(home):
-    """The files Firstmate's delivery history reads, besides each task's
-    completion receipt; None when they can't be known."""
-    sources = backlog_sources(home)
-    if not sources:
-        return None
-    config, backlog, archive = sources
-    root = Path(home.path)
-    return (config, file_mark(root / backlog), file_mark(root / archive),
-            file_mark(endpoint_path(home.path, 'fm-delivery-history.sh')),
-            file_mark(endpoint_path(home.path, 'fm_delivery.py')))
-
-
-MARKS, MARKS_LOCK = {}, threading.Lock()
-
-
-def state_mark(home):
-    """What changes when Firstmate records anything the Deck shows: each task's
-    status and meta, and each entry of data/ (Firstmate replaces files, which
-    changes their folder). Read once per 2 s; None for a remote home."""
-    if fm.is_remote_home(home) or fm.is_aggregate_home(home):
-        return None
-    with MARKS_LOCK:
-        at, mark = MARKS.get(home.path, (0, None))
-        if time.monotonic() - at < 2:
-            return mark
-        entries = [file_mark(Path(home.path, '.tasks.toml'))]
-        for folder in ('state', 'data'):
-            try:
-                with os.scandir(Path(home.path, folder)) as listing:
-                    entries += sorted((x.name, file_mark(x.path)) for x in listing if not x.name.startswith('.')
-                                      and (folder == 'data' or x.name.endswith(('.status', '.meta'))))
-            except OSError:
-                entries.append((folder, None))
-        mark = digest(json.dumps(entries))
-        MARKS[home.path] = time.monotonic(), mark
-        return mark
-
 
 # Set by the managed launcher when stderr is its server.log; rotated like fm_diagnostics.
 LOG_PATH, LOG_LIMIT = None, 2 * 1024 * 1024
@@ -438,46 +402,17 @@ def changed_since(path, started):
     return mark is not None and mark[3] >= (started - 1) * 1e9
 
 
-class Collector(fm.Collector):
-    """Track source-read failures separately from cheap card repaint times."""
-    def __init__(self):
-        super().__init__(fm.ALL_CREW_LABEL)
-        self.source_errors = {}
-        # Per home: the state mark of the last read, and when it was last seen unchanged.
-        self.marks, self.checked = {}, {}
-
-    def _bearings_stale(self, home, now):
-        raw, received, path = self._raw.get(home.label, ({}, 0.0, ''))
-        mark = state_mark(home)
-        if self._force or not raw or path != home.path or mark is None:
-            return super()._bearings_stale(home, now)
-        if mark == self.marks.get(home.label):
-            self.checked[home.label] = time.time()
-            return now - received > FULL_READ
-        return now - received > CHANGE_GAP
-
-    def _load_bearings(self, home, now, agents, panes, homes):
-        stale = self._bearings_stale(home, now)
-        before = self._raw.get(home.label, ({}, 0, ''))[1]
-        mark, started = state_mark(home), time.monotonic()
-        result = super()._load_bearings(home, now, agents, panes, homes)
-        after = self._raw.get(home.label, ({}, 0, ''))[1]
-        if stale:
-            self.source_errors[home.label] = '' if after > before else 'Could not refresh Firstmate.'
-            log_read('bearings', started, after > before, 'no-reply')
-            if after > before:
-                self.marks[home.label] = mark
-        return result
-
-
 class Board:
     def __init__(self, data_dir, herdr_origin='', collector=None, language=None):
         self.i18n = Localization(language if language is not None else os.environ.get('CD_WEB_LANGUAGE', 'en'))
         self.t = self.i18n.t
-        self.collector = collector or Collector()
+        homes = fm.real_homes(collector.snapshot().homes) if collector else fm.real_homes(fm.discover_homes())
+        self.columns, self.home_identity = COLUMNS, home_id
+        self.endpoint = lambda home: endpoint_path(home.path, 'fm_work_projection.py')
+        self.projection = EventProjection(self, homes)
         self.data_dir = Path(data_dir).expanduser().absolute()
         self.herdr_origin = herdr_origin
-        self.deck_controls = DeckControls(self.child_env, state_mark, log_read)
+        self.deck_controls = DeckControls(self.child_env)
         self.answer_capabilities = {}
         self.answer_files = AnswerFiles(self, Refusal, fm, shell_command, endpoint_path, home_id)
         self.relay_settings = RelaySettings(self.child_env, os.environ.get('CD_WEB_EXTENSIONS_ROOT', ''),
@@ -487,9 +422,6 @@ class Board:
         self.history_lock = threading.Lock()
         self.history_cache = {}
         self.repo_cache = {}
-        # Last built history per home selection; reads serve it while one rebuild runs.
-        self.histories, self.history_rebuilding = {}, set()
-        self.history_build_lock = threading.Lock()
         # Firstmate's identity for a call is kept until its backlog row
         # changes; until then an open reads the row, and answering always asks
         # Firstmate again.
@@ -501,127 +433,61 @@ class Board:
         # The read-ahead keeps whether each home's intake takes web answers,
         # per install of its script; an answer always asks again.
         self.capabilities = {}
-        self.warming = threading.Event()
-        self.stopping = threading.Event()
 
     def event_json(self, event):
         return event_json(event, self.t)
 
     def start(self):
-        self.collector.start()
-        threading.Thread(target=self.warm_loop, daemon=True, name='deck-warm').start()
-        self.warming.set()
+        self.projection.start()
 
     def stop(self):
-        self.stopping.set()
-        self.warming.set()
-        self.collector.stop()
-
-    def warm_loop(self):
-        """Keep open calls and delivery history read ahead of the captain.
-
-        Every board read wakes it; it does work only for what changed, one
-        Firstmate call at a time.
-        """
-        while not self.stopping.is_set():
-            self.warming.wait()
-            self.warming.clear()
-            if self.stopping.is_set():
-                return
-            try:
-                self.prefetch()
-            except Exception:  # A failed read-ahead only means the next open asks Firstmate itself.
-                time.sleep(5)
-
-    def prefetch(self):
-        current, checked = set(), set()
-        for card in self.view_cards().get('captains_call', []):
-            if (getattr(card, 'call', None) or {}).get('kind') == 'action':
-                continue  # No answer capabilities/identity intake for a chat action.
-            try:
-                home = self.owner(card)
-            except Refusal:
-                continue
-            key = home_id(home), card.task
-            current.add(key)
-            if key[0] not in checked and not fm.is_remote_home(home):
-                checked.add(key[0])
-                mark = file_mark(endpoint_path(home.path, 'fm-captain-hold.sh'))
-                self.capabilities[key[0]] = mark, self.guarded_intake(home)
-            # A call Firstmate couldn't confirm is retried only once its row
-            # changes; opening it still asks Firstmate.
-            mark = None if fm.is_remote_home(home) else call_mark(home, card.task)
-            if not mark or self.warm_failed.get(key) == mark:
-                continue
-            try:
-                self.call_identity(home, card.task, confirm=True)
-            except Refusal:
-                pass
-        with self.identity_lock:
-            for key in (set(self.identities) | set(self.warm_failed)) - current:
-                self.identities.pop(key, None)
-                self.identity_gates.pop(key, None)
-                self.warm_failed.pop(key, None)
-        for home in self.homes():
-            if not fm.is_remote_home(home):
-                self.records(home, max_age=None)
+        self.projection.stop()
 
     def homes(self):
-        return fm.real_homes(self.collector.snapshot().homes)
-
-    def inputs(self):
-        """What a board is built from, cheaply compared: Firstmate's state and
-        the last reads of it."""
-        homes = self.homes()
-        return (tuple(state_mark(h) for h in homes), tuple(self.collector._raw.get(h.label, ({}, 0))[1] for h in homes),
-                tuple(id(self.deck_controls.peek(h)) for h in homes))
+        return self.projection.homes
 
     def health(self):
-        snap = self.collector.snapshot()
-        ready = bool(snap.collected_at)
-        return {'ok': ready and not snap.loading and not snap.error,
-                'mode': 'connected' if fm.real_homes(snap.homes) else 'standalone',
-                'collector_at': snap.collected_at, 'loading': bool(snap.loading),
-                'error': snap.error}
+        return dict(ok=not self.projection.loading and not self.projection.error,
+                    loading=self.projection.loading, error=self.projection.error,
+                    mode='connected' if self.homes() else 'standalone')
+
+    @staticmethod
+    def projected_time(value):
+        if not value or not value.get('value'):
+            return None
+        return dict(date=value['value']) if value.get('precision') == 'date' else dict(epoch=datetime.fromisoformat(value['value'].replace('Z', '+00:00')).timestamp())
+
+    def projected_card(self, source, item, human, bucket):
+        task, identity = item['task'], source['home']
+        owner = self.home(identity)
+        question = item.get('question') or {}
+        call = question.get('call') or {}
+        is_action = call.get('kind') == 'action'
+        row = self.projection.readers[identity]['model'].rows[task]
+        stamp = re.search(r'^Captain hold set: (\S+)', row.get('body') or '', re.M)
+        identity_value = stamp[1] + '#' + str(len(re.findall(r'^Resolution recorded by fm-(?:captain|decision)-hold\.', row.get('body') or '', re.M))) if stamp else ''
+        return dict(key=digest(identity, task, bucket)[:40], task=task,
+            title=item['title'], original_title=item['title'], bucket=bucket, home=identity,
+            owner=owner.label, request=item['request'], outcome=item['outcome'],
+            summary=human.get('summary') or '', project=project_tag(item['raw'].get('project')),
+            presentation=dict(status=human.get('card_status'), summary=human.get('summary')),
+            context=dict(phase='human' if question.get('open') else 'unknown'),
+            activity=dict(kind='unknown', agent='unknown'), dependencies=[], native=dict(unconfirmed=True),
+            time=self.projected_time(item['updated_at']), question=(question.get('call') or {}).get('question', ''),
+            answered=False, attention_kind=('action' if is_action else 'question') if question.get('open') else None,
+            action=dict(call, error='') if is_action else None,
+            inline_call=dict(options=[dict(o, value=o['id']) for o in call.get('options', [])],
+                identity=identity_value, recommend=call.get('recommended'), error='') if question.get('open') and not is_action else None,
+            report={}, supervisor={})
 
     def event_view(self, identity):
-        """Explicitly read published events, without a canonical snapshot."""
-        owner = self.home(identity)
-        if fm.is_remote_home(owner):
-            raise Refusal('This view requires a local owner.', 403)
-        try:
-            text = fm.delivery_read(owner.path, 'state/fleet-ledger.jsonl', fm.DELIVERY_INDEX_LIMIT)
-        except FileNotFoundError:
-            text = ''
-        calls, presentations, agents, tasks, messages = {}, {}, {}, {}, []
-        for line in text.splitlines(keepends=True):
-            if not line.endswith('\n'):
-                break
-            event = json.loads(line)
-            if event.get('home') != fm.delivery_home_identity(owner):
-                continue
-            name, task, value = event.get('event'), event.get('task'), event.get('value')
-            if name in ('call.opened', 'call.resolved'):
-                calls[(task, value['call']['hold_set'])] = dict(value, task=task,
-                    state='open' if name == 'call.opened' else 'resolved')
-            elif name == 'call.application':
-                key = (task, value['call']['hold_set'])
-                if key in calls:
-                    calls[key]['answer'] = value['answer']
-            elif name == 'primary.final':
-                messages.append(value)
-            elif name == 'agent.activity':
-                agents[task] = value
-            elif name == 'agent.retired':
-                if agents.get(task, {}).get('gen') == value['gen']:
-                    agents.pop(task, None)
-            elif name == 'task.changed':
-                tasks[task] = value['task']
-            elif name in ('task.presentation', 'task.review'):
-                presentations[task] = value
-        return dict(calls=list(calls.values()), presentations=presentations,
-                    primary_finals=messages, agents=agents, tasks=tasks,
-                    scope='Published events only; no canonical bootstrap or continuity guarantee.')
+        self.home(identity)
+        with self.projection.condition:
+            reader = self.projection.readers.get(identity)
+            model = reader['model'] if reader else None
+            return dict(calls=list(model.calls.values()) if model else [], presentations=model.presentations if model else {},
+                        primary_finals=model.messages if model else [], agents=model.activity if model else {},
+                        tasks=model.rows if model else {}, scope='Current in-memory event projection.')
 
     def home(self, identity):
         matches = [h for h in self.homes() if home_id(h) == identity]
@@ -657,7 +523,7 @@ class Board:
         an answer; the existing card builder and occurrence guard own content
         and submission. Never infer a question from blocked prose.
         """
-        snap = snap or self.collector.snapshot()
+        snap = snap or fm.Snapshot()
         homes = self.homes()
         sources = work_sources if work_sources is not None else [
             dict(self.deck_controls.peek(h), home=home_id(h))
@@ -705,27 +571,25 @@ class Board:
     def card(self, key):
         matches = [c for cards in self.view_cards().values() for c in cards
                    if self.key(c) == key]
+        if not matches:
+            for home in self.homes():
+                reader = self.projection.readers.get(home_id(home))
+                if not reader:
+                    continue
+                for row in reader['model'].rows.values():
+                    for bucket, collection in (('charted', 'gates'), ('underway', 'in_flight'), ('landed', 'landed')):
+                        if digest(home_id(home), row['id'], bucket)[:40] == key:
+                            entry = dict(row, name=row['title'], flow=dict(presentation=reader['model'].presentations[row['id']]['presentation']))
+                            built, _ = fm.make_cards(home, {collection:[entry]}, {}, {}, {}, homes=self.homes())
+                            matches.extend(built[bucket])
         if len(matches) != 1:
             raise Refusal('This task changed or is no longer in view. Refresh the board.', 404)
         return matches[0]
 
     def titles(self):
-        """Each task's card title on the board, by task id."""
-        cards = [c for cards in self.view_cards().values() for c in cards]
-        found = {}
-        for card in cards:
-            found.setdefault(card.task, card_title(card, {}, self.t))
-        # Delivery history already read ahead; never a new Firstmate call.
-        # An install row names its source task, so that one comes first.
-        rows = [row for rows, *_ in list(self.history_cache.values()) for row in rows
-                if isinstance(row, dict) and row.get('id')]
-        for row in sorted(rows, key=lambda row: bool(INSTALL_TITLE.fullmatch(str(row.get('title') or '').strip()))):
-            found.setdefault(row['id'], record_title(row, self.t, found))
-        for card in cards:
-            for dep in getattr(card, 'dependencies', []) or []:
-                if isinstance(dep, dict) and dep.get('id') and dep.get('title'):
-                    found.setdefault(dep['id'], readable_title(dep['title'], found, self.t))
-        return found
+        with self.projection.condition:
+            return {task: row['title'] for reader in self.projection.readers.values()
+                    for task, row in reader['model'].rows.items()}
 
     def card_json(self, card, titles=None, saved_answers=None):
         owner = None
@@ -816,52 +680,7 @@ class Board:
                 'agent': fm.UI.card_agent_line(card, self.t), 'herdr_url': link}
 
     def board(self, selected=''):
-        snap = self.collector.snapshot()
-        chosen = self.home(selected) if selected else None
-        homes = self.homes()
-        self.warming.set()
-        titles = self.titles()
-        local = [h for h in homes if not fm.is_remote_home(h)]
-        work_sources = [dict(self.deck_controls.current(h), home=home_id(h)) for h in local]
-        for h, source in zip(local, work_sources):
-            self.answer_files.label_answers(h, source.get('snapshot', {}).get('nodes', []))
-        view = self.view_cards(snap, work_sources)
-        saved_answers = self.receipts(None, limit=1000)
-        built = {}
-        for key, _ in COLUMNS:
-            cards = [self.card_json(c, titles, saved_answers) for c in view.get(key, [])]
-            built[key] = [c for c in cards if c['home'] == selected] if chosen else cards
-        # Native/worker coordination never manufactures a captain question.
-        # view_cards joins the authoritative dedicated question records.
-        columns = [{'id': key, 'title': self.t(title), 'cards': built[key]} for key, title in COLUMNS]
-        # This sentinel is an owner integrity gate, never a backlog task. Keep
-        # the failure visible without inventing an identity or task controls.
-        diagnostics = []
-        for column in columns:
-            diagnostics.extend({'kind': 'main-inventory', 'home': c['home'],
-                                'owner': c['owner'], 'message': c['title'],
-                                'detail': c['native']['detail']}
-                               for c in column['cards'] if c['task'] == '(main-inventory)')
-            column['cards'] = [c for c in column['cards'] if c['task'] != '(main-inventory)']
-        sources = []
-        for h in homes:
-            if chosen and home_id(h) != selected:
-                continue
-            raw, received, _ = self.collector._raw.get(h.label, ({}, 0, ''))
-            error = getattr(self.collector, 'source_errors', {}).get(h.label, '')
-            sources.append({'home': home_id(h), 'label': h.label,
-                            'received_at': received, 'generated': raw.get('generated', ''),
-                            # Last time the Deck confirmed this read is still current.
-                            'checked_at': max(received, getattr(self.collector, 'checked', {}).get(h.label, 0)),
-                            'error': self.t(error), 'remote': fm.is_remote_home(h),
-                            'supervisor': raw.get('supervisor') or {}})
-        return {'seq': snap.seq, 'collected_at': snap.collected_at,
-                'server_at': time.time(), 'loading': bool(snap.loading),
-                'error': self.t(snap.error), 'sources': sources,
-                'homes': [{'id': home_id(h), 'label': h.label} for h in homes],
-                'columns': columns, 'diagnostics': diagnostics, 'home': selected,
-                'deck': {'sources': [source for source in work_sources if not selected or source['home'] == selected]},
-                'source_ttl': fm._bearings_ttl()}
+        return self.projection.base(selected)
 
     def receipts(self, actor, limit=10):
         directory = self.data_dir / 'answers'
@@ -959,27 +778,14 @@ class Board:
                 'message': self.t(message), 'current_key': current_key,
                 'receipts': [r for r in self.receipts(actor) if r.get('home') == identity and r.get('task') == task]}
 
-    def records(self, home, task='', force=False, max_age=CHANGE_GAP):
-        """Delivery rows, read again when Firstmate's records changed.
-
-        The history list also reads again when Firstmate's state changed, at
-        most every max_age seconds, and every FULL_READ seconds. Opening one
-        delivery reads again only when its sources or its completion receipt
-        changed, or always when the sources can't be known.
-        """
-        identity = home_id(home)
-        with self.history_lock:
-            rows, note, started, mark, seen = self.history_cache.get(identity, ([], '', 0, None, None))
-            current, state = history_mark(home), state_mark(home)
-            age = time.time() - started
-            if (force or not started or current != mark or (task and current is None)
-                    or (max_age is not None and (age > FULL_READ or (state != seen and age > max_age)))
-                    or (task and changed_since(Path(home.path, 'data', task, 'completion.json'), started))):
-                started, clock = time.time(), time.monotonic()
-                rows, note, complete = fm.delivery_records(home, translate=self.t)
-                log_read('history', clock, bool(rows) or complete, 'incomplete')
-                self.history_cache[identity] = rows, note, started, current, state
-            return rows, note
+    def records(self, home, task='', force=False, max_age=None):
+        with self.projection.condition:
+            reader = self.projection.readers.get(home_id(home))
+            if not reader:
+                return [], ''
+            model = reader['model']
+            rows = [r for i,r in model.rows.items() if r['state'] == 'done' or model.facts['receipts'].get(i)]
+            return copy.deepcopy(rows), self.t('Includes everything Firstmate still keeps, not just recent ones.')
 
     def delivered_project(self, home, rows, record, human):
         """A delivery's tag: the project it declared, else its repository's.
@@ -1015,71 +821,10 @@ class Board:
         return project_tag(names.get(repo, repo))
 
     def history(self, selected='', query=''):
-        """The last history built for this selection at once; only a read with
-        none waits for a build. A search filters that history."""
-        with self.history_lock:
-            built = self.histories.get(selected)
-            rebuild = built is not None and selected not in self.history_rebuilding
-            if rebuild:
-                self.history_rebuilding.add(selected)
-        if rebuild:
-            threading.Thread(target=self.rebuild_history, args=(selected,), daemon=True).start()
-        if built is None:
-            with self.history_build_lock:
-                # A read that waited here takes the history the previous one built.
-                with self.history_lock:
-                    built = self.histories.get(selected)
-                if built is None:
-                    built = self.build_history(selected)
-        rows, details = built
-        result = [row for row, text in rows if query.casefold() in text]
-        return {'records': result[:1000], 'omitted': max(0, len(result) - 1000),
-                'details': details, 'scope': self.t('Includes everything Firstmate still keeps, not just recent ones.')}
-
-    def rebuild_history(self, selected):
-        try:
-            with self.history_build_lock:
-                self.build_history(selected)
-        except Exception:  # A failed rebuild keeps serving the last history.
-            pass
-        finally:
-            with self.history_lock:
-                self.history_rebuilding.discard(selected)
-
-    def build_history(self, selected):
-        """Build and keep one selection's history with each row's search text;
-        the caller holds history_build_lock."""
-        # Before the collector loads there are no homes yet; that empty history is never kept.
-        loading = self.collector.snapshot().loading
-        homes = [self.home(selected)] if selected else self.homes()
-        result, details = [], []
-        listed = [(home, *self.records(home)) for home in homes]
-        titles = self.titles()
-        for home, rows, note in listed:
-            details.append({'home': home.label, 'source': note})
-            # The short ID the board shows (T-…), from the board's last Firstmate snapshot, even a stale one.
-            source = self.deck_controls.peek(home) if not fm.is_remote_home(home) else {}
-            aliases = {x.get('task'): x.get('alias') for x in (source.get('snapshot') or {}).get('nodes', [])
-                       if x.get('kind') == 'task' and x.get('alias')}
-            for row in rows:
-                human = record_presentation(home, row)
-                project = self.delivered_project(home, rows, row, human)
-                title = card_field(human.get('card_title'), 'card_title') or record_title(row, self.t, titles)
-                text = ' '.join([str(row.get(k) or '') for k in ('id', 'title', 'body', 'artifact')]
-                                + [title, aliases.get(row['id'], ''), project['label'] if project else '', (human.get('request') or {}).get('label', '')]).casefold()
-                event = fm.producer_card_time(row.get('card_time'), 'landed',
-                                              fm.CardTime('Delivered', row.get('closed')))
-                result.append(({'task': row['id'], 'title': title, 'alias': aliases.get(row['id']),
-                               'home': home_id(home), 'owner': home.label, 'project': project,
-                               'request': human.get('request'), 'outcome': human.get('outcome'),
-                               'summary': excerpt(human.get('summary') or ''),
-                               'time': self.event_json(event), 'closed': row.get('closed') or ''}, text))
-        # The order follows the time each row shows, not the raw closing text.
-        result.sort(key=lambda item: (newest_first(item[0]['time']), item[0]['task'], item[0]['home']), reverse=True)
-        if not loading:
-            with self.history_lock:
-                self.histories[selected] = result, details
-        return result, details
+        rows = self.projection.base(selected)['history']
+        result = [r for r in rows if query.casefold() in json.dumps(r, ensure_ascii=False).casefold()]
+        return dict(records=result[:1000], omitted=max(0,len(result)-1000), details=[],
+                    scope=self.t('Includes everything Firstmate still keeps, not just recent ones.'))
 
     def delivery(self, identity, task):
         home = self.home(identity)
@@ -1210,7 +955,8 @@ class Board:
 
     def content(self, card, home):
         # The confirmed owning home is the active context, never aggregate All.
-        snap = self.collector.snapshot()
+        snap = fm.Snapshot()
+        snap.homes = self.homes()
         content = fm.decision_card_content(card, snap.homes, home, translate=self.t, bearings=snap.bearings)
         if os.path.realpath(content['home_path']) != fm.delivery_home_identity(home):
             raise Refusal('This question belongs to a different crew than expected. Refresh the board.')
@@ -1438,7 +1184,7 @@ class Board:
                         receipt['primary'] = primary
                 # Success is durable intake acceptance, never native execution,
                 # wake acknowledgement or consumption by the owning agent.
-                self.collector.refresh_now()
+                pass  # The canonical owner publishes the answer event.
             except (OSError, subprocess.SubprocessError, Refusal) as exc:
                 if receipt.get('saved') is True:
                     receipt['detail'] = str(exc)
@@ -1459,7 +1205,7 @@ class Board:
         """
         if (card.owner or '(main)') != '(main)':
             return ''
-        _, pane = fm.supervisor_target(home, self.homes(), self.collector.snapshot().agents)
+        _, pane = fm.supervisor_target(home, self.homes(), {})
         if not pane:
             return 'unreachable'
         sent, _ = fm.send_to_firstmate(pane, PRIMARY_WAKE.format(task=card.task))
@@ -1571,80 +1317,11 @@ class Server(ThreadingHTTPServer):
         super().__init__(address, Handler)
         self.board, self.security = board, security
         self.i18n = board.i18n if board is not None else Localization('en')
-        # Last built board per home selection; reads serve it while one rebuild runs.
-        # A POST changes what the board shows, so it drops them (generation).
-        self.boards, self.rebuilding, self.generation = {}, set(), 0
-        # What each board was built from, and when: a read rebuilds only when that
-        # changed, or every 15 s for live agent activity.
-        self.built = {}
-        self.boards_lock = threading.Lock()
-
     def last_board(self, selected):
-        """The last built board at once; only a read with none waits for a build."""
-        current = self.board.inputs() if hasattr(self.board, 'inputs') else None
-        with self.boards_lock:
-            data = self.boards.get(selected)
-            inputs, at = self.built.get(selected, (None, 0))
-            rebuild = (data is not None and selected not in self.rebuilding
-                       and (current is None or current != inputs or time.monotonic() - at > 15))
-            if rebuild:
-                self.rebuilding.add(selected)
-        if rebuild:
-            threading.Thread(target=self.rebuild_board, args=(selected,), daemon=True).start()
-        if data is not None:
-            return data
-        with READ_LOCK:
-            # A read that waited here takes the board the previous one built.
-            with self.boards_lock:
-                data = self.boards.get(selected)
-            return data if data is not None else self.build_board(selected)
-
-    def rebuild_board(self, selected):
-        try:
-            with READ_LOCK:
-                self.build_board(selected)
-        except Exception:
-            diagnostic('snapshot.error', cause='parse', duration_ms=0, streak=FAILURES)
-        finally:
-            with self.boards_lock:
-                self.rebuilding.discard(selected)
+        return self.board.board(selected)
 
     def forget_boards(self):
-        with self.boards_lock:
-            self.boards.clear()
-            self.generation += 1
-
-    def build_board(self, selected):
-        """Build and keep one board; the caller holds READ_LOCK."""
-        global FAILURES
-        started = time.monotonic()
-        generation = self.generation
-        inputs = self.board.inputs() if hasattr(self.board, 'inputs') else None
-        data = self.board.board(selected)
-        with self.boards_lock:
-            # A board still loading is cheap and never kept past the first read.
-            if generation == self.generation and not data.get('loading'):
-                self.boards[selected] = data
-                self.built[selected] = inputs, time.monotonic()
-        sources = data.get('deck', {}).get('sources', [])
-        errors = [x for x in sources if not x.get('available')]
-        duration = round((time.monotonic() - started) * 1000)
-        log(f'deck build board {duration}ms')
-        if errors or data.get('error') or any(x.get('error') for x in data.get('sources', [])):
-            FAILURES += 1
-            code = errors[0].get('code') if errors else 'parse'
-            cause = code if code in ('timeout', 'missing-source', 'busy') else 'parse'
-            diagnostic('snapshot.error', cause=cause, duration_ms=duration, streak=FAILURES)
-        else:
-            FAILURES = 0
-            columns = {x['id']: len(x.get('cards', [])) for x in data.get('columns', [])}
-            nodes = [n for x in sources for n in x.get('snapshot', {}).get('nodes', [])]
-            projects = sum(n.get('kind') == 'project' for n in nodes)
-            diagnostic('snapshot.read', tasks=sum(columns.values()), duration_ms=duration,
-                       underway=columns.get('underway', 0), awaiting_closure=sum(n.get('state') == 'awaiting-closure' for n in nodes),
-                       needs_you=columns.get('captains_call', 0), done=columns.get('landed', 0),
-                       projects_received=projects, projects_shown=projects)
-        return data
+        pass  # Owner events update the single projection.
 
 
 # Route segments a request line may name; ids, files and text print as '*'.
@@ -1698,6 +1375,9 @@ class Handler(BaseHTTPRequestHandler):
                 data = self.server.i18n.client()
             elif not unsafe and path == '/api/events':
                 data = board.event_view(value('home'))
+            elif not unsafe and path == '/api/stream':
+                self.stream(value('home'), self.headers.get('Last-Event-ID') or value('cursor'), sid, secure)
+                return
             elif not unsafe and path == '/api/board':
                 data = dict(self.server.last_board(value('home')))
                 data['csrf'] = csrf
@@ -1854,6 +1534,32 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError('symlink asset')
         return path.read_bytes()
 
+    def stream(self, selected, cursor, sid, secure):
+        projection = self.server.board.projection
+        self.server.board.home(selected) if selected else None
+        self.send_response(200)
+        self.send_header('Content-Type', 'text/event-stream; charset=utf-8')
+        self.send_header('Cache-Control', 'no-cache, no-store')
+        self.send_header('X-Accel-Buffering', 'no')
+        self.send_header('Connection', 'close')
+        self.end_headers()
+        self.close_connection = True
+        previous = None
+        cursor = ''  # Reconnect starts with the current in-memory base.
+        try:
+            while not projection.stop_event.is_set():
+                data = projection.changes(cursor, selected)
+                if data is None:
+                    self.wfile.write(b'event: heartbeat\ndata: {}\n\n')
+                else:
+                    cursor = data['cursor']
+                    event, payload = ('base', data) if previous is None else ('change', delta(previous, data))
+                    self.wfile.write(('id: ' + cursor + '\nevent: ' + event + '\ndata: ' + json.dumps(payload, ensure_ascii=False) + '\n\n').encode())
+                    previous = data
+                self.wfile.flush()
+        except (OSError, TimeoutError):
+            pass
+
     def respond(self, status, content, mime='application/json; charset=utf-8', sid='', secure=False):
         self.send_response(status)
         self.send_header('Content-Type', mime)
@@ -1910,13 +1616,6 @@ def main(argv=None, *, stop_event=None, on_ready=None):
             diagnostic('board.heartbeat')
     threading.Thread(target=heartbeat, daemon=True).start()
     board.start()
-    def prepare():
-        # The first page read after a start finds a board already built.
-        while board.collector.snapshot().loading:
-            if board.stopping.wait(0.5):
-                return
-        server.rebuild_board('')
-    threading.Thread(target=prepare, daemon=True).start()
     stop_reason = {'cause': 'shutdown'}
     def stop(signum, frame):
         stop_reason['cause'] = 'signal'
