@@ -1130,5 +1130,6 @@
   "Search task, request or ID": "Search task, request or ID",
   "Order": "Order",
   "Up to date": "Up to date",
-  "Firstmate counts {count} lanes in use": "Firstmate counts {count} lanes in use"
+  "Firstmate counts {count} lanes in use": "Firstmate counts {count} lanes in use",
+  "{done} of {total} task done": "{done} of {total} task done"
 }
