@@ -36,7 +36,7 @@ class EventProjection:
         self.stop_event = threading.Event()
         self.cursor, self.sources, self.readers = time.time_ns(), {}, {}
         self.error, self.loading = '', True
-        self.thread = None
+        self.thread, self.body = None, None
 
     def start(self):
         self.thread = threading.Thread(target=self.run, daemon=True, name='deck-events')
@@ -135,6 +135,7 @@ class EventProjection:
             source['capabilities']['actions'] = self.board.deck_controls.actions(source['capabilities'])
             self.board.deck_controls.cache[self.readers[identity]['home'].path] = (0, source)
         self.cursor += 1
+        self.body = self.base()
         self.condition.notify_all()
 
     def base(self, selected=''):
@@ -170,9 +171,22 @@ class EventProjection:
                 columns=[dict(id=key, title=self.board.t(title), cards=columns[key]) for key,title in self.board.columns],
                 deck=dict(sources=copy.deepcopy(sources)), diagnostics=[], history=history)
 
+    def read(self, selected=''):
+        with self.condition:
+            if self.body is None:
+                return self.base(selected)
+            self.board.home(selected) if selected else None
+            data = dict(self.body, home=selected, server_at=time.time())
+            data['sources'] = [dict(s, checked_at=time.time() if not s['error'] else 0) for s in data['sources'] if not selected or s['home']==selected]
+            if selected:
+                data.update(columns=[dict(c, cards=[row for row in c['cards'] if row['home']==selected]) for c in data['columns']],
+                            history=[row for row in data['history'] if row['home']==selected],
+                            deck=dict(sources=[s for s in data['deck']['sources'] if s['home']==selected]))
+            return data
+
     def changes(self, cursor, selected):
         # A reconnect receives the current base from the same projection. No
         # second event log or per-browser queue is necessary for replacement values.
         with self.condition:
             self.condition.wait_for(lambda: self.stop_event.is_set() or str(self.cursor) != cursor, timeout=10)
-            return self.base(selected) if str(self.cursor) != cursor else None
+            return self.read(selected) if str(self.cursor) != cursor else None

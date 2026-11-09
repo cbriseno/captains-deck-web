@@ -669,7 +669,7 @@ class Board:
                 'agent': fm.UI.card_agent_line(card, self.t), 'herdr_url': link}
 
     def board(self, selected=''):
-        return self.projection.base(selected)
+        return self.projection.read(selected)
 
     def receipts(self, actor, limit=10):
         directory = self.data_dir / 'answers'
@@ -810,7 +810,7 @@ class Board:
         return project_tag(names.get(repo, repo))
 
     def history(self, selected='', query=''):
-        rows = self.projection.base(selected)['history']
+        rows = self.projection.read(selected)['history']
         result = [r for r in rows if query.casefold() in json.dumps(r, ensure_ascii=False).casefold()]
         return dict(records=result[:1000], omitted=max(0,len(result)-1000), details=[],
                     scope=self.t('Includes everything Firstmate still keeps, not just recent ones.'))
