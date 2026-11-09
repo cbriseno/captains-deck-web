@@ -242,8 +242,11 @@ function mergeChange(before, patch) {
   const rows = new Map((before || []).map(row => [key(row), row]));
   return patch.rows.map(id => patch.values[id] ? mergeChange(rows.get(id),patch.values[id]) : rows.get(id));
 }
-let stream;
+let stream, streamReading;
 function applyBoard(data) {
+    if (data.loading && S.board?.columns.some(column => column.cards.length)) { S.online = false; sourceStatus(); return; }
+    const selectedCall = S.modal?.type === 'call' ? S.modal.key : null;
+    const oldCall = selectedCall && S.board?.columns.flatMap(c => c.cards).find(c => c.key === selectedCall)?.inline_call;
     const firstRead = !S.csrf;
     S.online = true; S.lastRead = Date.now(); S.csrf = data.csrf;
     if (firstRead) window.DeckTrace?.use('open', 'page');
@@ -268,28 +271,32 @@ function applyBoard(data) {
       const params = new URLSearchParams(location.search);
       if (params.has('task')) openStableLink(params);
     }
+    const nextCall = selectedCall && data.columns.flatMap(c => c.cards).find(c => c.key === selectedCall)?.inline_call;
+    if (selectedCall && JSON.stringify(oldCall) !== JSON.stringify(nextCall) && !S.busy && !S.receipt) checkCall();
     sourceStatus();
 }
 async function poll() {
   const selected = S.home, request = ++S.boardRequest;
   stream?.close();
   try {
-    const data = await api('/api/board' + (selected ? '?home=' + encodeURIComponent(selected) : ''));
+    const data = await api('api/board' + (selected ? '?home=' + encodeURIComponent(selected) : ''));
     if (selected !== S.home || request !== S.boardRequest) return;
     applyBoard(data);
+    if (S.modal?.type === 'call' && !S.busy && !S.receipt) checkCall();
+    if (S.modal?.type === 'delivery' && S.modal.explanation) refreshExplanation();
     stream = new EventSource('/api/stream?' + new URLSearchParams({home:selected, cursor:data.cursor}));
     stream.addEventListener('base', event => {
-      if (selected === S.home) applyBoard({...JSON.parse(event.data), csrf:S.csrf});
+      if (selected === S.home) { streamReading = JSON.parse(event.data); applyBoard(streamReading); }
     });
     stream.addEventListener('change', event => {
-      if (selected === S.home) applyBoard({...mergeChange(S.board, JSON.parse(event.data)), csrf:S.csrf});
+      if (selected === S.home) { streamReading = mergeChange(streamReading, JSON.parse(event.data)); applyBoard(streamReading); }
     });
     stream.addEventListener('heartbeat', () => {
       S.lastRead = Date.now();
       for (const source of S.board?.sources || []) if (!source.error) source.checked_at = Date.now()/1000;
       sourceStatus();
     });
-    stream.onopen = () => { S.online = true; sourceStatus(); };
+    stream.onopen = () => sourceStatus();
     stream.onerror = () => { S.online = false; sourceStatus(); };
   } catch (err) {
     S.online = false; sourceStatus();

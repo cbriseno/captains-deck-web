@@ -407,7 +407,9 @@ class Board:
         self.i18n = Localization(language if language is not None else os.environ.get('CD_WEB_LANGUAGE', 'en'))
         self.t = self.i18n.t
         homes = fm.real_homes(collector.snapshot().homes) if collector else fm.real_homes(fm.discover_homes())
-        self.columns, self.home_identity = COLUMNS, home_id
+        identities = {id(home): home_id(home) for home in homes}
+        self.columns, self.home_identity, self.history_order = COLUMNS, lambda home: identities[id(home)], newest_first
+        self._homes_by_id = {identities[id(home)]: home for home in homes}
         self.endpoint = lambda home: endpoint_path(home.path, 'fm_work_projection.py')
         self.projection = EventProjection(self, homes)
         self.data_dir = Path(data_dir).expanduser().absolute()
@@ -457,7 +459,7 @@ class Board:
             return None
         return dict(date=value['value']) if value.get('precision') == 'date' else dict(epoch=datetime.fromisoformat(value['value'].replace('Z', '+00:00')).timestamp())
 
-    def projected_card(self, source, item, human, bucket):
+    def projected_card(self, source, item, human, bucket, titles, projects):
         task, identity = item['task'], source['home']
         owner = self.home(identity)
         question = item.get('question') or {}
@@ -467,9 +469,9 @@ class Board:
         stamp = re.search(r'^Captain hold set: (\S+)', row.get('body') or '', re.M)
         identity_value = stamp[1] + '#' + str(len(re.findall(r'^Resolution recorded by fm-(?:captain|decision)-hold\.', row.get('body') or '', re.M))) if stamp else ''
         return dict(key=digest(identity, task, bucket)[:40], task=task,
-            title=item['title'], original_title=item['title'], bucket=bucket, home=identity,
+            title=card_field(human.get('card_title'), 'card_title') or readable_title(item['title'], titles, self.t), original_title=item['title'], bucket=bucket, home=identity,
             owner=owner.label, request=item['request'], outcome=item['outcome'],
-            summary=human.get('summary') or '', project=project_tag(item['raw'].get('project')),
+            summary=human.get('summary') or '', project=projects.get(item['raw'].get('project')),
             presentation=dict(status=human.get('card_status'), summary=human.get('summary')),
             context=dict(phase='human' if question.get('open') else 'unknown'),
             activity=dict(kind='unknown', agent='unknown'), dependencies=[], native=dict(unconfirmed=True),
@@ -477,7 +479,8 @@ class Board:
             answered=False, attention_kind=('action' if is_action else 'question') if question.get('open') else None,
             action=dict(call, error='') if is_action else None,
             inline_call=dict(options=[dict(o, value=o['id']) for o in call.get('options', [])],
-                identity=identity_value, recommend=call.get('recommended'), error='') if question.get('open') and not is_action else None,
+                identity=identity_value, recommend=call.get('recommended'), attachments=self.file_answers_ready(owner),
+                error='' if source.get('answerable') else self.t('This Firstmate can’t take answers from the web yet. Update Firstmate or answer there.')) if question.get('open') and not is_action else None,
             report={}, supervisor={})
 
     def event_view(self, identity):
@@ -490,7 +493,7 @@ class Board:
                         tasks=model.rows if model else {}, scope='Current in-memory event projection.')
 
     def home(self, identity):
-        matches = [h for h in self.homes() if home_id(h) == identity]
+        matches = [self._homes_by_id[identity]] if identity in self._homes_by_id else []
         if len(matches) != 1:
             raise Refusal('Deck can’t find this crew right now. Refresh the board.', 404)
         return matches[0]
@@ -784,7 +787,7 @@ class Board:
             if not reader:
                 return [], ''
             model = reader['model']
-            rows = [r for i,r in model.rows.items() if r['state'] == 'done' or model.facts['receipts'].get(i)]
+            rows = [r for i,r in model.rows.items() if i in model.history]
             return copy.deepcopy(rows), self.t('Includes everything Firstmate still keeps, not just recent ones.')
 
     def delivered_project(self, home, rows, record, human):
@@ -1376,7 +1379,7 @@ class Handler(BaseHTTPRequestHandler):
             elif not unsafe and path == '/api/events':
                 data = board.event_view(value('home'))
             elif not unsafe and path == '/api/stream':
-                self.stream(value('home'), self.headers.get('Last-Event-ID') or value('cursor'), sid, secure)
+                self.stream(value('home'), self.headers.get('Last-Event-ID') or value('cursor'), csrf, sid, secure)
                 return
             elif not unsafe and path == '/api/board':
                 data = dict(self.server.last_board(value('home')))
@@ -1534,7 +1537,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ValueError('symlink asset')
         return path.read_bytes()
 
-    def stream(self, selected, cursor, sid, secure):
+    def stream(self, selected, cursor, csrf, sid, secure):
         projection = self.server.board.projection
         self.server.board.home(selected) if selected else None
         self.send_response(200)
@@ -1542,6 +1545,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-cache, no-store')
         self.send_header('X-Accel-Buffering', 'no')
         self.send_header('Connection', 'close')
+        self.send_header('Set-Cookie', f'deck_session={sid}; HttpOnly; SameSite=Strict; Path=/' + ('; Secure' if secure else ''))
         self.end_headers()
         self.close_connection = True
         previous = None
@@ -1553,6 +1557,7 @@ class Handler(BaseHTTPRequestHandler):
                     self.wfile.write(b'event: heartbeat\ndata: {}\n\n')
                 else:
                     cursor = data['cursor']
+                    data['csrf'] = csrf
                     event, payload = ('base', data) if previous is None else ('change', delta(previous, data))
                     self.wfile.write(('id: ' + cursor + '\nevent: ' + event + '\ndata: ' + json.dumps(payload, ensure_ascii=False) + '\n\n').encode())
                     previous = data

@@ -78,7 +78,7 @@ async function mountBoard(initial, clock = Date.UTC(2026, 0, 15, 12), tickets = 
   const fetch = async (url, options = {}) => {
     requests.push({url, method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null});
     if (url.startsWith('api/locale')) return { ok: true, json: async () => ({ locale: Object.keys(messages).length ? 'es' : 'en', messages }) };
-    if (url.startsWith('api/board')) return { ok: true, json: async () => JSON.parse(JSON.stringify(current)) };
+    if (url.startsWith('api/board')) return { ok: true, json: async () => ({...JSON.parse(JSON.stringify(current)), history:setup.history?.records || []}) };
     if (url.startsWith('api/history')) return { ok: true, json: async () => JSON.parse(JSON.stringify(setup.history || {records: [], details: [], omitted: 0, scope: ''})) };
     if (setup.explanation && url.endsWith('/explanation')) return { ok: true, json: async () => JSON.parse(JSON.stringify(setup.explanation)) };
     if (setup.delivery && url.startsWith('api/delivery/') && !url.endsWith('/explanation')) return { ok: true, json: async () => JSON.parse(JSON.stringify(setup.delivery)) };
@@ -92,7 +92,7 @@ async function mountBoard(initial, clock = Date.UTC(2026, 0, 15, 12), tickets = 
   const context = vm.createContext({ document: doc, fetch, navigator: {}, location: { href: 'http://example.test/', search: '' },
     matchMedia: (query) => ({ matches: !!setup.phone && /max-width/.test(query), addEventListener() {} }), setInterval: (fn) => timers.push(fn), setTimeout: (fn,ms,...args) => ms===10000 ? answerTimers.push(fn) : setTimeout(fn,ms,...args), clearTimeout,
     localStorage: { getItem(key) { return local.get(key) ?? null; }, setItem(key, value) { local.set(key, value); } },
-    AbortController, URL, URLSearchParams, Intl, Date: FixedDate, JSON, Map, Set, Promise, crypto: require('node:crypto').webcrypto, Option: function Option(text, value) { return Object.assign(new Element('option', doc), { text, value }); },
+    EventSource: class {addEventListener() {} close() {}}, AbortController, URL, URLSearchParams, Intl, Date: FixedDate, JSON, Map, Set, Promise, crypto: require('node:crypto').webcrypto, Option: function Option(text, value) { return Object.assign(new Element('option', doc), { text, value }); },
     sessionStorage: { getItem(key) { return storage.get(key) || null; }, setItem(key, value) { storage.set(key, value); } } });
   context.window = context;
   context.addEventListener = () => {};
@@ -124,7 +124,7 @@ async function mountBoard(initial, clock = Date.UTC(2026, 0, 15, 12), tickets = 
   vm.runInContext(fs.readFileSync(path.join(root, 'static/app.js'), 'utf8'), context);
   const flush = async () => { for (let i = 0; i < 20; i++) await new Promise(resolve => setImmediate(resolve)); };
   await flush();
-  return { doc, flush, finishAnswer:async()=>{for(const fn of answerTimers.splice(0))fn();await flush();}, requests, local, poll: timers[0], setBoard(next) { current = next; } };
+  return { doc, flush, finishAnswer:async()=>{for(const fn of answerTimers.splice(0))fn();await flush();}, requests, local, poll: () => doc.getElementById('refresh').listeners.click[0](), setBoard(next) { current = next; } };
 }
 
 const underwayList = (doc) => doc.getElementById('board').children.find(s => s.dataset.kind === 'underway').querySelector('.cards');

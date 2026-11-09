@@ -576,8 +576,12 @@ window.createDeckUI = function (host) {
     const link=c.action?.link&&host.reportLink&&actionLink(c),control=link&&(link.tagName==='A'?link:link.querySelector('button'));if(control){control.classList.add('primary');withCardIcon(control,'ext');}
     if(link)card.append(add(n('div','cacts'),link));wireEvents(card,card.dataset.node);return card;
   }
+  let questionEditors = new Map();
   function questionCard(c) {
-    const x=questionNode(c),own=byId.get(taskNodeId(c.home,c.task)),card=setColor(n('article','task-card card qcard'),x||{id:c.key});card.dataset.node='question:'+c.key;card.dataset.key='question:'+c.key;card.dataset.state=own?.state||'waiting';
+    const reading = JSON.stringify([c.title,c.question,c.question_summary,c.inline_call,c.project,c.answered]);
+    const previous = questionEditors.get('question:'+c.key);
+    if (previous?._reading === reading) return previous;
+    const x=questionNode(c),own=byId.get(taskNodeId(c.home,c.task)),card=setColor(n('article','task-card card qcard'),x||{id:c.key});card._reading=reading;card.dataset.node='question:'+c.key;card.dataset.key='question:'+c.key;card.dataset.state=own?.state||'waiting';
     const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}if(ui.selected==='question:'+c.key&&detailOpen()){clearFocus(true);return;}ui.selected='question:'+c.key;ui.pin=ui.focus?'question:'+c.key:'';announceFocus(ui.pin,c.title);openCard(c,face);highlight();},'card-open');face.dataset.key='question:'+c.key;face.setAttribute('aria-controls','detail');face.setAttribute('aria-expanded',String(ui.selected==='question:'+c.key));add(face,n('span','title',c.question||c.title));const q=c.question_summary;if(q){if(q.question&&q.question!==(c.question||c.title))face.append(n('span','cctx question',q.question));if(q.context)face.append(n('span','cctx question-context',q.context));} if(x?.state==='done')face.append(n('span','deck-origin',t('Origin delivered · decision still open')));const origin=menuItem('link',t('Go to source task'),e=>{e.stopPropagation();revealQuestionOrigin(c);});origin.disabled=!canRevealOrigin(own);add(card,cardKind('ask','ask',t('Decide'),{id:c.key},own||{kind:'task',task:c.task,home:c.home},[origin]),add(n('div','card-face'),face),add(n('div','card-more'),n('div','card-more-inner')));host.inlineAnswer(c,face,card);host.answerTools?.dropCard(card,c.key,()=>openCard(c,face));wireEvents(card,'question:'+c.key);return card;
   }
   function needs(cards) {
@@ -810,7 +814,7 @@ window.createDeckUI = function (host) {
     $('columns-nav').replaceChildren();
     const detail=$('detail'),wasOpen=detailOpen();parkDetail();
     mixer();tree();
-    const board=$('board');board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';board.replaceChildren();
+    const board=$('board');questionEditors=new Map([...board.querySelectorAll('.qcard')].map(card=>[card.dataset.key,card]));board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';board.replaceChildren();
     renderRequests(board,ts,asks,act);
     mountPausePreview();
     if(wasOpen){const face=[...document.querySelectorAll('.card-open')].find(y=>y.dataset.key===app.openerKey && y.getClientRects().length);if(face){app.opener=face;host.placeDetail(face);face.setAttribute('aria-expanded','true');face.closest('.task-card').dataset.open='true';}else if(ui.selected&&byId.has(ui.selected)){const group=[...document.querySelectorAll('[data-node]')].find(y=>y.dataset.node===ui.selected && y.getClientRects().length);if(group){group.append(detail);detail.hidden=false;$('detail-panel').dataset.active='false';}}}

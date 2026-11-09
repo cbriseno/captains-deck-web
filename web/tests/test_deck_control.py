@@ -63,7 +63,7 @@ class ProjectionTests(unittest.TestCase):
             self.assertEqual(controls.request(home, 'review', payload, 'captain'), response)
         self.assertEqual(invoke.call_args_list[1].args, (home, 'outcome.review', payload))
         self.assertNotIn('request_id', payload)
-        self.assertNotIn(home.path, controls.cache)
+        self.assertEqual(controls.cache[home.path], (0, {}))
         with patch.object(controls, 'invoke', return_value={'ops': []}) as invoke:
             with self.assertRaises(ControlError) as refused:
                 controls.request(home, 'review', payload, 'captain')

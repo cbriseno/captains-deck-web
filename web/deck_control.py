@@ -299,10 +299,7 @@ class DeckControls:
                 capabilities = self.invoke(home, 'capabilities')
                 if 'outcome.review' not in capabilities.get('outcome_controls', []):
                     raise ControlError('Shared review is not available from this Firstmate yet.', 409, 'unsupported_op')
-                try:
-                    return self.invoke(home, 'outcome.review', body)
-                finally:
-                    self.cache.pop(home.path, None)
+                return self.invoke(home, 'outcome.review', body)
             return self._request(home, command, body, actor)
 
     def _request(self, home, command, body, actor):
@@ -330,11 +327,8 @@ class DeckControls:
             if body.get('action') in ('cancel-pause', 'dequeue-resume'):
                 raise ControlError('This Deck action is not supported.', 400, 'unsupported_op')
             result = self.invoke(home, command, operation)
-        if result.get('code') == 'stale_revision':
-            self.cache.pop(home.path, None)
         if command == 'apply':
             if (result.get('state') not in ('received', 'applied', 'rejected', 'conflict', 'failed')
                     or (result.get('state') in ('received', 'applied') and result.get('request_id') != request_id)):
                 raise ControlError('Firstmate did not confirm the request. Check its receipt before retrying.', 502, 'receipt-uncertain')
-            self.cache.pop(home.path, None)
         return result

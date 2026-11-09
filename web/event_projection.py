@@ -75,8 +75,9 @@ class EventProjection:
             raise ValueError('Firstmate does not expose the event bootstrap.')
         sys.path.insert(0, str(Path(self.board.endpoint(home)).parent))
         module = importlib.import_module('fm_work_projection')
-        reader = dict(home=home, model=module.Projection(base), offset=base['position'][2],
+        reader = dict(home=home, root=str(Path(home.path).resolve()), model=module.Projection(base), offset=base['position'][2],
                       file_id=base['position'][:2], enabled=base['enabled'])
+        reader['answerable'] = self.board.guarded_intake(home)
         self.read_suffix(reader)
         identity = self.board.home_identity(home)
         self.readers[identity] = reader
@@ -85,7 +86,7 @@ class EventProjection:
     def read_suffix(self, reader):
         path = Path(reader['home'].path) / 'state/fleet-ledger.jsonl'
         try:
-            root = os.open(str(Path(reader['home'].path).resolve()), os.O_RDONLY | os.O_DIRECTORY)
+            root = os.open(reader['root'], os.O_RDONLY | os.O_DIRECTORY)
             try:
                 state = os.open('state', os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=root)
                 try:
@@ -110,7 +111,7 @@ class EventProjection:
                     if not line.endswith(b'\n'):
                         break
                     event = json.loads(line)
-                    if event.get('home') == str(Path(reader['home'].path).resolve()):
+                    if event.get('home') == reader['root']:
                         changed |= reader['model'].apply(event)
                     reader['offset'] += len(line)
                 return changed
@@ -123,7 +124,7 @@ class EventProjection:
         home, model = reader['home'], reader['model']
         snapshot = project_snapshot(model.value)
         identity = self.board.home_identity(home)
-        return dict(home=identity, available=reader['enabled'], snapshot=snapshot,
+        return dict(home=identity, available=reader['enabled'], snapshot=snapshot, answerable=reader['answerable'],
                     code=None if reader['enabled'] else 'events-disabled',
                     error='' if reader['enabled'] else 'Firstmate event publication is disabled.',
                     capabilities=self.board.deck_controls.invoke(home, 'capabilities') if not hasattr(model, 'capabilities') else model.capabilities)
@@ -142,8 +143,10 @@ class EventProjection:
             sources = [s for key, s in self.sources.items() if not selected or key == selected]
             columns = {key: [] for key, _ in self.board.columns}
             history = []
+            titles = self.board.titles()
             for source in sources:
                 model = self.readers[source['home']]['model']
+                projects = {n['id']: dict(id=n['id'], label=n['title']) for n in source['snapshot']['nodes'] if n['kind']=='project'}
                 for item in source['snapshot']['nodes']:
                     if item['kind'] != 'task':
                         continue
@@ -151,14 +154,15 @@ class EventProjection:
                     human = model.presentations[task]['presentation']
                     bucket = ('captains_call' if (item.get('question') or {}).get('open') else
                               'landed' if item['state'] == 'done' else 'underway' if item['state'] in ('active', 'stopping') else 'charted')
-                    columns[bucket].append(self.board.projected_card(source, item, human, bucket))
+                    columns[bucket].append(self.board.projected_card(source, item, human, bucket, titles, projects))
                     receipt = model.facts['receipts'].get(task)
-                    if item['state'] == 'done' or receipt and receipt.get('valid', True):
+                    if task in model.history:
                         card = columns[bucket][-1]
                         history.append(dict(task=task, home=source['home'], owner=card['owner'],
-                            title=item['title'], alias=item['alias'], project=card['project'],
+                            title=card['title'], alias=item['alias'], project=card['project'],
                             request=item['request'], outcome=item['outcome'], summary=human.get('summary') or '',
                             closed=model.rows[task].get('closed'), time=self.board.projected_time(item['completed_at'])))
+            history.sort(key=lambda row: self.board.history_order(row['time'] or {}), reverse=True)
             return dict(cursor=str(self.cursor), csrf='', seq=self.cursor, home=selected,
                 loading=self.loading, error=self.error, collected_at=time.time(), server_at=time.time(),
                 homes=[dict(id=self.board.home_identity(h), label=h.label) for h in self.homes],
