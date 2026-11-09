@@ -60,8 +60,6 @@ CANONICAL_TEXT = Localization('en').t
 
 # Structural diagnostics are intentionally limited to the allowlisted schema.
 DIAG_LOCK = threading.Lock()
-READ_LOCK = threading.Lock()
-FAILURES = 0
 TRACE_TIMES = []
 try:
     REVISION = subprocess.run(['git', '-C', str(HERE.parent), 'rev-parse', '--short=12', 'HEAD'],
@@ -391,17 +389,6 @@ def log(text):
         pass
 
 
-def log_read(kind, started, ok=True, cause=''):
-    """One line per Firstmate read: which, how long, and why it failed."""
-    log(f'deck read {kind} {round((time.monotonic() - started) * 1000)}ms ' + ('ok' if ok else 'error ' + (cause or 'unknown')))
-
-
-def changed_since(path, started):
-    # One second covers filesystems with coarse change times.
-    mark = file_mark(path)
-    return mark is not None and mark[3] >= (started - 1) * 1e9
-
-
 class Board:
     def __init__(self, data_dir, herdr_origin='', collector=None, language=None):
         self.i18n = Localization(language if language is not None else os.environ.get('CD_WEB_LANGUAGE', 'en'))
@@ -422,7 +409,6 @@ class Board:
             proof_dir=self.data_dir / 'settings')
         self.mutation_lock = threading.Lock()
         self.history_lock = threading.Lock()
-        self.history_cache = {}
         self.repo_cache = {}
         # Firstmate's identity for a call is kept until its backlog row
         # changes; until then an open reads the row, and answering always asks
