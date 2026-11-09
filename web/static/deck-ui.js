@@ -780,9 +780,11 @@ window.createDeckUI = function (host) {
     const reason=n('textarea');reason.name='removal-reason';reason.maxLength=2000;reason.rows=2;reason.placeholder=t('Why are you considering removing it? (optional)');reason.setAttribute('aria-label',t('Reason for considering removal'));
     const current=()=>byId.get(x.id)||x;
     const refresh=()=>workControl(send,can(current(),'scope-removal')&&!ui.log.some(entry=>entry.home===x.home&&entry.command?.node===x.owner_id&&entry.command.action==='scope-removal'&&entry.command.reason===reason.value.trim()&&['pending','received','applied','uncertain'].includes(entry.state)));
-    const send=b(t('Discuss removal'),async()=>{await preview(current(),{action:'scope-removal',reason:reason.value.trim()});refresh();},'deck-removal-send');
+    const files=[],area=n('div','deck-removal-compose');area.append(reason);
+    const send=b(t('Discuss removal'),async()=>{if(area.dataset.uploading)return;await preview(current(),{action:'scope-removal',reason:reason.value.trim(),...(files.length?{attachments:files.map(f=>f.id)}:{})});refresh();},'deck-removal-send');
     box.refreshRemoval=refresh;reason.addEventListener('input',refresh);refresh();
-    panel.append(send,reason);box.append(panel);if(app.modal?.type==='call')content.append(box);else content.prepend(box);
+    host.answerTools?.composer(area,'api/control/'+encodeURIComponent(x.home)+'/upload',files,refresh,()=>area.isConnected&&!ui.busy,true);
+    panel.append(send,area);box.append(panel);if(app.modal?.type==='call')content.append(box);else content.prepend(box);
   }
   function reveal(x) {
     ui.scope='';ui.view='board';ui.column=colOf(x);const r=requestFor(x);if(r){ui.expanded.add(r.id);ui.groups.delete(requestState(r));ui.steps.add(r.id);}host.setView('board');render(true,'filter');

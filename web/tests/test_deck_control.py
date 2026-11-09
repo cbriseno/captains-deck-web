@@ -1,4 +1,5 @@
 """Contract adapter/security checks. Stub owner evidence is not real acceptance."""
+import base64
 import json
 import os
 from pathlib import Path
@@ -366,6 +367,15 @@ class AdapterHTTPTests(unittest.TestCase):
         operation = self.calls()[-1]['body']
         self.assertEqual(operation, {'op': 'request_removal', 'target': 'task:web',
                                      'expected_rev': 'r1', 'note': reason, 'actor': 'captain'})
+        # Files attached to the consultation reach Firstmate as named paths in the note.
+        status, item = self.req(f'/api/control/{home}/upload', {'name': 'captura.txt', 'data': base64.b64encode(b'evidence').decode()})
+        self.assertEqual(status, 200)
+        status, _ = self.req(f'/api/control/{home}/preview', self.change('scope-removal', reason='Mira esto', attachments=[item['id']]))
+        self.assertEqual(status, 200)
+        note = self.calls()[-1]['body']['note']
+        self.assertTrue(note.startswith('Mira esto\nAdjunto: '))
+        self.assertEqual(Path(note.split('Adjunto: ', 1)[1]).read_bytes(), b'evidence')
+        self.assertEqual(self.req(f'/api/control/{home}/preview', self.change('scope-removal', attachments=['0' * 32]))[0], 404)
         before = len(self.calls())
         for invalid in ('x' * 2001, 'invalid\x00reason', {'unexpected': 'object'}):
             status, _ = self.req(f'/api/control/{home}/apply', self.change('scope-removal', reason=invalid))

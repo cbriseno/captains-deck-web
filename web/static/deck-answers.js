@@ -23,7 +23,7 @@ window.createAnswerTools = ({t,node,button,api,state,syncSubmit}) => {
       list.append(chip);
     });return list;
   }
-  function composer(container,uploadPath,items,changed,active=()=>true) {
+  function composer(container,uploadPath,items,changed,active=()=>true,local=false) {
     const picker=node('input');picker.type='file';picker.multiple=true;picker.accept=accept;picker.hidden=true;
     const attach=button('',()=>picker.click(),'answer-attach');attach.setAttribute('aria-label',t('Attach files'));
     const hint=node('small','meta',t('Paste a screenshot or drop files here · up to 8 files, 5 MB each'));attach.title=t('Attach files')+' · '+hint.textContent;
@@ -49,7 +49,12 @@ window.createAnswerTools = ({t,node,button,api,state,syncSubmit}) => {
     if(field&&send){const row=node('div','answer-compose');row.append(attach,field,send,picker);container.prepend(row);container.append(hint,list,status);}
     else container.append(attach,picker,hint,list,status);
     draw();
-    dropTarget={container,add,active};
+    // A local composer takes only drops on itself and leaves the answer's drop target alone.
+    if(local){
+      container.addEventListener('dragover',event=>{if(active()&&event.dataTransfer?.types.includes('Files')){event.preventDefault();event.stopPropagation();container.classList.add('answer-dragover');}});
+      container.addEventListener('dragleave',()=>container.classList.remove('answer-dragover'));
+      container.addEventListener('drop',event=>{if(active()&&event.dataTransfer?.files.length){event.preventDefault();event.stopPropagation();container.classList.remove('answer-dragover');add([...event.dataTransfer.files]);}});
+    }else dropTarget={container,add,active};
     return {items};
   }
   document.addEventListener('dragover',event=>{if(dropTarget?.active()&&event.dataTransfer?.types.includes('Files')&&event.target.closest('#detail,.answer-editor,.own-words')){event.preventDefault();dropTarget.container.classList.add('answer-dragover');}});
@@ -67,7 +72,7 @@ window.createAnswerTools = ({t,node,button,api,state,syncSubmit}) => {
   }
   function correction(answer,home,host) {
     if(blocked()||host.querySelector('.answer-editor'))return;
-    const editor=node('div','answer-editor'),note=node('textarea');note.rows=3;note.value=answer.value||answer.text||'';note.setAttribute('aria-label',t('Your correction'));
+    const editor=node('div','answer-editor'),note=node('textarea');note.rows=3;note.value=answer.shown||answer.value||answer.text||'';note.setAttribute('aria-label',t('Your correction'));
     const uploads=[],status=node('p','notice'),send=button(t('Send correction'),()=>{
       if(blocked()||editor.dataset.uploading)return;
       if(!note.value.trim()&&!uploads.length)return;
@@ -89,7 +94,7 @@ window.createAnswerTools = ({t,node,button,api,state,syncSubmit}) => {
   async function panel(home,task,taskState,chat) {
     const section=node('section','recorded-answers');
     try{const {answers}=await api(`api/answers/${home}/${task}`);
-      for(const answer of answers){const entry=node('div','recorded-answer');entry.append(node('h4','',t(answer.correction?'Correction':'Your answer')),node('p','answer-text',answer.value||answer.text||''),files(answer.files||[]));
+      for(const answer of answers){const entry=node('div','recorded-answer');entry.append(node('h4','',t(answer.correction?'Correction':'Your answer')),node('p','answer-text',answer.shown||answer.value||answer.text||''),files(answer.files||[]));
         if(answer.can_correct){if(answer.chat_required||taskState==='active'){const url=chat||state.board?.columns.flatMap(c=>c.cards).find(c=>c.home===home&&c.task===answer.origin)?.herdr_url;if(url){const link=node('a','',t('Change answer in chat'));link.href=url;link.target='_blank';link.rel='noopener';entry.append(link);}else entry.append(node('p','notice',t('Use the task chat to change this answer.')));}else entry.append(button(t('Change answer'),()=>correction(answer,home,entry),'answer-edit'));}
         section.append(entry);
       }
@@ -100,7 +105,7 @@ window.createAnswerTools = ({t,node,button,api,state,syncSubmit}) => {
     const answers=x.raw?.recorded_answers||[];
     if(!answers.length)return null;
     const section=node('div','answer-summary');
-    for(const answer of answers){section.append(node('small','',t('Your answer')),node('p','answer-text',answer.value||answer.text||''),files((answer.attachments||[]).map((file,index)=>({name:file.name,type:/\.(png|jpe?g|gif|webp)$/i.test(file.name)?'image/preview':'application/octet-stream',url:`/api/answers/${x.home}/${answer.task_id}/file/${index}`}))));}
+    for(const answer of answers){section.append(node('small','',t('Your answer')),node('p','answer-text',answer.shown||answer.value||answer.text||''),files((answer.attachments||[]).map((file,index)=>({name:file.name,type:/\.(png|jpe?g|gif|webp)$/i.test(file.name)?'image/preview':'application/octet-stream',url:`/api/answers/${x.home}/${answer.task_id}/file/${index}`}))));}
     if(open)section.append(button(t(x.state==='active'?'Change answer in chat':'Change answer'),async()=>{if(blocked())return;await open();document.querySelector('#detail-content .answer-edit')?.click();},'answer-edit'));
     return section;
   }

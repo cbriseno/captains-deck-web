@@ -659,8 +659,10 @@ class Board:
         homes = self.homes()
         self.warming.set()
         titles = self.titles()
-        work_sources = [dict(self.deck_controls.source(h), home=home_id(h))
-                        for h in homes if not fm.is_remote_home(h)]
+        local = [h for h in homes if not fm.is_remote_home(h)]
+        work_sources = [dict(self.deck_controls.source(h), home=home_id(h)) for h in local]
+        for h, source in zip(local, work_sources):
+            self.answer_files.label_answers(h, source.get('snapshot', {}).get('nodes', []))
         view = self.view_cards(snap, work_sources)
         saved_answers = self.receipts(None, limit=1000)
         built = {}
@@ -1562,7 +1564,13 @@ class Handler(BaseHTTPRequestHandler):
                 if fm.is_remote_home(owner):
                     raise Refusal('Controls require a local owner.', 403)
                 operation = parts[3]
-                if (unsafe and operation in ('preview', 'apply', 'review')) or (not unsafe and operation == 'receipt'):
+                if unsafe and operation == 'upload':
+                    data = board.answer_files.upload('control/' + parts[2], body, actor)
+                elif (unsafe and operation in ('preview', 'apply', 'review')) or (not unsafe and operation == 'receipt'):
+                    if unsafe and body.get('action') == 'scope-removal' and 'attachments' in body:
+                        # Firstmate's removal note is text: name each attached file on its own line.
+                        paths = board.answer_files.paths(body.pop('attachments'), actor, 'control/' + parts[2])
+                        body['reason'] = str(body.get('reason') or '').strip() + ''.join('\nAdjunto: ' + str(p) for p in paths)
                     data = board.deck_controls.request(owner, operation,
                         body if unsafe else {'request_id': value('request_id')}, actor)
                 else:

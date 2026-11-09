@@ -94,6 +94,14 @@ class AnswerFileTests(unittest.TestCase):
             self.assertEqual(status, 200)
             public, = saved['answers']
             self.assertTrue(public['can_correct'])
+            self.assertEqual(public['shown'], 'original answer')
+            # A chosen option reads as the question showed it, never as its id.
+            for said, shown in (('scope', 'Entregar el tablero y registrar la validación pendiente'),
+                                ('scope - pronto', 'Entregar el tablero y registrar la validación pendiente · pronto'),
+                                ('otra cosa', 'otra cosa')):
+                answer['value'] = said
+                self.assertEqual(self.req(route)[1]['answers'][0]['shown'], shown)
+            del answer['value']
             capability.return_value = False
             self.assertFalse(self.req(route)[1]['answers'][0]['can_correct'])
             self.assertEqual(self.req(route + '/correct', dict(note='unsupported', identity='#1', request_id='u'*32))[0], 409)

@@ -640,3 +640,7 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
  /* As on the board's request headers: no idle button or explanation beside the title. */
  #project-tree .mix .pause-explanation,#project-tree .mix .mix-pause[data-idle=true]{display:none}}
 .priority-preview{display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;margin:6px 0}.priority-preview .fact{margin:0}.priority-preview button{margin:0}
+/* The clip reads the same wherever an answer, correction or removal note takes files. */
+.answer-attach{display:inline-grid;place-items:center;flex:none;width:30px;height:30px;min-height:0;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted)}
+.answer-attach:hover:enabled{background:var(--soft);color:var(--ink)}
+.answer-attach .ci{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
