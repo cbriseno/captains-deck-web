@@ -1707,7 +1707,7 @@ class Handler(BaseHTTPRequestHandler):
                 data = {'preview': diagnostics.export(['deck'], preview=True)}
             elif unsafe and path == '/api/diagnostics/trace':
                 events = body.get('events')
-                allowed = {'card.move', 'card.render', 'anim.start', 'anim.end', 'anim.cancel', 'overlay.show', 'overlay.hide', 'layout', 'reconcile.mismatch'}
+                allowed = {'ui.use', 'card.move', 'card.render', 'anim.start', 'anim.end', 'anim.cancel', 'overlay.show', 'overlay.hide', 'layout', 'reconcile.mismatch'}
                 if set(body) != {'events', 'exporting'} or type(body['exporting']) is not bool or not isinstance(events, list) or len(events) > 100:
                     raise Refusal('Invalid trace.', 400)
                 clean = []

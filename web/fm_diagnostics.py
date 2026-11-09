@@ -19,6 +19,7 @@ LIMIT = 20 * 1024 * 1024
 BATCH = 32
 PRODUCT_VERSION = "0.7.0"
 EVENTS = {
+    "ui.use": {"action": "enum", "target": "enum", "age": "count"},
     "card.move": {"task":"id", "from_column":"enum", "to_column":"enum", "move_cause":"enum", "age":"count"},
     "card.render": {"duration_ms":"measure", "age":"count"},
     "anim.start": {"animation":"enum", "duration_ms":"measure", "age":"count"},
@@ -41,6 +42,8 @@ EVENTS = {
     "relay.attempt": {"result": "enum", "reason": "enum", "count": "count", "version": "version", "revision": "revision"},
 }
 ENUMS = {
+    "action": {"open", "view", "search", "refresh", "select", "change", "export"},
+    "target": {"page", "board", "projects", "history", "task", "delivery", "settings", "space", "appearance", "diagnostics"},
     "from_column": {"needs", "now", "waiting", "paused", "done"},
     "to_column": {"needs", "now", "waiting", "paused", "done"},
     "move_cause": {"snapshot", "response", "optimistic"},
@@ -145,7 +148,7 @@ def export(components, downloads=None, preview=False):
     result = f"{size} bytes, {min(stamps) if stamps else '-'}..{max(stamps) if stamps else '-'}, {len(records)} eventos, verificador: {'ok' if _verify(records) else 'falló'}"
     if preview:
         counts = {event: sum(record['e'] == event for record in records) for event in
-                  ('card.move', 'card.render', 'anim.start', 'anim.end', 'anim.cancel',
+                  ('ui.use', 'card.move', 'card.render', 'anim.start', 'anim.end', 'anim.cancel',
                    'overlay.show', 'overlay.hide', 'layout', 'reconcile.mismatch')}
         return result + ', ' + ', '.join(f'{event}: {count}' for event, count in counts.items())
     outdir = Path(downloads or Path.home() / "Downloads").expanduser()

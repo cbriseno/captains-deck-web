@@ -380,6 +380,22 @@ The optional push module requires cryptography and the icon generator requires P
 
 The Deck diagnostic log rotates by size, not by age: two JSONL files retain
 approximately 20 MiB in total. How much time that covers depends on activity.
+The current UI records `ui.use` actions for opening the page, tasks, deliveries,
+settings and diagnostics; switching views or spaces; refreshing; committing a
+search field; changing appearance; and exporting. Only fixed action and target
+names are sent to the local server, never search text, titles, answers, task IDs
+or space IDs. Each interaction is sent once, best effort, through the existing
+session and CSRF guard, sharing the 200 browser events per minute limit. Failed
+or offline writes are dropped and do not interrupt the UI.
+
+Settings → Export diagnostics previews the log and saves an anonymized ZIP into
+`~/Downloads`. Nothing is uploaded to an external service. This reuses Day
+Attendant's standard-library JSONL schema (`t`, `c`, `e`, `v`, `r`), platform state
+directory, rotation and export design. On Linux the directory is
+`$XDG_STATE_HOME/firstmate/diagnostics/deck` (default `~/.local/state`); on macOS it
+is `~/Library/Logs/Firstmate/Diagnostics/deck`. `FM_DIAGNOSTICS_HOME` overrides the
+base directory. Delete the two event files to clear retained history.
+
 The browser also keeps up to 2,000 structural events from the last ten minutes
 in memory. It records card moves and render durations, motion starts, ends and
 cancellations, motion and question-focus layers, viewport characteristics and

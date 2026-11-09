@@ -34,7 +34,9 @@ window.DeckTrace = (() => {
       browser:/Firefox\//.test(ua)?'firefox':/Edg\//.test(ua)?'edge':/Chrome\//.test(ua)?'chrome':/Safari\//.test(ua)?'safari':'other'});
   }
   layout(); addEventListener('resize', layout);
-  return {add, anomaly, flush, get response() {return response;}, setResponse(value) {response=value; if(value==='receipt')setTimeout(()=>{if(focusSince||document.querySelector('.deck-motion-layer .qcard'))anomaly();},3000);}, setSender(fn) {send=fn;}, counts() {const c={};for(const x of events)c[x.e]=(c[x.e]||0)+1;return c;},
+  return {add, anomaly, flush,
+    async use(action, target) { try { if (send) await send([{e:'ui.use', action, target, age:0}], false); } catch { /* Usage must not interrupt the UI. */ } },
+    get response() {return response;}, setResponse(value) {response=value; if(value==='receipt')setTimeout(()=>{if(focusSince||document.querySelector('.deck-motion-layer .qcard'))anomaly();},3000);}, setSender(fn) {send=fn;}, counts() {const c={};for(const x of events)c[x.e]=(c[x.e]||0)+1;return c;},
     focus(active) {if(active&&!focusSince){focusSince=now();add('overlay.show',{overlay:'focus',visible_s:0,response});}else if(!active&&focusSince){add('overlay.hide',{overlay:'focus',visible_s:Math.round((now()-focusSince)/1000),response});focusSince=0;}},
     mismatch(key, from, to) {add('reconcile.mismatch',{task:id(key),from_column:from,to_column:to});anomaly();},
     move(key, from, to, cause) {

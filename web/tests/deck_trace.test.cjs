@@ -30,3 +30,19 @@ test('trace remains bounded and preserves event classes in a capped export', asy
   trace.add('card.render',{duration_ms:2});
   assert.deepEqual(JSON.parse(JSON.stringify(trace.counts())),{'card.render':1});
 });
+
+test('usage sends fixed fields immediately and tolerates unavailable logging', async () => {
+  const context = vm.createContext({navigator:{userAgent:''}, innerWidth:1000, innerHeight:700, devicePixelRatio:1,
+    matchMedia:()=>({matches:false}), addEventListener:()=>{}, Date, setTimeout, clearTimeout});
+  context.window = context;
+  vm.runInContext(fs.readFileSync(path.join(__dirname,'../static/deck-trace.js'),'utf8'), context);
+  const trace = context.DeckTrace, sent = [];
+  await trace.use('open', 'page');
+  trace.setSender(async (events, exporting) => sent.push({events, exporting}));
+  await trace.use('search', 'board');
+  assert.deepEqual(JSON.parse(JSON.stringify(sent)), [{events:[{e:'ui.use',action:'search',target:'board',age:0}],exporting:false}]);
+  trace.setSender(() => {throw new Error('offline');});
+  await trace.use('open', 'task');
+  trace.setSender(async () => {throw new Error('rate limited');});
+  await trace.use('view', 'history');
+});

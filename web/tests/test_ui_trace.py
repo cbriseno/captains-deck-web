@@ -35,3 +35,24 @@ class TraceTests(unittest.TestCase):
             self.assertNotIn(b'canary-private', raw)
             records = [json.loads(line) for line in raw.splitlines()]
             self.assertTrue(all(row['task'].startswith('t-') for row in records))
+
+    def test_usage_records_only_fixed_names_and_survives_export(self):
+        bridge.TRACE_TIMES.clear()
+        self.init()
+        event = {'e': 'ui.use', 'action': 'search', 'target': 'board', 'age': 0}
+        with patch.dict(os.environ, FM_DIAGNOSTICS_HOME=str(self.root / 'diagnostics')):
+            for changes in ({'query': 'private-canary'}, {'target': 'private-canary'}, {'action': 'private-canary'}):
+                status, _ = self.req('/api/diagnostics/trace', {'events': [dict(event, **changes)], 'exporting': False})
+                self.assertEqual(status, 400)
+            status, result = self.req('/api/diagnostics/trace', {'events': [event], 'exporting': False})
+            self.assertEqual((status, result['accepted']), (200, 1))
+            self.assertIn('ui.use: 1', self.req('/api/diagnostics/preview')[1]['preview'])
+            path = bridge.diagnostics.export(['deck'], self.root / 'downloads')
+            import zipfile
+            with zipfile.ZipFile(path) as archive:
+                raw = archive.read('events.jsonl')
+            self.assertNotIn(b'private-canary', raw)
+            records = [json.loads(line) for line in raw.splitlines()]
+            self.assertEqual(len(records), 1)
+            self.assertEqual({k: records[0][k] for k in event}, event)
+            self.assertEqual(set(records[0]), {'t', 'c', 'v', 'r'} | set(event))

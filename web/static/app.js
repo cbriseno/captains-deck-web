@@ -245,7 +245,9 @@ async function poll() {
     // Accept an earlier reply while newer reads are pending, avoiding starvation.
     if (selected !== S.home || request < S.boardApplied) return;
     S.boardApplied = request;
+    const firstRead = !S.csrf;
     S.online = true; S.lastRead = Date.now(); S.csrf = data.csrf;
+    if (firstRead) window.DeckTrace?.use('open', 'page');
     // Failed collection must not erase an already useful board.
     if (!(data.error && !data.columns.some(c => c.cards.length) && S.board)) S.board = data;
     else { S.board.error = data.error; S.board.sources = data.sources; }
@@ -284,6 +286,7 @@ async function loadBoardHistory() {
   finally { S.historyReading = false; }
 }
 function setView(view) {
+  window.DeckTrace?.use('view', view);
   S.view = view; deckUI?.setView(view);
   $('board-view-panel').hidden = view !== 'board'; $('history-panel').hidden = view !== 'history'; $('projects-panel').hidden = view !== 'projects';
   $('board-search').hidden = view === 'history';
@@ -405,6 +408,7 @@ function saveDraft(event) {
   syncSubmit();
 }
 async function openTicket(key, opener, asTask = false) {
+  window.DeckTrace?.use('open', 'task');
   const gen = ++S.generation;
   showDetail(t("Task"), '', t("DETAILS"), opener);
   S.modal = { type: 'loading', key };
@@ -719,6 +723,7 @@ async function submitAnswer() {
   } finally { S.busy = false; syncSubmit(); }
 }
 async function openDelivery(home, task, opener) {
+  window.DeckTrace?.use('open', 'delivery');
   const gen = ++S.generation;
   showDetail(t("Delivered work"), '', t("DELIVERED"), opener);
   S.modal = { type: 'loading' };
@@ -852,7 +857,7 @@ document.addEventListener('click', (event) => {
   closeDetail(false);
 });
 
-$('crew').addEventListener('change', () => { S.home = $('crew').value; S.board = null; S.historyRows = []; S.historyFetchedAt = 0; closeDetail(false); $('board').replaceChildren(node('p', 'placeholder', t("Loading this space…"))); poll(); if (S.view === 'history') loadHistory(); });
+$('crew').addEventListener('change', () => { window.DeckTrace?.use('select', 'space'); S.home = $('crew').value; S.board = null; S.historyRows = []; S.historyFetchedAt = 0; closeDetail(false); $('board').replaceChildren(node('p', 'placeholder', t("Loading this space…"))); poll(); if (S.view === 'history') loadHistory(); });
 $('board-view').addEventListener('click', () => setView('board'));
 $('projects-view').addEventListener('click', () => setView('projects'));
 $('history-tab').addEventListener('click', () => setView('history'));
@@ -860,7 +865,7 @@ for (const el of document.querySelectorAll('[data-mode]')) el.addEventListener('
 $('palette').addEventListener('change', () => window.DeckAppearance.set('palette',$('palette').value));
 window.DeckAppearance.apply();
 $('history-view').addEventListener('click', () => setView(S.view === 'history' ? 'board' : 'history'));
-$('refresh').addEventListener('click', () => { poll(); if (S.view === 'history') loadHistory(); });
+$('refresh').addEventListener('click', () => { window.DeckTrace?.use('refresh', 'board'); poll(); if (S.view === 'history') loadHistory(); });
 $('board-search').addEventListener('input', () => { S.query = $('board-search').value.trim().toLocaleLowerCase(locale); renderBoard(); });
 $('history-search').addEventListener('input', () => { S.historyLimit = 40; clearTimeout(S.historyTimer); S.historyTimer = setTimeout(loadHistory, 250); });
 window.addEventListener('offline', () => { S.online = false; sourceStatus(); });
@@ -874,15 +879,23 @@ if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().the
 poll();
 
 window.DeckTrace?.setSender((events,exporting)=>api('/api/diagnostics/trace',{events,exporting}));
+for (const [id,target] of [['board-search','board'],['history-search','history']]) {
+  $(id).addEventListener('change', () => window.DeckTrace?.use('search', target));
+}
+for (const el of document.querySelectorAll('[data-mode], #palette')) {
+  el.addEventListener(el.id === 'palette' ? 'change' : 'click', () => window.DeckTrace?.use('change', 'appearance'));
+}
+$('settings-open').addEventListener('click', () => window.DeckTrace?.use('open', 'settings'));
 const diagnosticsDialog = document.querySelector('#diagnostics-dialog');
 document.querySelector('#diagnostics-open').addEventListener('click', async () => {
+  window.DeckTrace?.use('open', 'diagnostics');
   diagnosticsDialog.showModal();
   try { document.querySelector('#diagnostics-preview').textContent = (await api('/api/diagnostics/preview')).preview + ' · browser: ' + JSON.stringify(window.DeckTrace?.counts() || {}); }
   catch (error) { document.querySelector('#diagnostics-preview').textContent = error.message; }
 });
 document.querySelector('#diagnostics-close').addEventListener('click', () => diagnosticsDialog.close());
 document.querySelector('#diagnostics-export').addEventListener('click', async () => {
-  try { await window.DeckTrace?.flush(true); const result = await api('/api/diagnostics/export', {}); document.querySelector('#diagnostics-preview').textContent = `Saved: ${result.file}`; }
+  try { window.DeckTrace?.use('export', 'diagnostics'); await window.DeckTrace?.flush(true); const result = await api('/api/diagnostics/export', {}); document.querySelector('#diagnostics-preview').textContent = `Saved: ${result.file}`; }
   catch (error) { document.querySelector('#diagnostics-preview').textContent = error.message; }
 });
 
