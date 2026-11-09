@@ -124,7 +124,12 @@ function dependencyText(card) {
   return card.dependencies.map(d => (d.title || d.id) + crew(d) +
     (d.reconciliation_required ? t(' · needs a check') : d.unresolved === false ? t(' · resolved') : '')).join('; ');
 }
-function notice(text, error = false) { $('notice').hidden = !text; $('notice').className = 'notice' + (error ? ' error' : ''); $('notice').textContent = text; }
+function notice(text, error = false) {
+  const el = $('notice'), name = 'notice' + (error ? ' error' : '');
+  if (el.hidden !== !text) el.hidden = !text;
+  if (el.className !== name) el.className = name;
+  if (el.textContent !== text) el.textContent = text;
+}
 function syncSubmit() {
   const call = S.modal?.type === 'call' ? S.modal.ticket?.call : null;
   if (!call) return;
@@ -159,9 +164,10 @@ async function api(path, body) {
 function sourceStatus() {
   if (!S.board) return;
   const sources = S.board.sources || [];
-  const latest = sources.map(x => x.received_at).filter(x => x > 0);
+  // Old only when the Deck couldn't confirm Firstmate for several minutes; the header says so, no banner.
+  const latest = sources.map(x => x.checked_at || x.received_at).filter(x => x > 0);
   const at = latest.length ? Math.min(...latest) : 0;
-  const stale = at && Date.now() / 1000 - at > Math.max(60, S.board.source_ttl * 2);
+  const stale = at && Date.now() / 1000 - at > 360;
   const failed = S.board.error || sources.some(s => s.error) || (S.board.deck?.sources || []).some(s => !s.available);
   const disconnected = !S.online || Date.now() - S.lastRead > 30000;
   // Freshness is one short phrase; the exact read time is on hover.
@@ -170,24 +176,24 @@ function sourceStatus() {
   const staleAt = retained.length ? Math.min(...retained) : at || S.lastRead / 1000;
   const connectionText = (failed || disconnected || stale) && S.board ? t("Out of date since {time}", {time: exactTime({epoch: staleAt})}) : S.board.loading ? t("Loading…") : t('Up to date');
   if ($('connection').textContent !== connectionText) $('connection').textContent = connectionText;
-  $('connection').dataset.level = disconnected || failed ? 'error' : stale ? 'warning' : 'ok';
+  const level = disconnected || failed ? 'error' : stale ? 'warning' : 'ok';
+  if ($('connection').dataset.level !== level) $('connection').dataset.level = level;
   structural($('connection'), 'time');
   $('connection').title = S.lastRead ? t('Source read') + ' · ' + exactTime(read) + ' · ' + t('updated {ago}', {ago: ago(read)}) : '';
   if (disconnected) notice(t("You’re offline. Your draft is safe. Check the question again once you’re back."));
   else if (failed) notice(t("Couldn’t refresh one source. Some cards may be out of date."));
   else if (!S.board.loading && !S.board.homes.length) notice(t('Standalone mode. Connect Firstmate to show tasks and enable controls.'));
-  else if (stale) notice(t("This view is a bit old. Waiting for a fresh update."));
   else notice('');
   syncSubmit();
 }
 let deckUI;
 let relaySettings;
-function renderBoard() {
+function renderBoard(mode) {
   if (!S.board) return;
   if (!relaySettings) relaySettings = window.createRelaySettings({t,node,button,api,state:S});
   if (!deckUI) deckUI = window.createDeckUI({t,node,button,append,api,ago,creationAge,exactTime,openCard,showDetail,closeDetail,detailOpen,parkDetail,state:S,
     hashOf,cardLine,phaseText,refreshTimes,sourceStatus,poll,setView,placeDetail,openDelivery,reportLink,answerTools,inlineAnswer,showAnswers:async()=>{await loadReceipts();$('receipts-panel').open=true;closeDetail(false);$('receipts-panel').scrollIntoView({block:'start'});}});
-  deckUI.render();
+  deckUI.render(false, mode);
 }
 const flatten = (text) => String(text || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase(locale);
 // One line of what is happening: authored text only, never a placeholder.
@@ -250,8 +256,10 @@ async function poll() {
       $('crew').value = S.home;
     }
     // A single coordinating space needs no picker.
-    $('crew').parentElement && ($('crew').parentElement.hidden = data.homes.length < 2 && !S.home);
-    renderBoard();
+    const lone = data.homes.length < 2 && !S.home;
+    if ($('crew').parentElement && $('crew').parentElement.hidden !== lone) $('crew').parentElement.hidden = lone;
+    // An automatic update changes cards in place: no entrance or move animation.
+    renderBoard('refresh');
     loadReceipts();
     loadBoardHistory();
     if (!S.linkHandled && data.homes.length && !data.loading) {
@@ -271,7 +279,7 @@ async function loadBoardHistory() {
   if (S.historyReading || Date.now() - (S.historyFetchedAt || 0) < 15000) return;
   const home = S.home; S.historyReading = true;
   try { const data = await api('api/history?' + new URLSearchParams({home}));
-    if (home === S.home) { S.historyRows = data.records; S.historyFetchedAt = Date.now(); renderBoard(); }
+    if (home === S.home) { S.historyRows = data.records; S.historyFetchedAt = Date.now(); renderBoard('refresh'); }
   } catch { /* Board keeps current deliveries; the full history view shows read errors. */ }
   finally { S.historyReading = false; }
 }
@@ -502,15 +510,25 @@ function reportLink(link, key) {
   return append(box, open, view);
 }
 // Card editors share the guarded ticket intake and its durable drafts.
+// The last reading of each inline question, so a refresh repaints it at its height.
+const inlineTickets=new Map();
 async function inlineAnswer(card, opener, container) {
   // Options and free answer stay on the card when it opens, as the demo; its detail follows them.
   const editor=node('div','inline-answer'),more=container.querySelector('.card-more');more?more.before(editor):container.append(editor);
+  // The card's menu item is added once and answers through the newest reading.
+  let answer=null,recheck=false;
+  const known=inlineTickets.get(card.key);
+  if(known)fill(known);
   try {
     const ticket=await api('api/ticket/'+encodeURIComponent(card.key));
-    if(!editor.isConnected||ticket.answered||!ticket.call)return;
+    inlineTickets.set(card.key,ticket);
+    if(!editor.isConnected||known&&JSON.stringify(known)===JSON.stringify(ticket))return;
+    editor.replaceChildren();fill(ticket);
+  }catch(error){editor.append(node('p','notice error',error.message));}
+  function fill(ticket){
+    if(ticket.answered||!ticket.call)return;
     const c=ticket.call,draft=readDraft(card.key),items=draft.attachments||[];
     const offered=c.options.filter(o=>o.value!=='reconcile');
-    if(c.options.some(o=>o.value==='reconcile'))deckUI?.addMenuItem?.(container,'redo',t('Ask to check it again'),()=>sendAnswer('reconcile'));
     const note=node('input');note.type='text';note.value=draft.note||'';note.placeholder=t(offered.length?'Or write your answer…':'Write your answer…');note.setAttribute('aria-label',t('Answer in my own words'));
     const status=node('p','notice');status.hidden=true;status.setAttribute('role','status');
     let edited=false;
@@ -529,13 +547,15 @@ async function inlineAnswer(card, opener, container) {
       if(option.value===c.recommend){choice.classList.add('recommended-choice');choice.title=t('Recommended');choice.append(node('small','recommended',t('Recommended')));}
       choices.append(choice);
     }
+    answer=sendAnswer;
+    if(!recheck&&c.options.some(o=>o.value==='reconcile')){recheck=true;deckUI?.addMenuItem?.(container,'redo',t('Ask to check it again'),()=>answer('reconcile'));}
     const send=button(t('Send'),()=>sendAnswer(''),'primary answer-send');
     const sync=()=>{const blocked=!!window.DeckAnonymize?.enabled||!S.online||S.busy||!!c.error||!!editor.querySelector('[data-uploading]');send.disabled=blocked||(!note.value.trim()&&!items.length);for(const b of choices.children)b.disabled=blocked;};
     note.addEventListener('input',store);note.addEventListener('keydown',event=>{if(event.key==='Enter'&&!send.disabled){event.preventDefault();sendAnswer('');}});
     const free=node('div','own-words');free.append(append(node('label','answer-label'),note),send);editor.append(choices,free,status);
     if(c.attachments)answerTools.composer(free,'api/ticket/'+encodeURIComponent(card.key)+'/upload',items,()=>store(true),()=>editor.isConnected&&!window.DeckAnonymize?.enabled&&!S.busy);
     if(c.error){status.textContent=c.error;status.hidden=false;}sync();
-  }catch(error){editor.append(node('p','notice error',error.message));}
+  }
 }
 function choose(value) {
   if (S.busy || S.receipt || S.modal?.type !== 'call') return;

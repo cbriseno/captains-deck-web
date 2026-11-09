@@ -9,6 +9,7 @@ one message the bridge sends is the Deck's fixed pointer to a recorded answer.
 from __future__ import annotations
 
 import argparse
+import copy
 from answer_files import AnswerFiles, MAX_FILE
 import hashlib
 import http.cookies
@@ -35,7 +36,7 @@ from presentation import USER_PATH_STARTS, URL_RE, card_field, drop_links, excer
 import flow_tui as fm  # noqa: E402
 from deck_platform import LOOPBACK, local_origin, endpoint_path, private_directory, safe_file_reads, shell_command
 
-from deck_control import DeckControls, ControlError
+from deck_control import CHANGE_GAP, FULL_READ, DeckControls, ControlError
 from relay_settings import RelaySettings
 import fm_diagnostics as diagnostics
 
@@ -337,6 +338,42 @@ def history_mark(home):
             file_mark(endpoint_path(home.path, 'fm_delivery.py')))
 
 
+MARKS, MARKS_LOCK = {}, threading.Lock()
+
+
+def state_mark(home):
+    """What changes when Firstmate records anything the Deck shows: each task's
+    status and meta, and each entry of data/ (Firstmate replaces files, which
+    changes their folder). Read once per 2 s; None for a remote home."""
+    if fm.is_remote_home(home) or fm.is_aggregate_home(home):
+        return None
+    with MARKS_LOCK:
+        at, mark = MARKS.get(home.path, (0, None))
+        if time.monotonic() - at < 2:
+            return mark
+        entries = [file_mark(Path(home.path, '.tasks.toml'))]
+        for folder in ('state', 'data'):
+            try:
+                with os.scandir(Path(home.path, folder)) as listing:
+                    entries += sorted((x.name, file_mark(x.path)) for x in listing if not x.name.startswith('.')
+                                      and (folder == 'data' or x.name.endswith(('.status', '.meta'))))
+            except OSError:
+                entries.append((folder, None))
+        mark = digest(json.dumps(entries))
+        MARKS[home.path] = time.monotonic(), mark
+        return mark
+
+
+def log(text):
+    """One timed line in the server log; callers pass no ids, paths or captain text."""
+    print(time.strftime('%Y-%m-%dT%H:%M:%SZ ', time.gmtime()) + text, file=sys.stderr, flush=True)
+
+
+def log_read(kind, started, ok=True, cause=''):
+    """One line per Firstmate read: which, how long, and why it failed."""
+    log(f'deck read {kind} {round((time.monotonic() - started) * 1000)}ms ' + ('ok' if ok else 'error ' + (cause or 'unknown')))
+
+
 def changed_since(path, started):
     # One second covers filesystems with coarse change times.
     mark = file_mark(path)
@@ -348,14 +385,30 @@ class Collector(fm.Collector):
     def __init__(self):
         super().__init__(fm.ALL_CREW_LABEL)
         self.source_errors = {}
+        # Per home: the state mark of the last read, and when it was last seen unchanged.
+        self.marks, self.checked = {}, {}
+
+    def _bearings_stale(self, home, now):
+        raw, received, path = self._raw.get(home.label, ({}, 0.0, ''))
+        mark = state_mark(home)
+        if self._force or not raw or path != home.path or mark is None:
+            return super()._bearings_stale(home, now)
+        if mark == self.marks.get(home.label):
+            self.checked[home.label] = time.time()
+            return now - received > FULL_READ
+        return now - received > CHANGE_GAP
 
     def _load_bearings(self, home, now, agents, panes, homes):
         stale = self._bearings_stale(home, now)
         before = self._raw.get(home.label, ({}, 0, ''))[1]
+        mark, started = state_mark(home), time.monotonic()
         result = super()._load_bearings(home, now, agents, panes, homes)
         after = self._raw.get(home.label, ({}, 0, ''))[1]
         if stale:
             self.source_errors[home.label] = '' if after > before else 'Could not refresh Firstmate.'
+            log_read('bearings', started, after > before, 'no-reply')
+            if after > before:
+                self.marks[home.label] = mark
         return result
 
 
@@ -366,7 +419,7 @@ class Board:
         self.collector = collector or Collector()
         self.data_dir = Path(data_dir).expanduser().absolute()
         self.herdr_origin = herdr_origin
-        self.deck_controls = DeckControls(self.child_env)
+        self.deck_controls = DeckControls(self.child_env, state_mark, log_read)
         self.answer_capabilities = {}
         self.answer_files = AnswerFiles(self, Refusal, fm, shell_command, endpoint_path, home_id)
         self.relay_settings = RelaySettings(self.child_env, os.environ.get('CD_WEB_EXTENSIONS_ROOT', ''),
@@ -457,6 +510,13 @@ class Board:
 
     def homes(self):
         return fm.real_homes(self.collector.snapshot().homes)
+
+    def inputs(self):
+        """What a board is built from, cheaply compared: Firstmate's state and
+        the last reads of it."""
+        homes = self.homes()
+        return (tuple(state_mark(h) for h in homes), tuple(self.collector._raw.get(h.label, ({}, 0))[1] for h in homes),
+                tuple(id(self.deck_controls.peek(h)) for h in homes))
 
     def health(self):
         snap = self.collector.snapshot()
@@ -576,6 +636,11 @@ class Board:
             owner = self.owner(card)
         except Refusal:
             pass
+        # The card text Firstmate saved now, without waiting for its next slow board read.
+        fresh = task_presentation(owner, card.task) if owner and card.task and not fm.is_remote_home(owner) else {}
+        if fresh:
+            card = copy.copy(card)
+            card.flow = dict(getattr(card, 'flow', None) or {}, presentation=fresh)
         context = fm.flow_context(card, translate=self.t)
         activity = fm.card_activity(card)
         if card.bucket != 'captains_call' and (activity['kind'] == 'decision' or context['phase'] == 'human'):
@@ -660,7 +725,7 @@ class Board:
         self.warming.set()
         titles = self.titles()
         local = [h for h in homes if not fm.is_remote_home(h)]
-        work_sources = [dict(self.deck_controls.source(h), home=home_id(h)) for h in local]
+        work_sources = [dict(self.deck_controls.current(h), home=home_id(h)) for h in local]
         for h, source in zip(local, work_sources):
             self.answer_files.label_answers(h, source.get('snapshot', {}).get('nodes', []))
         view = self.view_cards(snap, work_sources)
@@ -689,6 +754,8 @@ class Board:
             error = getattr(self.collector, 'source_errors', {}).get(h.label, '')
             sources.append({'home': home_id(h), 'label': h.label,
                             'received_at': received, 'generated': raw.get('generated', ''),
+                            # Last time the Deck confirmed this read is still current.
+                            'checked_at': max(received, getattr(self.collector, 'checked', {}).get(h.label, 0)),
                             'error': self.t(error), 'remote': fm.is_remote_home(h),
                             'supervisor': raw.get('supervisor') or {}})
         return {'seq': snap.seq, 'collected_at': snap.collected_at,
@@ -795,23 +862,26 @@ class Board:
                 'message': self.t(message), 'current_key': current_key,
                 'receipts': [r for r in self.receipts(actor) if r.get('home') == identity and r.get('task') == task]}
 
-    def records(self, home, task='', force=False, max_age=15):
+    def records(self, home, task='', force=False, max_age=CHANGE_GAP):
         """Delivery rows, read again when Firstmate's records changed.
 
-        The history list also reads again after max_age seconds. Opening one
+        The history list also reads again when Firstmate's state changed, at
+        most every max_age seconds, and every FULL_READ seconds. Opening one
         delivery reads again only when its sources or its completion receipt
         changed, or always when the sources can't be known.
         """
         identity = home_id(home)
         with self.history_lock:
-            rows, note, started, mark = self.history_cache.get(identity, ([], '', 0, None))
-            current = history_mark(home)
+            rows, note, started, mark, seen = self.history_cache.get(identity, ([], '', 0, None, None))
+            current, state = history_mark(home), state_mark(home)
+            age = time.time() - started
             if (force or not started or current != mark or (task and current is None)
-                    or (max_age is not None and time.time() - started > max_age)
+                    or (max_age is not None and (age > FULL_READ or (state != seen and age > max_age)))
                     or (task and changed_since(Path(home.path, 'data', task, 'completion.json'), started))):
-                started = time.time()
-                rows, note, _ = fm.delivery_records(home, translate=self.t)
-                self.history_cache[identity] = rows, note, started, current
+                started, clock = time.time(), time.monotonic()
+                rows, note, complete = fm.delivery_records(home, translate=self.t)
+                log_read('history', clock, bool(rows) or complete, 'incomplete')
+                self.history_cache[identity] = rows, note, started, current, state
             return rows, note
 
     def delivered_project(self, home, rows, record, human):
@@ -1407,13 +1477,19 @@ class Server(ThreadingHTTPServer):
         # Last built board per home selection; reads serve it while one rebuild runs.
         # A POST changes what the board shows, so it drops them (generation).
         self.boards, self.rebuilding, self.generation = {}, set(), 0
+        # What each board was built from, and when: a read rebuilds only when that
+        # changed, or every 15 s for live agent activity.
+        self.built = {}
         self.boards_lock = threading.Lock()
 
     def last_board(self, selected):
         """The last built board at once; only a read with none waits for a build."""
+        current = self.board.inputs() if hasattr(self.board, 'inputs') else None
         with self.boards_lock:
             data = self.boards.get(selected)
-            rebuild = data is not None and selected not in self.rebuilding
+            inputs, at = self.built.get(selected, (None, 0))
+            rebuild = (data is not None and selected not in self.rebuilding
+                       and (current is None or current != inputs or time.monotonic() - at > 15))
             if rebuild:
                 self.rebuilding.add(selected)
         if rebuild:
@@ -1446,14 +1522,17 @@ class Server(ThreadingHTTPServer):
         global FAILURES
         started = time.monotonic()
         generation = self.generation
+        inputs = self.board.inputs() if hasattr(self.board, 'inputs') else None
         data = self.board.board(selected)
         with self.boards_lock:
             # A board still loading is cheap and never kept past the first read.
             if generation == self.generation and not data.get('loading'):
                 self.boards[selected] = data
+                self.built[selected] = inputs, time.monotonic()
         sources = data.get('deck', {}).get('sources', [])
         errors = [x for x in sources if not x.get('available')]
         duration = round((time.monotonic() - started) * 1000)
+        log(f'deck build board {duration}ms')
         if errors or data.get('error') or any(x.get('error') for x in data.get('sources', [])):
             FAILURES += 1
             code = errors[0].get('code') if errors else 'parse'
@@ -1471,6 +1550,13 @@ class Server(ThreadingHTTPServer):
         return data
 
 
+# Route segments a request line may name; ids, files and text print as '*'.
+ROUTE_WORDS = {'', 'api', 'health', 'locale', 'board', 'history', 'diagnostics', 'preview', 'trace', 'export',
+               'settings', 'apply', 'control', 'upload', 'review', 'receipt', 'receipts', 'resolve', 'ticket',
+               'report', 'attachments', 'answers', 'correct', 'file', 'answer', 'delivery', 'explanation',
+               'icons'} | {x.name for x in STATIC.iterdir()}
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = 'CaptainsDeck/1'
     protocol_version = 'HTTP/1.0'
@@ -1486,6 +1572,7 @@ class Handler(BaseHTTPRequestHandler):
         self.handle_request(True)
 
     def handle_request(self, unsafe):
+        self.started, self.age = time.monotonic(), None
         try:
             actor, csrf, sid, secure = self.server.security.check(self, unsafe)
             parsed = urlsplit(self.path)
@@ -1515,6 +1602,8 @@ class Handler(BaseHTTPRequestHandler):
             elif not unsafe and path == '/api/board':
                 data = dict(self.server.last_board(value('home')))
                 data['csrf'] = csrf
+                checked = [x.get('checked_at') or 0 for x in data.get('sources', [])]
+                self.age = round(time.time() - min(checked)) if checked and min(checked) else None
             elif not unsafe and path == '/api/diagnostics/preview':
                 data = {'preview': diagnostics.export(['deck'], preview=True)}
             elif unsafe and path == '/api/diagnostics/trace':
@@ -1668,11 +1757,13 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(content)
         except (BrokenPipeError, ConnectionResetError):
             pass
+        # One line per request: its route without ids or query, status and duration.
+        route = '/'.join(x if x in ROUTE_WORDS else '*' for x in urlsplit(self.path).path.split('/'))
+        took, age = round((time.monotonic() - getattr(self, 'started', time.monotonic())) * 1000), getattr(self, 'age', None)
+        log(f'deck request {self.command} {route} {status} {took}ms' + (f' source_age={age}s' if age is not None else ''))
 
     def log_message(self, fmt, *args):
-        # Paths, query strings and captain text are intentionally not logged.
-        if args and str(args[1] if len(args) > 1 else '') not in ('200', '304'):
-            print('deck HTTP request completed', file=sys.stderr)
+        pass  # respond() logs each request without its ids, query or captain text.
 
 
 def main(argv=None, *, stop_event=None, on_ready=None):

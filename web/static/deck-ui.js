@@ -91,7 +91,7 @@ window.createDeckUI = function (host) {
   }
   const ageText=(label,value)=>label==='ago'?shortAge(value):t(label)+' '+(['Created','Created group'].includes(label)?creationAge(event(value)):naturalAge(value));
   function time(labelText, value) { const e = event(value)??null; const el = structural(n('span','dates',ageText(labelText,value)), 'time'); el.title = exactTime(e); el.dataset.event = JSON.stringify(e);el.dataset.ageLabel=labelText;return el; }
-  function refreshAges(){for(const el of document.querySelectorAll('[data-age-label]'))el.textContent=ageText(el.dataset.ageLabel,JSON.parse(el.dataset.event));}
+  function refreshAges(){for(const el of document.querySelectorAll('[data-age-label]')){const text=ageText(el.dataset.ageLabel,JSON.parse(el.dataset.event));if(el.textContent!==text)el.textContent=text;}}
   function dates(x) { const created=x.kind !== 'project'||event(x.created_at);return add(n('div','dates'),created?time(x.kind === 'task' ? 'Created' : 'Created group',x.created_at):null,created?' · ':null,time(x.kind === 'task' ? 'Updated' : 'Updated group',x.updated_at)); }
   function normalize(data) {
     const cards = [...data.columns.flatMap(c => c.cards)];
@@ -704,10 +704,11 @@ window.createDeckUI = function (host) {
     if(!app.board)return;
     const traceStart=performance.now(), oldColumns=new Map();
     for(const el of document.querySelectorAll('#board .task-card[data-key]')){const actual=el.closest('.col')?.dataset.k;oldColumns.set(el.dataset.key,actual);const x=byId.get(el.dataset.node);if(!el.closest('.request-board')&&x&&actual&&!el.classList.contains('qcard')&&!el.classList.contains('action-card')&&(colOf(x)!==actual||x.state!==el.dataset.state))window.DeckTrace?.mismatch(el.dataset.key,actual,colOf(x));}
-    const cardSignature=app.board.columns.map(c=>[c.id,c.cards.map(x=>[x.key,x.title,x.question,x.question_summary,x.attention_kind,x.action,x.answered,x.project,host.cardLine(x),host.phaseText(x),x.dependencies,x.time?.epoch,x.time?.date])]);
+    const cardSignature=app.board.columns.map(c=>[c.id,c.cards.map(x=>[x.key,x.title,x.question,x.question_summary,x.attention_kind,x.action,x.answered,x.project,host.cardLine(x),host.phaseText(x),x.dependencies,x.time?.epoch,x.time?.date,x.summary,x.presentation])]);
     const workSignature=app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.requests,s.snapshot?.rev,s.snapshot?.sigue,s.snapshot?.yields,s.snapshot?.pause_controls,s.snapshot?.crew,s.snapshot?.events,s.retained_at && Date.now()/1000-s.retained_at>=30,s.snapshot?.nodes?.map(x=>x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30)]);
     const signature=JSON.stringify([cardSignature,workSignature,app.board.diagnostics,app.historyRows,app.query,ui.scope,ui.view,ui.column,ui.done,ui.pausedOpen,ui.order,ui.needsClosed,ui.density,[...ui.expanded],[...ui.groups],[...ui.steps],ui.mixer,[...ui.closed],[...ui.stacks],[...ui.tree],app.online]);
-    if(!force&&signature===ui.signature){refreshAges();highlight();return;}ui.signature=signature;
+    // Nothing changed: leave the DOM as it is, only ages that moved.
+    if(!force&&signature===ui.signature){refreshAges();return;}ui.signature=signature;
     // A refresh may rebuild rows for unrelated detail/focus changes. Preserve
     // each existing comet's phase, including a paused offscreen instance.
     const activityKey=row=>(row.closest('#project-tree')?'tree:':'mixer:')+row.dataset.node;

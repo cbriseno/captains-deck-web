@@ -46,7 +46,7 @@ window.createDeckMotion = function ({t, settled}) {
   function capture(mode) {
     cleanup();
     const board = document.getElementById('board');
-    if (!board || document.documentElement?.dataset.animations === 'false' || (reduced.matches && mode === 'filter')) return null;
+    if (!board || mode === 'refresh' || document.documentElement?.dataset.animations === 'false' || (reduced.matches && mode === 'filter')) return null;
     pending = true;
     const snapshot = {mode, board, generation, cards:new Map(), immediate:reduced.matches, played:false};
     if (mode === 'filter') {
