@@ -149,7 +149,7 @@ function syncSubmit() {
 const answerTools=window.createAnswerTools({t,node,button,api,state:S,syncSubmit});
 const retryable = (message) => Object.assign(new Error(message), {retry: true});
 async function api(path, body) {
-  if (body && path !== '/api/diagnostics/trace' && path !== '/api/diagnostics/export' && window.DeckAnonymize?.enabled) throw new Error(t('Editing is unavailable in Anonymize mode.'));
+  if (body && path !== '/api/diagnostics/trace' && path !== '/api/diagnostics/export' && window.DeckAnonymize?.enabled) throw new Error(t('Editing is unavailable while text is hidden.'));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), body ? 100000 : 20000);
   try {

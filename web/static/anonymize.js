@@ -179,8 +179,8 @@ window.DeckAnonymize = (() => {
     observer.disconnect(); internal = true;
     try { return work(); } finally { internal = false; if (active) for (const root of roots) if (root.isConnected) observe(root); }
   }
-  function scan(root) {
-    const nodes = collect(root); for (const el of nodes) if (el.tagName === 'SELECT') selectWidths.set(el, getComputedStyle(el).width);
+  function scan(changed) {
+    const nodes = [...new Set([...changed].filter(n => n.isConnected).flatMap(collect))]; for (const el of nodes) if (el.tagName === 'SELECT') selectWidths.set(el, getComputedStyle(el).width);
     const jobs = nodes.filter(n => n.nodeType === Node.TEXT_NODE).map(read).filter(Boolean).map(calculate);
     batch(() => { for (const node of nodes) if (node.nodeType === Node.ELEMENT_NODE) element(node); for (const job of jobs) write(job); });
   }
@@ -188,6 +188,7 @@ window.DeckAnonymize = (() => {
   async function sweep(root, token) {
     const nodes = collect(root), texts = nodes.filter(n => n.nodeType === Node.TEXT_NODE && n.data.trim() && !generated.has(n)), jobs = [], prepared = [];
     const staged = texts.length > 180; metrics.staged ||= staged;
+    let slice = performance.now();
     async function phase(items, name, work) {
       const size = name === 'attributes' ? 192 : 48;
       for (let i = 0; i < items.length; i += size) {
@@ -195,7 +196,8 @@ window.DeckAnonymize = (() => {
         const start = performance.now();
         work(items.slice(i, i + size));
         const elapsed = performance.now() - start; metrics[name] = (metrics[name] || 0) + elapsed; metrics.maxTask = Math.max(metrics.maxTask || 0, elapsed);
-        if (staged && i + size < items.length) await frame();
+        // Yield only after ~30 ms of work, so a large page is not one frame per batch.
+        if (staged && i + size < items.length && performance.now() - slice > 30) { await frame(); slice = performance.now(); }
       }
     }
     await phase(nodes.filter(n => n.tagName === 'SELECT'), 'read', chunk => { for (const el of chunk) selectWidths.set(el, getComputedStyle(el).width); });
@@ -212,8 +214,8 @@ window.DeckAnonymize = (() => {
       else targets.add(m.target);
     }
     if (processing) { for (const node of targets) pending.add(node); return; }
-    if (targets.size > 48) { set(true); return; }
-    for (const node of targets) if (node.isConnected) scan(node);
+    // Only the changed nodes, in one pass that runs before the next paint; the page stays visible.
+    scan(targets);
     for (const node of records.keys()) if (!node.isConnected) records.delete(node);
   });
   const attachShadow = Element.prototype.attachShadow;
@@ -265,10 +267,8 @@ window.DeckAnonymize = (() => {
     if (active) {
       roots.add(document.body); observe(document.body);
       await sweep(document.body, token);
-      while (pending.size && token === revision) {
-        const extra = [...pending]; pending.clear();
-        for (const node of extra) if (node.isConnected) await sweep(node, token);
-      }
+      // Changes made during the sweep, in one synchronous pass so a live page cannot keep it running.
+      if (token === revision) { const extra = [...pending]; pending.clear(); scan(extra); }
     } else observer.disconnect();
     if (token !== revision) return;
     // One final layout read; no data is revealed until every pending node is scrubbed.
@@ -288,7 +288,9 @@ window.DeckAnonymize = (() => {
     for (const event of ['pointerdown', 'mousedown', 'click']) document.addEventListener(event, e => { if (active && e.target.closest('select,[contenteditable=true],input[type=checkbox]:not(#anonymize),input[type=radio]')) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
     document.addEventListener('keydown', e => { if (active && !['Tab', 'Escape'].includes(e.key) && e.target.matches('select,input[type=checkbox]:not(#anonymize),input[type=radio]')) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
     let saved = false; try { saved = sessionStorage.getItem('deck-anonymize') === 'true'; } catch { /* Default off. */ }
-    window.addEventListener('resize', () => { if (active) set(true); });
+    // Word widths follow line width; a phone's toolbar changing only the height needs no new sweep.
+    let width = innerWidth;
+    window.addEventListener('resize', () => { if (innerWidth === width) return; width = innerWidth; if (active) set(true); });
     return set(saved);
   }
   return {catalog, start, set, project(el,key) { if(!projectAliases.has(key))projectAliases.set(key,projectAliases.size+1);provenance.set(el,{alias:(language==='es'?'Proyecto ':'Project ')+projectAliases.get(key)});return el; }, value(el) { return records.get(el)?.get('value')?.original ?? el.value; }, formatted(value) { times.add(value); if (times.size > 4096) times.delete(times.values().next().value); return value; }, structural(el, kind) { provenance.set(el, kind); return el; }, get enabled() { return active; }, get metrics() { return {...metrics}; }};
