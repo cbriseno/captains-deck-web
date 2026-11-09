@@ -364,9 +364,22 @@ def state_mark(home):
         return mark
 
 
+# Set by the managed launcher when stderr is its server.log; rotated like fm_diagnostics.
+LOG_PATH, LOG_LIMIT = None, 2 * 1024 * 1024
+
+
 def log(text):
     """One timed line in the server log; callers pass no ids, paths or captain text."""
     print(time.strftime('%Y-%m-%dT%H:%M:%SZ ', time.gmtime()) + text, file=sys.stderr, flush=True)
+    if LOG_PATH is None or os.fstat(2).st_size <= LOG_LIMIT // 2:
+        return
+    try:
+        os.replace(LOG_PATH, LOG_PATH.with_name('server.1.log'))
+        fd = os.open(LOG_PATH, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+        os.dup2(fd, 2)
+        os.close(fd)
+    except OSError:
+        pass
 
 
 def log_read(kind, started, ok=True, cause=''):

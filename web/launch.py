@@ -51,6 +51,9 @@ def request(directory, command):
 
 def managed(directory, port=None):
     import bridge
+    with contextlib.suppress(OSError):
+        if os.path.samestat(os.fstat(2), os.stat(directory / 'server.log')):
+            bridge.LOG_PATH = directory / 'server.log'
     stop = threading.Event()
     token = secrets.token_hex(32)
     state = {'state': 'starting', 'pid': os.getpid()}
