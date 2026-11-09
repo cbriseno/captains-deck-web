@@ -193,7 +193,7 @@ class DeckControls:
         try:
             result = subprocess.run(shell_command(script, *args),
                                     input=json.dumps(payload, ensure_ascii=False) if payload is not None else None,
-                                    env=self.child_env(home), capture_output=True, text=True, timeout=15 if command == 'snapshot' else 8)
+                                    env=self.child_env(home), capture_output=True, text=True, timeout=60 if command == 'snapshot' else 8)
         except subprocess.TimeoutExpired as exc:
             raise ControlError('Firstmate took too long.', 503, 'timeout') from exc
         except (OSError, subprocess.SubprocessError) as exc:
