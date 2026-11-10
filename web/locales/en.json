@@ -141,6 +141,7 @@
   "Report: ": "Report: ",
   "Request failed ({status}).": "Request failed ({status}).",
   "Request is too large or empty.": "Request is too large or empty.",
+  "Firstmate took too long.": "Firstmate took too long.",
   "Deck took too long to answer.": "Deck took too long to answer.",
   "Firstmate history. ": "Firstmate history. ",
   "Original title": "Original title",

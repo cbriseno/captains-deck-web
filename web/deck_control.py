@@ -190,10 +190,15 @@ class DeckControls:
         if command == 'request-status':
             args += ['--request-id', payload['request_id']]
             payload = None
+        # Firstmate owns the safe-point and agent-launch deadlines. Cutting a
+        # pause/resume command short can leave a recorded request unfinished.
+        pause_write = command in {verbs[1] for verbs in SIGNAL_ACTIONS.values()} or (
+            command == 'apply' and (payload or {}).get('op') in ('set_pause', 'clear_pause'))
+        timeout = None if pause_write else 120 if command == 'bootstrap' else 60 if command == 'snapshot' else 8
         try:
             result = subprocess.run(shell_command(script, *args),
                                     input=json.dumps(payload, ensure_ascii=False) if payload is not None else None,
-                                    env=self.child_env(home), capture_output=True, text=True, timeout=120 if command == 'bootstrap' else 60 if command == 'snapshot' else 8)
+                                    env=self.child_env(home), capture_output=True, text=True, timeout=timeout)
         except subprocess.TimeoutExpired as exc:
             raise ControlError('Firstmate took too long.', 503, 'timeout') from exc
         except (OSError, subprocess.SubprocessError) as exc:

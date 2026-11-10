@@ -141,6 +141,7 @@
   "Report: ": "Reporte: ",
   "Request failed ({status}).": "La consulta falló ({status}).",
   "Request is too large or empty.": "Petición demasiado grande o vacía.",
+  "Firstmate took too long.": "Firstmate tardó demasiado en responder.",
   "Deck took too long to answer.": "Deck tardó demasiado en responder.",
   "Firstmate history. ": "Historial de Firstmate. ",
   "Original title": "Título original",

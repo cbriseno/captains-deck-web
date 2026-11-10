@@ -153,7 +153,7 @@ async function api(path, body) {
       headers: body ? { 'Content-Type': 'application/json', 'X-Deck-CSRF': S.csrf } : {},
       body: body ? JSON.stringify(body) : undefined, signal: controller.signal });
     const data = await response.json();
-    if (!response.ok) throw Object.assign(new Error(data.error || t('Request failed ({status}).', {status: response.status})), {code:data.code,details:data.details,retry:data.code === 'receipt-uncertain'});
+    if (!response.ok) throw Object.assign(new Error(data.error || t('Request failed ({status}).', {status: response.status})), {code:data.code,details:data.details,retry:['receipt-uncertain','timeout'].includes(data.code)});
     return data;
   } catch (err) {
     if (err.name === 'AbortError') throw retryable(t('Deck took too long to answer.'));
@@ -885,7 +885,7 @@ window.addEventListener('online', poll);
 matchMedia('(max-width: 639px)').addEventListener('change', renderBoard);
 window.addEventListener('pagehide', () => stream?.close());
 window.addEventListener('pageshow', event => { if (event.persisted) poll(); });
-setInterval(() => { sourceStatus(); refreshTimes(); deckUI?.refreshAges(); }, 15000);
+setInterval(() => { sourceStatus(); refreshTimes(); deckUI?.refreshAges(); deckUI?.refreshReceipts(); }, 15000);
 // Retire an old Deck push/offline worker. It must never intercept actions or
 // show stale API success; offline honesty is handled by the visible live view.
 if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(regs => { for (const reg of regs) if (reg.scope === new URL('./', location.href).href) reg.unregister(); }).catch(() => {});
