@@ -249,10 +249,8 @@ window.createDeckUI = function (host) {
   function pauseSignals(){
     const capacity=$('agents-capacity');capacity.replaceChildren();
     for(const source of model.sources){
-      const crew=source.snapshot?.crew,tasks=model.nodes.filter(x=>x.home===source.home&&x.kind==='task');
-      const live=tasks.filter(x=>x.raw?.worker_liveness?.state==='alive').length;
-      const unknown=tasks.some(x=>['active','stopping'].includes(x.state)&&!['alive','dead'].includes(x.raw?.worker_liveness?.state));
-      const agents=unknown?t('Agents · unconfirmed'):t('Agents {count}',{count:live});
+      const crew=source.snapshot?.crew;
+      const agents=Number.isInteger(crew?.agents_running)?t('Agents {count}',{count:crew.agents_running}):t('Agents · unconfirmed');
       const chip=structural(n('span','agents-count',agents+' · '+t('Slots {running} of {cap}',{running:Number.isInteger(crew?.agents_running)?crew.agents_running:t('unconfirmed'),cap:crew?.agents_cap??t('Not reported')})));
       const home=app.board.homes?.find(h=>h.id===source.home)?.label||chip.textContent;
       chip.title=home;chip.dataset.stale=String(!source.available);capacity.append(chip);

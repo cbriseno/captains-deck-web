@@ -24,16 +24,16 @@ test('pause preview, scope signals, confirmation, queue and owner events',{timeo
   try{
     const url=await new Promise((resolve,reject)=>{let out='';const timer=setTimeout(()=>reject(Error(out)),12000);child.stdout.on('data',c=>{out+=c;const m=out.match(/Fixture at (\S+)/);if(m){clearTimeout(timer);resolve(m[1]);}});child.stderr.on('data',c=>out+=c);child.on('exit',c=>reject(Error('Fixture '+c+' '+out)));});
     browser=true;run('open',url);run('resize','1440','1000');
-    assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes 2 de 6');return document.querySelector('#agents-capacity .agents-count').title.includes('Firstmate cuenta 3 carriles ocupados');}`),true,'Agents count the live tasks shown in progress; Firstmate lanes stay visible on hover');
+    assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes 3 · Cupos 3 de 6');return true;}`),true,'Agents and slots use the owner lifecycle count even when task states differ');
     evaluate(`async()=>{document.querySelector('#columns-nav button:last-child').click();return true;}`);
     const inherited=evaluate(`async()=>{const b=${button('task:inherited-signal')};return {text:b.textContent,scopeLink:b.classList.contains('pause-owner'),disabled:b.disabled};}`);
     assert.match(inherited.text,/Preparar entrega/);assert.equal(inherited.scopeLink,true);assert.equal(inherited.disabled,false,'Inherited pauses point to their owning scope');
     evaluate(`async()=>{${button('task:inherited-signal')}.click();return true;}`);
     assert.equal(calls().filter(c=>c.command==='pause.cancel').length,0,'Following an inherited pause never cancels it');
     change(raw=>{raw.crew=null;});
-    assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes · sin dato');return true;}`),true);
+    assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes · sin confirmar · Cupos sin confirmar de Sin dato');return true;}`),true);
     change(raw=>{raw.crew={agents_running:3,agents_cap:6};});
-    evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes 2 de 6');return true;}`);
+    evaluate(`async()=>{${wait}await wait(()=>document.querySelector('#agents-capacity').textContent==='Agentes 3 · Cupos 3 de 6');return true;}`);
     assert.equal(evaluate(`async()=>{document.querySelector('#columns-nav button:nth-child(2)').click();const mine=document.querySelector('#columns-nav button:nth-child(2)').getAttribute('aria-pressed');document.querySelector('#columns-nav button:first-child').click();return mine==='true'&&document.querySelector('#columns-nav button:first-child').getAttribute('aria-pressed')==='true'&&document.querySelector('#board .request-title').getAttribute('aria-expanded')==='true';}`),true,'Request order mode preserves expanded pause scopes');
     change(raw=>{raw.requests.push({id:'top',scope:'req:top',key:'request:top',label:'Arriba · ficticio',project:'project:deck',tasks:['task:second'],pause:null});raw.sigue=['task:second','task:next'];raw.yields={pause:'task:web',request:'request:demo',for_task:'task:second',for_request:'request:top',room:false};});
     const order=evaluate(`async()=>{${wait.replace('160','400')}document.querySelector('#columns-nav button:nth-child(2)').click();await wait(()=>document.querySelector('.yield-chip'));const chips=id=>[...document.querySelector('.request-row[data-node$="'+id+'"]').querySelectorAll('.turn-chip,.yield-chip')].map(c=>c.textContent);const out={top:chips('req:top'),demo:chips('req:demo'),note:!!document.querySelector('.order-note')};document.querySelector('#columns-nav button:first-child').click();await wait(()=>!document.querySelector('.order-note,.turn-chip,.yield-chip'));return out;}`);
