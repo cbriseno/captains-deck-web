@@ -38,6 +38,38 @@ def owner(home):
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_external_relaunch_reconciles_stale_resume_for_each_scope(self):
+        import copy
+        raw = {'projects': [{'key': 'project:deck'}], 'tasks': [
+            {'key': 'task:live', 'project': 'project:deck', 'state': 'running',
+             'worker_liveness': {'state': 'alive'}}],
+            'requests': [{'id': 'work', 'tasks': ['task:live'], 'pause': None}],
+            'pause_controls': [{'scope': scope, 'state': 'resuming'} for scope in
+                               ('task:live', 'project:deck', 'req:work')]}
+        original = copy.deepcopy(raw)
+        projected = project_snapshot(raw)
+        self.assertEqual(projected['pause_controls'], [])
+        for node in projected['nodes']:
+            self.assertTrue(node['pause']['can_pause'])
+            self.assertNotEqual(node['pause']['state'], 'resuming')
+        self.assertEqual(raw, original, 'Projection must preserve owner receipts')
+
+        for state, liveness in [('running', None), ('running', {'state': 'unknown'}),
+                                ('ready', {'state': 'dead'}), ('paused_own', {'state': 'alive'})]:
+            pending = copy.deepcopy(raw)
+            pending['tasks'][0].update(state=state, worker_liveness=liveness)
+            self.assertEqual(project_snapshot(pending)['pause_controls'], raw['pause_controls'])
+        for extra in [{'key': 'task:missing'}, {'key': 'task:queued', 'state': 'ready'}]:
+            pending = copy.deepcopy(raw)
+            pending['tasks'].append(dict(extra, project='project:deck'))
+            pending['requests'][0]['tasks'].append(extra['key'])
+            self.assertEqual(len(project_snapshot(pending)['pause_controls']), 2)
+        pending = copy.deepcopy(raw)
+        pending['requests'][0]['pause'] = {'reason': 'Still paused'}
+        self.assertEqual(project_snapshot(pending)['pause_controls'], [raw['pause_controls'][2]])
+        pending['pause_controls'][2]['state'] = 'queued'
+        self.assertEqual(project_snapshot(pending)['pause_controls'], [pending['pause_controls'][2]])
+
     def test_requests_keep_explicit_membership_activity_and_manual_order(self):
         requests = [{'id': 'old', 'tasks': ['task:work'], 'updated_at': '2026-11-01T00:00:00Z'},
                     {'id': 'new', 'tasks': [], 'updated_at': '2026-11-08T00:00:00Z'}]

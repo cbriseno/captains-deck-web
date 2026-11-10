@@ -19,7 +19,15 @@ test('slow pause/resume and a lost reply converge using the original receipt',{t
     const url=await new Promise((resolve,reject)=>{let out='';const timer=setTimeout(()=>reject(Error(out)),12000);child.stdout.on('data',c=>{out+=c;const m=out.match(/Fixture at (\S+)/);if(m){clearTimeout(timer);resolve(m[1]);}});child.stderr.on('data',c=>out+=c);child.on('exit',c=>{clearTimeout(timer);reject(Error('Fixture '+c+' '+out));});});
     browser=true;run('open',url);
     assert.match(action('Pausar'),/Aplicado/);
+    // A lingering request receipt must converge after a normal Deck resume too.
+    const snapshot=path.join(root,'home/snapshot.json'),raw=JSON.parse(fs.readFileSync(snapshot));
+    raw.rev='r2';raw.tasks[0].worker_liveness={state:'alive'};
+    raw.requests=[{id:'relaunch',label:'Encargo reactivado',tasks:['task:slow'],pause:null}];
+    raw.pause_controls=[{scope:'req:relaunch',state:'resuming'}];
+    fs.writeFileSync(snapshot+'.tmp',JSON.stringify(raw));fs.renameSync(snapshot+'.tmp',snapshot);
+    evaluate(`async()=>{${wait}await wait(()=>document.querySelector('[data-node$="req:relaunch"]'));return true;}`);
     assert.match(action('Reanudar'),/Aplicado/);
+    assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelector('[data-node$="req:relaunch"] .pause-control button')?.disabled===false);for(const b of document.querySelectorAll('.request-title[aria-expanded=false]'))b.click();await wait(()=>${button}&&!${button}.disabled);return !document.querySelector('[data-node$="req:relaunch"] [data-pause-state=resuming]');}`),true);
     evaluate(`async()=>{const original=window.fetch;let lost=false;window.fetch=async(...args)=>{if(lost&&String(args[0]).includes('/receipt?')){window.fetch=original;throw new TypeError('Lost receipt read');}const response=await original(...args);if(String(args[0]).endsWith('/apply')){lost=true;throw new TypeError('Lost reply');}return response;};return true;}`);
     action('Pausar');
     assert.equal(evaluate(`async()=>{${wait}await wait(()=>JSON.parse(sessionStorage.getItem('deck-control-receipts'))[0].state==='applied');return !document.querySelector('#change-results').textContent.includes('sin confirmar')&&!document.querySelector('.pause-preview');}`),true);

@@ -165,12 +165,38 @@ def project_snapshot(raw):
         pause.update(can_resume=pause['own'] and reason is None,
                      can_pause=not pause['own'] and reason is None,
                      disabled_reason=reason)
-    controls = {p['scope']: p for p in raw.get('pause_controls', [])}
+    requests = {r.get('scope') or 'req:' + r['id']: r for r in raw.get('requests', [])}
+    def resumed(control):
+        # A failed resume can leave a receipt open after an external relaunch.
+        # Current owner facts take precedence only with confirmed live workers.
+        if control.get('state') != 'resuming':
+            return False
+        scope = control['scope']
+        request = requests.get(scope)
+        owner = by_id.get(scope)
+        if request is not None:
+            if request.get('pause'):
+                return False
+            members = [by_id.get(key) for key in request.get('tasks', [])]
+        elif owner is not None:
+            if owner['pause']['own'] or owner['pause']['inherited'] or owner['pause']['condition']:
+                return False
+            members = [owner] if owner['kind'] == 'task' else [
+                task for task in nodes if task['kind'] == 'task' and belongs(task, scope)]
+        else:
+            return False
+        return bool(members) and all(
+            task is not None and task['state'] == 'active' and task['pause']['can_pause']
+            and (task['raw'].get('worker_liveness') or {}).get('state') == 'alive'
+            for task in members)
+
+    pause_controls = [p for p in raw.get('pause_controls', []) if not resumed(p)]
+    controls = {p['scope']: p for p in pause_controls}
     for node in nodes:
         if node['id'] in controls:
             node['pause'].update(controls[node['id']])
     return {'nodes': nodes, 'edges': edges, 'generated_at': raw.get('generated_at'), 'sigue': raw.get('sigue', []),
-            'rev': raw.get('rev'), 'requests': raw.get('requests', []), 'pause_controls': raw.get('pause_controls', []),
+            'rev': raw.get('rev'), 'requests': raw.get('requests', []), 'pause_controls': pause_controls,
             'crew': raw.get('crew'), 'yields': raw.get('yields'), 'events': raw.get('events', [])}
 
 
