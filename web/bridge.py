@@ -18,6 +18,7 @@ import json
 import mimetypes
 import os
 from pathlib import Path
+from functools import lru_cache
 import re
 import secrets
 import signal
@@ -101,6 +102,8 @@ def event_json(event, translate=None):
             'detail': fm.card_time_detail(event, translate=translate)}
 
 
+# Task activity does not change the formatting of an unchanged canonical title.
+@lru_cache(maxsize=2048)
 def human_title(value, translate=lambda text: text):
     # Canonical titles sometimes retain a report link or a PR address as a
     # trailing token. Keep the original in Details; a filesystem location or a

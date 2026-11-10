@@ -83,6 +83,21 @@ class EventProjectionTests(unittest.TestCase):
         self.assertEqual(delta({'cursor': '41'}, {'cursor': '42'}),
                          {'fields': {'cursor': {'value': '42'}}})
 
+    def test_reader_failure_does_not_change_a_previously_served_base(self):
+        projection = self.board.projection
+        self.board.titles = lambda: {}
+        self.board.columns = [('charted', 'Up next')]
+        self.board.home_identity = lambda home: 'home'
+        projection.sources['home'] = dict(home='home', available=True, error='',
+                                          snapshot={'nodes': []})
+        previous = projection.base()
+        projection.sources['home'].update(available=False, error='Reader stopped')
+        current = projection.base()
+        self.assertTrue(previous['deck']['sources'][0]['available'])
+        self.assertEqual(previous['deck']['sources'][0]['error'], '')
+        self.assertFalse(current['deck']['sources'][0]['available'])
+        self.assertEqual(current['deck']['sources'][0]['error'], 'Reader stopped')
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -42,7 +42,8 @@ window.createDeckUI = function (host) {
   }
   const cardFace=(face,x)=>add(n('div','card-face'),face,idBadge(x));
   const ancestors = x => { const out = [], seen = new Set(); for (let p = x; p && !seen.has(p.id); p = byId.get(p.parent)) {out.unshift(p);seen.add(p.id);} return out; };
-  const tasksOf = x => model.nodes.filter(y => y.kind === 'task' && ancestors(y).some(z => z.id === x.id));
+  let tasksByAncestor = new Map();
+  const tasksOf = x => tasksByAncestor.get(x.id) || [];
   const projectOf = x => ancestors(x).find(y => y.kind === 'project');
   const pathOf = x => ancestors(x).filter(y => y.id !== x.id).map(label).join(' · ');
   function projectLabel(x) {
@@ -95,7 +96,8 @@ window.createDeckUI = function (host) {
   function dates(x) { const created=x.kind !== 'project'||event(x.created_at);return add(n('div','dates'),created?time(x.kind === 'task' ? 'Created' : 'Created group',x.created_at):null,created?' · ':null,time(x.kind === 'task' ? 'Updated' : 'Updated group',x.updated_at)); }
   function normalize(data) {
     const cards = [...data.columns.flatMap(c => c.cards)];
-    for(const row of app.historyRows || []){const current=cards.find(c=>c.home===row.home&&c.task===row.task);if(!current)cards.push({...row,key:'history:'+row.home+':'+row.task,bucket:'landed',dependencies:[],activity:{kind:'delivered'}});else if(current.bucket==='landed'&&row.project)current.project=row.project;} cardMap = new Map(cards.map(c => [keyOf(c.home,c.task),c]));
+    cardMap = new Map(cards.map(c => [keyOf(c.home,c.task),c]));
+    for(const row of app.historyRows || []){const key=keyOf(row.home,row.task),current=cardMap.get(key);if(!current){const card={...row,key:'history:'+row.home+':'+row.task,bucket:'landed',dependencies:[],activity:{kind:'delivered'}};cards.push(card);cardMap.set(key,card);}else if(current.bucket==='landed'&&row.project)current.project=row.project;}
     const nodes = [], edges = [], sources = data.deck?.sources || [];
     for (const source of sources) {
       if (!source.snapshot) continue;
@@ -124,19 +126,25 @@ window.createDeckUI = function (host) {
         pause:{own:false,inherited:[]},progress:null});
       for (const dep of c.dependencies || []) edges.push({from:keyOf(c.home,c.task),to:keyOf(c.home,dep.id),origin:dep.origin || 'firstmate',completed:dep.state === 'done' || dep.unresolved === false});
     }
-    for(const edge of edges) for(const end of ['from','to']) { const match=nodes.find(x=>x.kind==='task'&&keyOf(x.home,x.task)===edge[end]); if(match)edge[end]=match.id; }
+    const taskNodes=nodes.filter(x=>x.kind==='task'), taskIds=new Map(taskNodes.map(x=>[keyOf(x.home,x.task),x.id])), membersByRequest=new Map();
+    for(const x of taskNodes){const r=x.request||x.raw?.request||x.card?.request;if(r?.id){const key=keyOf(x.home,r.id);if(!membersByRequest.has(key))membersByRequest.set(key,[]);membersByRequest.get(key).push(x);}}
+    for(const edge of edges) for(const end of ['from','to']) edge[end]=taskIds.get(edge[end])||edge[end];
     for(const source of sources){
       const requests=new Map((source.snapshot?.requests||[]).map(r=>[r.id,r]));
-      for(const x of nodes.filter(x=>x.home===source.home&&x.kind==='task')){const r=x.request||x.raw?.request||x.card?.request;if(r?.id&&!requests.has(r.id))requests.set(r.id,r);}
+      const homeTasks=taskNodes.filter(x=>x.home===source.home),byOwner=new Map(homeTasks.map(x=>[x.owner_id,x])),requestOrder=new Map();
+      for(const x of homeTasks){const r=x.request||x.raw?.request||x.card?.request;if(r?.id&&!requests.has(r.id))requests.set(r.id,r);}
+      [...requests.keys()].forEach((id,i)=>requestOrder.set(id,i));
       for(const r of requests.values()){
         // Firstmate's project_key names the shown group, which may be a logical subproject root.
         const id=keyOf(source.home,'req:'+r.id),project=r.project_key||(typeof r.project==='object'?r.project?.id:r.project);
-        const members=nodes.filter(x=>x.home===source.home&&x.kind==='task'&&((x.request||x.raw?.request||x.card?.request)?.id===r.id||r.tasks?.includes(x.owner_id)));
-        nodes.push({...r,id,owner_id:r.scope||'req:'+r.id,order_id:r.key||'request:'+r.id,scope:r.scope||'req:'+r.id,kind:'request',title:r.label,home:source.home,source,rev:source.snapshot.rev,parent:project?keyOf(source.home,/^(sub)?project:/.test(project)?project:'project:'+project):members[0]?.parent||'',updated_at:r.updated_at,pause:{own:!!r.pause,can_resume:!!r.pause,can_pause:!r.pause,inherited:[],...source.snapshot.pause_controls?.find(p=>p.scope===(r.scope||'req:'+r.id))},manual:[...requests.keys()].indexOf(r.id)});
+        const members=[...new Set([...(membersByRequest.get(keyOf(source.home,r.id))||[]),...(r.tasks||[]).map(id=>byOwner.get(id)).filter(Boolean)])];
+        nodes.push({...r,id,owner_id:r.scope||'req:'+r.id,order_id:r.key||'request:'+r.id,scope:r.scope||'req:'+r.id,kind:'request',title:r.label,home:source.home,source,rev:source.snapshot.rev,parent:project?keyOf(source.home,/^(sub)?project:/.test(project)?project:'project:'+project):members[0]?.parent||'',updated_at:r.updated_at,pause:{own:!!r.pause,can_resume:!!r.pause,can_pause:!r.pause,inherited:[],...source.snapshot.pause_controls?.find(p=>p.scope===(r.scope||'req:'+r.id))},manual:requestOrder.get(r.id)});
         for(const x of members)x.parent=id;
       }
     }
     byId = new Map(nodes.map(x=>[x.id,x]));
+    tasksByAncestor = new Map();
+    for(const task of taskNodes)for(const ancestor of ancestors(task)){if(!tasksByAncestor.has(ancestor.id))tasksByAncestor.set(ancestor.id,[]);tasksByAncestor.get(ancestor.id).push(task);}
     return {nodes,edges,sources};
   }
   function ownPause(x) { return x.pause?.own === true; }
@@ -241,11 +249,13 @@ window.createDeckUI = function (host) {
   function pauseSignals(){
     const capacity=$('agents-capacity');capacity.replaceChildren();
     for(const source of model.sources){
-      // Same rule as «En curso»: agents are the tasks Firstmate reports with a live worker.
-      const crew=source.snapshot?.crew,live=model.nodes.filter(x=>x.home===source.home&&x.kind==='task'&&['active','stopping'].includes(x.state)).length;
-      const chip=structural(n('span','agents-count',crew?t('Agents {running} of {cap}',{running:live,cap:crew.agents_cap??t('Not reported')}):t('Agents · not reported')));
+      const crew=source.snapshot?.crew,tasks=model.nodes.filter(x=>x.home===source.home&&x.kind==='task');
+      const live=tasks.filter(x=>x.raw?.worker_liveness?.state==='alive').length;
+      const unknown=tasks.some(x=>['active','stopping'].includes(x.state)&&!['alive','dead'].includes(x.raw?.worker_liveness?.state));
+      const agents=unknown?t('Agents · unconfirmed'):t('Agents {count}',{count:live});
+      const chip=structural(n('span','agents-count',agents+' · '+t('Slots {running} of {cap}',{running:Number.isInteger(crew?.agents_running)?crew.agents_running:t('unconfirmed'),cap:crew?.agents_cap??t('Not reported')})));
       const home=app.board.homes?.find(h=>h.id===source.home)?.label||chip.textContent;
-      chip.title=crew&&Number.isInteger(crew.agents_running)&&crew.agents_running!==live?home+' · '+t('Firstmate counts {count} lanes in use',{count:crew.agents_running}):home;chip.dataset.stale=String(!source.available);capacity.append(chip);
+      chip.title=home;chip.dataset.stale=String(!source.available);capacity.append(chip);
     }
     for(const source of model.sources)for(const e of source.snapshot?.events||[]){
       const key=JSON.stringify([source.home,e]);if(pauseEventsSeen.has(key))continue;pauseEventsSeen.add(key);
@@ -771,11 +781,12 @@ window.createDeckUI = function (host) {
     if(!app.board)return;
     const traceStart=performance.now(), oldColumns=new Map();
     for(const el of document.querySelectorAll('#board .task-card[data-key]')){const actual=el.closest('.col')?.dataset.k;oldColumns.set(el.dataset.key,actual);const x=byId.get(el.dataset.node);if(!el.closest('.request-board')&&x&&actual&&!el.classList.contains('qcard')&&!el.classList.contains('action-card')&&(colOf(x)!==actual||x.state!==el.dataset.state))window.DeckTrace?.mismatch(el.dataset.key,actual,colOf(x));}
-    const cardSignature=app.board.columns.map(c=>[c.id,c.cards.map(x=>[x.key,x.title,x.question,x.question_summary,x.attention_kind,x.action,x.answered,x.project,host.cardLine(x),host.phaseText(x),x.dependencies,x.time?.epoch,x.time?.date,x.summary,x.presentation])]);
-    const workSignature=app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.requests,s.snapshot?.rev,s.snapshot?.sigue,s.snapshot?.yields,s.snapshot?.pause_controls,s.snapshot?.crew,s.snapshot?.events,s.retained_at && Date.now()/1000-s.retained_at>=30,s.snapshot?.nodes?.map(x=>x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30)]);
-    const signature=JSON.stringify([cardSignature,workSignature,app.board.diagnostics,app.historyRows,app.query,ui.scope,ui.view,ui.column,ui.done,ui.pausedOpen,ui.order,ui.needsClosed,ui.density,[...ui.expanded],[...ui.groups],[...ui.steps],ui.mixer,[...ui.closed],[...ui.stacks],[...ui.tree],app.online]);
+    // SSE already identifies a new reading; only local renders need a content comparison.
+    const cardSignature=mode==='refresh'?null:app.board.columns.map(c=>[c.id,c.cards.map(x=>[x.key,x.title,x.question,x.question_summary,x.attention_kind,x.action,x.answered,x.project,host.cardLine(x),host.phaseText(x),x.dependencies,x.time?.epoch,x.time?.date,x.summary,x.presentation])]);
+    const workSignature=mode==='refresh'?null:app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.requests,s.snapshot?.rev,s.snapshot?.sigue,s.snapshot?.yields,s.snapshot?.pause_controls,s.snapshot?.crew,s.snapshot?.events,s.retained_at && Date.now()/1000-s.retained_at>=30,s.snapshot?.nodes?.map(x=>x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30)]);
+    const signature=mode==='refresh'?null:JSON.stringify([cardSignature,workSignature,app.board.diagnostics,app.historyRows,app.query,ui.scope,ui.view,ui.column,ui.done,ui.pausedOpen,ui.order,ui.needsClosed,ui.density,[...ui.expanded],[...ui.groups],[...ui.steps],ui.mixer,[...ui.closed],[...ui.stacks],[...ui.tree],app.online]);
     // Nothing changed: leave the DOM as it is, only ages that moved.
-    if(!force&&signature===ui.signature){refreshAges();return;}ui.signature=signature;
+    if(!force&&signature!==null&&signature===ui.signature){refreshAges();return;}ui.signature=signature;
     // A refresh may rebuild rows for unrelated detail/focus changes. Preserve
     // each existing comet's phase, including a paused offscreen instance.
     const activityKey=row=>(row.closest('#project-tree')?'tree:':'mixer:')+row.dataset.node;
@@ -813,7 +824,9 @@ window.createDeckUI = function (host) {
     const counts={needs:asks.length+act.length,now:run.length+stopping.length,waiting:sorted('waiting').length,paused:sorted('paused').length,done:done.length};
     $('columns-nav').replaceChildren();
     const detail=$('detail'),wasOpen=detailOpen();parkDetail();
-    mixer();tree();
+    // Hidden views render when selected; they need no DOM work for a board update.
+    if(ui.mixer)mixer();
+    if(ui.view==='projects')tree();
     const board=$('board');questionEditors=new Map([...board.querySelectorAll('.qcard')].map(card=>[card.dataset.key,card]));board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';board.replaceChildren();
     renderRequests(board,ts,asks,act);
     mountPausePreview();

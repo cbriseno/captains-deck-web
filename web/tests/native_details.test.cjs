@@ -475,6 +475,7 @@ test('a delivery without a summary opens its formatted report and one explanatio
   const history = {records: [{task: 'old', home: 'h', title: 'Delivered'}], details: [], omitted: 0, scope: ''};
   const view = await mountBoard(board([]), undefined, {}, {}, {history, delivery});
   await view.doc.getElementById('history-view').listeners.click[0](); await view.flush();
+  assert.doesNotMatch(view.doc.getElementById('history-status').textContent, /Could not refresh|undefined|map/);
   await view.doc.getElementById('history-results').querySelector('.history-row').listeners.click[0](); await view.flush();
   const content = view.doc.getElementById('detail-content');
   assert.equal(content.querySelector('.detail-tabs'), null);

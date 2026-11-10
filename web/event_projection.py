@@ -1,5 +1,4 @@
 """One continuously maintained work projection; HTTP reads never scan sources."""
-import copy
 import importlib
 import json
 import os
@@ -169,7 +168,9 @@ class EventProjection:
                 sources=[dict(home=s['home'], label=next(h.label for h in self.homes if self.board.home_identity(h)==s['home']),
                     checked_at=time.time() if s['available'] and not self.error else 0, error=self.error or s['error']) for s in sources],
                 columns=[dict(id=key, title=self.board.t(title), cards=columns[key]) for key,title in self.board.columns],
-                deck=dict(sources=copy.deepcopy(sources)), diagnostics=[], history=history)
+                # Snapshots are replacement values. Copy source availability so
+                # a later reader failure cannot mutate an already served base.
+                deck=dict(sources=[dict(source) for source in sources]), diagnostics=[], history=history)
 
     def read(self, selected=''):
         with self.condition:

@@ -354,7 +354,7 @@ async function loadHistory() {
     $('history-results').replaceChildren(...[...groups.values()].map(g=>g.group));
     if (records.length > (S.historyLimit || 40)) $('history-results').append(structural(button(t('View {count} more', {count:Math.min(40,records.length-(S.historyLimit || 40))}), () => { S.historyLimit = (S.historyLimit || 40) + 40; loadHistory(); }, 'more')));
     if (!records.length) $('history-results').append(node('p', 'empty', t("No matches.")));
-    $('history-sources').replaceChildren(node('p', 'muted', data.scope), ...data.details.map(d => contextRow(d.home, d.source)));
+    $('history-sources').replaceChildren();
   } catch (err) { if (generation === S.historyGeneration) $('history-status').textContent = t("Could not refresh history. ") + err.message; }
 }
 // Details expand inside the selected card at every width. A notification
