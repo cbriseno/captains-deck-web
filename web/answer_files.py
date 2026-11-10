@@ -99,11 +99,13 @@ class AnswerFiles:
             answers.append(own)
         return nodes, answers
 
-    def shown(self, home, answer):
+    def shown(self, home, answer, nodes=()):
         """The answer as the question showed it: the chosen option's label, never its id."""
-        said = answer.get('value') or ''
-        for option in self.fm.decision_card_for(str(answer.get('task_id') or ''), home).get('options') or []:
-            value = option.get('value') if isinstance(option, dict) else None
+        said = answer.get('value') or answer.get('text') or ''
+        question = next((n.get('question') or {} for n in nodes if n.get('task') == answer.get('task_id')), {})
+        call = question.get('call') or self.fm.decision_card_for(str(answer.get('task_id') or ''), home)
+        for option in call.get('options') or []:
+            value = (option.get('value') or option.get('id')) if isinstance(option, dict) else None
             if not isinstance(value, str) or not isinstance(option.get('label', ''), str):
                 continue
             label = option.get('label') or value
@@ -116,7 +118,7 @@ class AnswerFiles:
     def label_answers(self, home, nodes):
         for node in nodes:
             for answer in (node.get('raw') or {}).get('recorded_answers') or []:
-                answer['shown'] = self.shown(home, answer)
+                answer['shown'] = self.shown(home, answer, nodes)
 
     def saved(self, home, task):
         nodes, answers = self.canonical(home, task)
@@ -125,7 +127,7 @@ class AnswerFiles:
         for answer in answers:
             question = next((n for n in nodes if n.get('task') == answer.get('task_id')), {})
             public = {k: answer.get(k) for k in ('task_id', 'origin', 'text', 'value', 'correction', 'application', 'occurrence')}
-            public['shown'] = self.shown(home, answer)
+            public['shown'] = self.shown(home, answer, nodes)
             # A3 closed-row CAS is #<resolution count>; no open hold stamp remains.
             public['identity'] = '#' + str(answer['occurrence'])
             origin = next((n for n in nodes if n.get('task') == answer.get('origin')), {})

@@ -7,7 +7,24 @@ from unittest.mock import patch
 
 from fixtures import bridge
 import test_bridge as existing
-from answer_files import MAX_FILE
+from answer_files import MAX_FILE, AnswerFiles
+from types import SimpleNamespace
+
+
+class AnswerLabelTests(unittest.TestCase):
+    def test_saved_text_resolves_the_chosen_option_label(self):
+        home = object()
+        options = [dict(id='uno', label='prueba-doble uno')]
+        nodes = [dict(task='prueba-doble', question=dict(open=False, call=dict(options=options)))]
+        service = AnswerFiles.__new__(AnswerFiles)
+        service.fm = SimpleNamespace(decision_card_for=lambda task, current: {})
+        for answer, expected in [
+                (dict(text='uno', value=None), 'prueba-doble uno'),
+                (dict(value='uno'), 'prueba-doble uno'),
+                (dict(text='uno - comentario'), 'prueba-doble uno · comentario'),
+                (dict(text='Mis propias palabras'), 'Mis propias palabras')]:
+            with self.subTest(answer=answer):
+                self.assertEqual(service.shown(home, dict(task_id='prueba-doble', **answer), nodes), expected)
 
 
 class AnswerFileTests(unittest.TestCase):
