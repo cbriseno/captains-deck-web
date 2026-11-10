@@ -653,8 +653,11 @@ window.createDeckUI = function (host) {
     if(entry.error||result&&!applied)box.append(b(t('Review current data'),async()=>{await host.poll();render(true);}));
     return box;
   }
+  let reviewCards = new Map();
   function reviewCard(x){
-    const card=setColor(n('article','task-card card review-card'),x);card.dataset.node=x.id;card.dataset.key=x.card?.key||x.id;card.dataset.state=x.state;card.dataset.open=String(ui.selected===x.id);
+    const reading=JSON.stringify([x.raw,x.card,projectOf(x)?.title,app.online,x.source?.available,x.source?.capabilities]);
+    const previous=reviewCards.get(x.id);if(previous?._reading===reading)return previous;
+    const card=setColor(n('article','task-card card review-card'),x);card._reading=reading;card.dataset.node=x.id;card.dataset.key=x.card?.key||x.id;card.dataset.state=x.state;card.dataset.open=String(ui.selected===x.id);
     const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}openNode(x,face);},'card-open');face.dataset.key=card.dataset.key;face.setAttribute('aria-expanded',String(ui.selected===x.id));face.setAttribute('aria-controls','detail');
     const outcome=x.outcome||x.raw?.outcome||x.card?.outcome||{},validation=x.card?.validation_pending||x.raw?.validation_pending||x.validation_pending,summary=x.card?.summary||x.raw?.summary||x.summary;
     add(face,n('span','title',label(x)),validation||summary?n('span','cctx',[validation,summary].filter(Boolean).join(' ')):null);
@@ -827,7 +830,7 @@ window.createDeckUI = function (host) {
     // Hidden views render when selected; they need no DOM work for a board update.
     if(ui.mixer)mixer();
     if(ui.view==='projects')tree();
-    const board=$('board');questionEditors=new Map([...board.querySelectorAll('.qcard')].map(card=>[card.dataset.key,card]));board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';board.replaceChildren();
+    const board=$('board');questionEditors=new Map([...board.querySelectorAll('.qcard')].map(card=>[card.dataset.key,card]));reviewCards=new Map([...board.querySelectorAll('.review-card')].map(card=>[card.dataset.node,card]));board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';board.replaceChildren();
     renderRequests(board,ts,asks,act);
     mountPausePreview();
     if(wasOpen){const face=[...document.querySelectorAll('.card-open')].find(y=>y.dataset.key===app.openerKey && y.getClientRects().length);if(face){app.opener=face;host.placeDetail(face);face.setAttribute('aria-expanded','true');face.closest('.task-card').dataset.open='true';}else if(ui.selected&&byId.has(ui.selected)){const group=[...document.querySelectorAll('[data-node]')].find(y=>y.dataset.node===ui.selected && y.getClientRects().length);if(group){group.append(detail);detail.hidden=false;$('detail-panel').dataset.active='false';}}}
