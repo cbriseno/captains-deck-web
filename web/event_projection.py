@@ -125,7 +125,9 @@ class EventProjection:
         identity = self.board.home_identity(home)
         return dict(home=identity, available=reader['enabled'], snapshot=snapshot, answerable=reader['answerable'],
                     code=None if reader['enabled'] else 'events-disabled',
-                    error='' if reader['enabled'] else 'Firstmate event publication is disabled.',
+                    error='' if reader['enabled'] else self.board.t(
+                        'Firstmate’s event journal is disabled. Create an empty file at {path} (create the config directory if needed), then restart Deck.',
+                        path=str(Path(home.path) / 'config/fleet-ledger')),
                     capabilities=self.board.deck_controls.invoke(home, 'capabilities') if not hasattr(model, 'capabilities') else model.capabilities)
 
     def publish(self):

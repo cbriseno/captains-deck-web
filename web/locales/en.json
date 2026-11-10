@@ -80,6 +80,7 @@
   "Filed": "Filed",
   "Find this task in history": "Find this task in history",
   "First read pending.": "First read pending.",
+  "Firstmate’s event journal is disabled. Create an empty file at {path} (create the config directory if needed), then restart Deck.": "Firstmate’s event journal is disabled. Create an empty file at {path} (create the config directory if needed), then restart Deck.",
   "Firstmate declaration": "Firstmate declaration",
   "Firstmate left a reply.": "Firstmate left a reply.",
   "Firstmate must confirm the task’s state.": "Firstmate must confirm the task’s state.",

@@ -31,6 +31,24 @@ class EventProjectionTests(unittest.TestCase):
         return self.board.projected_card({'home': 'home'}, self.item, {},
                                          'underway', {}, {})
 
+    def test_disabled_journal_explains_activation_in_the_installation_language(self):
+        from localization import Localization
+        self.board.home_identity = lambda home: 'home'
+        reader = dict(home=self.home, model=SimpleNamespace(value={}, capabilities={}),
+                      enabled=False, answerable=False)
+        for language, explanation in [('en', 'Create an empty file'), ('es', 'Crea un archivo vacío')]:
+            self.board.t = Localization(language).t
+            source = self.board.projection.present(reader)
+            self.assertFalse(source['available'])
+            self.assertEqual(source['code'], 'events-disabled')
+            self.assertIn(explanation, source['error'])
+            self.assertIn(str(self.root / 'config/fleet-ledger'), source['error'])
+        reader['enabled'] = True
+        source = self.board.projection.present(reader)
+        self.assertTrue(source['available'])
+        self.assertIsNone(source['code'])
+        self.assertEqual(source['error'], '')
+
     def test_turn_end_preserves_task_and_worker_facts(self):
         self.model.activity['task'] = dict(state='busy', source='claude-hook', seq=1)
         self.assertEqual(self.card()['activity']['kind'], 'working')

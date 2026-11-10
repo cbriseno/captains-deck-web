@@ -80,6 +80,7 @@
   "Filed": "Registrada",
   "Find this task in history": "Buscar esta tarea en el historial",
   "First read pending.": "Primera lectura pendiente.",
+  "Firstmate’s event journal is disabled. Create an empty file at {path} (create the config directory if needed), then restart Deck.": "El diario de eventos de Firstmate está desactivado. Crea un archivo vacío en {path} (crea el directorio config si hace falta) y luego reinicia Deck.",
   "Firstmate declaration": "Declaración de Firstmate",
   "Firstmate left a reply.": "Firstmate dejó una respuesta.",
   "Firstmate must confirm the task’s state.": "Firstmate debe confirmar el estado de la tarea.",

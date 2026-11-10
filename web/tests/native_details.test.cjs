@@ -535,3 +535,19 @@ test('explanation states share one control and one status line, with a safe form
     }
   }
 });
+
+
+test('disabled event journals show activation help for each home in the installation language', async () => {
+  for (const language of ['en', 'es']) {
+    const messages = JSON.parse(fs.readFileSync(path.join(root, 'locales', language + '.json'), 'utf8'));
+    const key = 'Firstmate’s event journal is disabled. Create an empty file at {path} (create the config directory if needed), then restart Deck.';
+    const sources = ['/tmp/Firstmate home', '/tmp/Other home'].map(home => ({home, available: false,
+      code: 'events-disabled', error: messages[key].replace('{path}', home + '/config/fleet-ledger')}));
+    const initial = {...board([]), sources: sources.map(s => ({home:s.home, error:s.error})), deck:{sources}};
+    const app = await mountBoard(initial, undefined, {}, {messages});
+    const notice = app.doc.getElementById('notice');
+    assert.equal(notice.hidden, false);
+    assert.equal(notice.textContent, sources.map(s => s.error).join('\n'));
+    assert.match(notice.textContent, language === 'es' ? /reinicia Deck/ : /restart Deck/);
+  }
+});
