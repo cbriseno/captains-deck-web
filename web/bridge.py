@@ -1207,7 +1207,8 @@ class Board:
         """
         if (card.owner or '(main)') != '(main)':
             return ''
-        _, pane = fm.supervisor_target(home, self.homes(), {})
+        agents = fm._herdr_list(['agent', 'list'], 'agents', 'pane_id')
+        _, pane = fm.supervisor_target(home, self.homes(), agents)
         if not pane:
             return 'unreachable'
         sent, _ = fm.send_to_firstmate(pane, PRIMARY_WAKE.format(task=card.task))
