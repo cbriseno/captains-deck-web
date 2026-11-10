@@ -760,6 +760,11 @@ window.createDeckUI = function (host) {
     const latest=ui.log.find(entry=>entry.home===r.home&&(entry.command.node===r.order_id||entry.command.node===r.owner_id)&&(entry.command.action==='move'||entry.command.undo_operation?.op==='move'));if(latest?.undo)wrap.append(add(n('div','request-order-result'),n('span','meta',receiptLabel(latest)),workControl(b(t('Undo'),()=>undo(latest),'more'),true)));
     wireEvents(wrap,r.id);return wrap;
   }
+  function syncChildren(parent,children){
+    let cursor=parent.firstChild;
+    for(const child of children){if(child===cursor)cursor=cursor.nextSibling;else parent.insertBefore(child,cursor);}
+    while(cursor){const next=cursor.nextSibling;cursor.remove();cursor=next;}
+  }
   function renderRequests(board,tasks,asks,act){
     board.classList.add('request-board');board.closest('.deck').classList.add('request-layout');$('projects-toggle').hidden=true;
     const nav=$('columns-nav');nav.className='request-tools';nav.removeAttribute('role');
@@ -767,10 +772,13 @@ window.createDeckUI = function (host) {
     const rows=orderedRequests(requestRows(model.nodes.filter(x=>x.kind==='task')).filter(r=>r.tasks.some(x=>tasks.some(y=>y.id===x.id))||r.calls.some(c=>asks.some(q=>q.key===c.key)||act.some(q=>q.key===c.key)))),allOpen=rows.length&&rows.every(r=>ui.expanded.has(r.id));nav.append(b(t(allOpen?'Collapse requests':'Expand requests'),()=>{for(const r of rows)allOpen?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');}));
     peersAll=rows;ui.turns=new Map();document.querySelectorAll('.order-note').forEach(x=>x.remove());if(ui.order==='mine'){let k=0;for(const source of model.sources||[])for(const key of source.snapshot?.sigue||[]){const row=rows.find(r=>r.home===source.home&&r.tasks.some(x=>x.owner_id===key));if(row&&!ui.turns.has(row.id))ui.turns.set(row.id,++k);}
       nav.after(n('p','order-note',t('Firstmate starts at the top: it dispatches first whatever is ready highest in your order. If room runs out, it pauses only the lowest running request, at its safe point, and only to make way for one you put above it.')));}
-    const side=n('section','attention-list'),reviews=tasks.filter(reviewNeeded);side.setAttribute('aria-label',t('Needs you'));const needsToggle=b('',()=>{ui.needsClosed=!ui.needsClosed;save('deck-needs-closed',ui.needsClosed);render(true,'filter');});add(needsToggle,n('span','fold'),n('span','dot'),n('span','',t('Needs you')));needsToggle.dataset.control='needs-fold';needsToggle.setAttribute('aria-expanded',String(!ui.needsClosed));side.append(add(n('div','request-group-head'),needsToggle,structural(n('span','n',String(asks.length+act.length+reviews.length)))));
-    const feedback=reviewFeedback();if(feedback)side.append(feedback);
+    const side=board.querySelector(':scope > .attention-list')||n('section','attention-list'),reviews=tasks.filter(reviewNeeded);side.setAttribute('aria-label',t('Needs you'));const needsToggle=b('',()=>{ui.needsClosed=!ui.needsClosed;save('deck-needs-closed',ui.needsClosed);render(true,'filter');});add(needsToggle,n('span','fold'),n('span','dot'),n('span','',t('Needs you')));needsToggle.dataset.control='needs-fold';needsToggle.setAttribute('aria-expanded',String(!ui.needsClosed));
+    const head=add(n('div','request-group-head'),needsToggle,structural(n('span','n',String(asks.length+act.length+reviews.length)))),previousHead=side.querySelector(':scope > .request-group-head');
+    const attention=[previousHead?.textContent===head.textContent&&previousHead.querySelector('button').getAttribute('aria-expanded')===needsToggle.getAttribute('aria-expanded')?previousHead:head];
+    const feedback=reviewFeedback();if(feedback)attention.push(feedback);
     // Keep owner attention order; card kinds are labels, never separate stacks.
-    const pending=new Set([...asks,...act].map(c=>c.key));if(!ui.needsClosed){for(const c of attentionCards().filter(c=>pending.has(c.key)).sort((a,b)=>(b.attention_kind==='action')-(a.attention_kind==='action')))side.append(c.attention_kind==='action'?actionCard(c):questionCard(c));side.append(...reviews.map(reviewCard));if(!pending.size&&!reviews.length)side.append(n('p','meta',t('Nothing needs you right now.')));}
+    const pending=new Set([...asks,...act].map(c=>c.key));if(!ui.needsClosed){for(const c of attentionCards().filter(c=>pending.has(c.key)).sort((a,b)=>(b.attention_kind==='action')-(a.attention_kind==='action')))attention.push(c.attention_kind==='action'?actionCard(c):questionCard(c));attention.push(...reviews.map(reviewCard));if(!pending.size&&!reviews.length)attention.push(n('p','meta',t('Nothing needs you right now.')));}
+    syncChildren(side,attention);
     const list=n('div','request-list');
     for(const [state,title]of [['now','In progress'],['waiting','Waiting'],['paused','Paused'],['done','Finished requests']]){
       const peers=rows.filter(r=>requestState(r)===state);if(!peers.length)continue;
@@ -778,7 +786,7 @@ window.createDeckUI = function (host) {
       const folded=ui.groups.has(state),toggle=b('',()=>{folded?ui.groups.delete(state):ui.groups.add(state);render(true,'filter');});add(toggle,n('span','fold'),n('span','dot'),n('span','',t(title)));toggle.setAttribute('aria-expanded',String(!folded));
       group.append(add(n('div','request-group-head col-h'),toggle,structural(n('span','n',String(peers.length)))));if(!folded)group.append(add(n('div','request-table'),...peers.map(r=>requestRow(r,peers))));list.append(group);
     }
-    if(!rows.length)list.append(n('p','meta',t('No requests match.')));board.append(side,list);
+    if(!rows.length)list.append(n('p','meta',t('No requests match.')));syncChildren(board,[side,list]);
   }
   function render(force=false,mode='state') {
     if(!app.board)return;
@@ -830,7 +838,7 @@ window.createDeckUI = function (host) {
     // Hidden views render when selected; they need no DOM work for a board update.
     if(ui.mixer)mixer();
     if(ui.view==='projects')tree();
-    const board=$('board');questionEditors=new Map([...board.querySelectorAll('.qcard')].map(card=>[card.dataset.key,card]));reviewCards=new Map([...board.querySelectorAll('.review-card')].map(card=>[card.dataset.node,card]));board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';board.replaceChildren();
+    const board=$('board');questionEditors=new Map([...board.querySelectorAll('.qcard')].map(card=>[card.dataset.key,card]));reviewCards=new Map([...board.querySelectorAll('.review-card')].map(card=>[card.dataset.node,card]));board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';
     renderRequests(board,ts,asks,act);
     mountPausePreview();
     if(wasOpen){const face=[...document.querySelectorAll('.card-open')].find(y=>y.dataset.key===app.openerKey && y.getClientRects().length);if(face){app.opener=face;host.placeDetail(face);face.setAttribute('aria-expanded','true');face.closest('.task-card').dataset.open='true';}else if(ui.selected&&byId.has(ui.selected)){const group=[...document.querySelectorAll('[data-node]')].find(y=>y.dataset.node===ui.selected && y.getClientRects().length);if(group){group.append(detail);detail.hidden=false;$('detail-panel').dataset.active='false';}}}

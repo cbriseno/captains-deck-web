@@ -56,7 +56,7 @@ class EventProjection:
             with self.condition:
                 self.loading = False
                 self.publish()
-            while not self.stop_event.wait(.1):
+            while not self.stop_event.wait(.05):
                 with self.condition:
                     for identity, reader in self.readers.items():
                         if self.read_suffix(reader):
