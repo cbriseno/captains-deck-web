@@ -921,6 +921,7 @@
   "1 action requires attention.": "1 action requires attention.",
   "No tasks": "No tasks",
   "No running work": "No running work",
+  "Hold": "Hold",
   "Set aside pending work": "Set aside pending work",
   "No tasks are running. This prevents pending work from starting.": "No tasks are running. This prevents pending work from starting.",
   "The tasks in this group are still waiting on their existing conditions.": "The tasks in this group are still waiting on their existing conditions.",

@@ -921,6 +921,7 @@
   "1 action requires attention.": "1 acción requiere atención.",
   "No tasks": "Sin tareas",
   "No running work": "Sin trabajo en ejecución",
+  "Hold": "Retener",
   "Set aside pending work": "Apartar pendientes",
   "No tasks are running. This prevents pending work from starting.": "No hay tareas en ejecución. Esto impide que comience el trabajo pendiente.",
   "The tasks in this group are still waiting on their existing conditions.": "Las tareas de este grupo siguen esperando sus condiciones actuales.",

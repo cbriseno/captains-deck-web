@@ -571,20 +571,20 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 #board .attention-list>.card{--kind:var(--warn);position:relative;display:flex;flex-direction:column;padding:12px 14px 12px 16px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:inset 3px 0 0 var(--kind)}
 #board .attention-list>.card:hover{border-color:var(--control)}
 #board .attention-list>.qcard{--kind:var(--pause)}#board .attention-list>.action-card{--kind:var(--warn);border-inline-start:1px solid var(--line)}#board .attention-list>.review-card{--kind:var(--p-medium,var(--blue))}
-:is(.attention-list,.task-row) .ci{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
+:is(.attention-list,.task-row,.hold-menu) .ci{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.75;stroke-linecap:round;stroke-linejoin:round;flex:none}
 .attention-list .cmeta{display:flex;gap:8px;align-items:center;min-width:0;padding-right:28px;font-size:12px;line-height:18px;color:var(--muted)}
 .attention-list .cmeta .kind{display:inline-flex;flex:none;white-space:nowrap;gap:4px;align-items:center;font-weight:600;color:var(--kind)}.attention-list .cmeta .kind .ci{width:14px;height:14px}
 .attention-list .cmeta .node-id{display:inline;flex:none;margin:0 -4px;padding:0 4px;border:0;border-radius:4px;min-height:0;background:transparent;font:500 12px/18px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.02em;color:var(--muted);white-space:nowrap}
 .attention-list .cmeta .node-id:hover{background:var(--soft);color:var(--ink)}
 .attention-list .cmeta .req{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-:is(.attention-list,.task-row) .card-menu-btn{position:absolute;top:8px;right:8px;display:inline-grid;place-items:center;width:28px;height:28px;min-height:0;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted)}
-:is(.attention-list,.task-row) .card-menu-btn .ci{stroke-width:1;fill:currentColor}:is(.attention-list,.task-row) .card-menu-btn:hover:enabled{background:var(--soft);color:var(--ink)}
-:is(.attention-list,.task-row) .card-menu{position:absolute;z-index:40;top:38px;right:8px;display:flex;flex-direction:column;min-width:220px;max-width:280px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 6px 24px rgb(0 0 0/.24)}
-:is(.attention-list,.task-row) .card-menu[hidden]{display:none}
-:is(.attention-list,.task-row) .card-menu button .ci{color:var(--muted)}:is(.attention-list,.task-row) .card-menu button.danger,:is(.attention-list,.task-row) .card-menu button.danger .ci{color:var(--danger)}:is(.attention-list,.task-row) .card-menu hr{height:1px;margin:4px 2px;border:0;background:var(--line)}
-:is(.attention-list,.task-row) .card-menu-h{padding:6px 8px 4px;font-size:12px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-:is(.attention-list,.task-row) .card-menu button{display:flex;gap:9px;align-items:center;margin:0;min-height:32px;padding:5px 8px;border:0;border-radius:6px;background:none;color:var(--ink);font-size:13px;font-weight:400;text-align:left}
-:is(.attention-list,.task-row) .card-menu button:hover:enabled,:is(.attention-list,.task-row) .card-menu button:focus-visible{background:var(--soft);outline:none}
+:is(.attention-list,.task-row,.hold-menu) .card-menu-btn{position:absolute;top:8px;right:8px;display:inline-grid;place-items:center;width:28px;height:28px;min-height:0;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted)}
+:is(.attention-list,.task-row,.hold-menu) .card-menu-btn .ci{stroke-width:1;fill:currentColor}:is(.attention-list,.task-row,.hold-menu) .card-menu-btn:hover:enabled{background:var(--soft);color:var(--ink)}
+:is(.attention-list,.task-row,.hold-menu) .card-menu{position:absolute;z-index:40;top:38px;right:8px;display:flex;flex-direction:column;min-width:220px;max-width:280px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 6px 24px rgb(0 0 0/.24)}
+:is(.attention-list,.task-row,.hold-menu) .card-menu[hidden]{display:none}
+:is(.attention-list,.task-row,.hold-menu) .card-menu button .ci{color:var(--muted)}:is(.attention-list,.task-row,.hold-menu) .card-menu button.danger,:is(.attention-list,.task-row,.hold-menu) .card-menu button.danger .ci{color:var(--danger)}:is(.attention-list,.task-row,.hold-menu) .card-menu hr{height:1px;margin:4px 2px;border:0;background:var(--line)}
+:is(.attention-list,.task-row,.hold-menu) .card-menu-h{padding:6px 8px 4px;font-size:12px;font-weight:600;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+:is(.attention-list,.task-row,.hold-menu) .card-menu button{display:flex;gap:9px;align-items:center;margin:0;min-height:32px;padding:5px 8px;border:0;border-radius:6px;background:none;color:var(--ink);font-size:13px;font-weight:400;text-align:left}
+:is(.attention-list,.task-row,.hold-menu) .card-menu button:hover:enabled,:is(.attention-list,.task-row,.hold-menu) .card-menu button:focus-visible{background:var(--soft);outline:none}
 #board .attention-list .card-face>.card-open{display:block;padding:0;margin:6px 0 0;border-radius:4px}
 .attention-list .card-open .title{display:block;font-size:14px;line-height:1.4;font-weight:600}
 .attention-list .card-open .cctx{display:block;margin-top:2px;font-size:13px;line-height:1.5;color:var(--muted);white-space:normal}
@@ -687,3 +687,6 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .log-row[data-kind^=closed] .log-kind,.log-row[data-kind=done] .log-kind{color:var(--ok)}
 .log-chat{font-size:12px;color:var(--accent);white-space:nowrap}
 @media(max-width:640px){.log-row{grid-template-columns:40px minmax(0,1fr)}.log-chat{grid-column:2}}
+
+.hold-menu{position:relative}.hold-menu>.card-menu-btn{position:static}.hold-menu>.card-menu{top:100%;right:0;max-width:min(280px,85vw);min-width:min(220px,85vw)}
+.hold-menu .card-menu .pause-explanation{display:block;text-align:left}

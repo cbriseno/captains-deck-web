@@ -230,7 +230,7 @@ window.createDeckUI = function (host) {
       }else{
         if(action==='pause')slot.append(n('p','',t('{running} running tasks will reach a safe point and Firstmate will close their agents; {pending} pending tasks will be set aside.',{running:result.impact?.affected?.running?.length??0,pending:result.impact?.affected?.queued?.length??0})));
         else slot.append(n('p','',t('Needs {needed} agents; {running} of {cap} are running.',{needed:result.agents_needed??'?',running:result.agents_running??'?',cap:result.agents_cap??'?'})));
-        const confirm=b(t(action==='pause'?'Pause':'Resume'),async()=>{
+        const confirm=b(t(action==='pause'?(runningWork(x)?'Pause':'Hold'):'Resume'),async()=>{
           await apply(x,request,slot);
           const entry=ui.log.find(e=>e.request_id===request.request_id);
           if(!['conflict','rejected','failed','error','uncertain'].includes(entry?.state)){ui.pausePreview=null;slot.remove();}
@@ -272,7 +272,21 @@ window.createDeckUI = function (host) {
   // Approved demo: a request whose open tasks are all paused by another scope
   // has nothing of its own to pause; it shows that scope's pause instead.
   const heldBy=x=>{if(x.kind==='task'||ownPause(x))return null;const open=tasksOf(x).filter(y=>y.state!=='done'&&!questionOnly(y));return open.every(y=>ownPause(y)||y.pause?.inherited?.length)&&open.find(y=>!ownPause(y)&&y.pause?.inherited?.length)?.pause.inherited||null;};
+  const runningWork=x=>x.kind==='task'?x.state==='active'&&!isStopping(x):tasksOf(x).some(y=>y.state==='active'&&!isStopping(y));
   function pauseButton(x) {
+    const wrap=pauseControl(x),button=wrap.querySelector('button[data-action="pause"]');
+    if(!button||runningWork(x)||ownPause(x)||isStopping(x)||x.state==='paused')return wrap;
+    // Setting a hold on waiting work must not imply that it is running.
+    if(button.textContent!==t('Pause')&&button.textContent!==t('Set aside pending work'))return wrap;
+    button.textContent=t('Hold');button.setAttribute('aria-label',t('{action}: {name}',{action:t('Hold'),name:label(x)}));
+    const note=wrap.querySelector('.pause-explanation');
+    const [open,menu]=moreMenu(x,n('span'),[button]);
+    if(note)menu.append(note);
+    wrap.replaceChildren(open,menu);wrap.classList.add('hold-menu');
+    wrap.removeAttribute('tabindex');wrap.removeAttribute('role');wrap.removeAttribute('aria-describedby');wrap.removeAttribute('aria-label');
+    return wrap;
+  }
+  function pauseControl(x) {
     const inheritedScopes=!ownPause(x)&&x.pause?.inherited?.length?x.pause.inherited:heldBy(x);
     if(inheritedScopes){
       const scope=inheritedScopes[0],owner=byId.get(keyOf(x.home,scope))||byId.get(scope),wrap=n('span','pause-control inherited-pause');
@@ -466,7 +480,9 @@ window.createDeckUI = function (host) {
     const derived=Array.isArray(x.raw?.derived_blocked_by)?x.raw.derived_blocked_by.filter(e=>e.open!==false&&e.via?.length&&!deps.some(d=>d.to===keyOf(x.home,e.ref))).map(e=>[byId.get(keyOf(x.home,e.ref))||{title:e.ref},e.via]):null;
     if(x.kind==='project')for(const [to,tasks] of derived||projectWaits(x)){const count=tasks.size??tasks.length;meta.append(n('span','mix-wait',t(count===1?'1 task waits for “{name}”':'{count} tasks wait for “{name}”',{count,name:label(to)})));}
     const detail=b('⋯',()=>openNode(x,detail),'mix-pause');detail.setAttribute('aria-label',t('Details of {name}',{name:label(x)}));
-    add(row,info,priority(x),pauseButton(x),detail);row.setAttribute('data-group-action','');wireEvents(row,x.id);return row;
+    const pause=pauseButton(x),held=pause.classList.contains('hold-menu');
+    if(held){detail.textContent=t('Details');detail.setAttribute('role','menuitem');pause.querySelector('.card-menu').append(detail);}
+    add(row,info,priority(x),pause,held?null:detail);row.setAttribute('data-group-action','');wireEvents(row,x.id);return row;
   }
   function mixer() {
     const root=$('project-mixer'),projects=model.nodes.filter(x=>x.kind==='project'),allExpanded=projects.every(p=>!ui.closed.has(p.id));
@@ -553,6 +569,8 @@ window.createDeckUI = function (host) {
       x.state!=='done'&&can(x,'priority')&&menuItem('sort',t('Change priority…'),inDetail(c=>c.querySelector('select[name=priority]')?.focus())),
       related&&menuItem('link',t('View relationships'),()=>showRelations(x)),
       can(x,'scope-removal')&&n('hr'),can(x,'scope-removal')&&menuItem('trash',t('Ask to remove it…'),inDetail(c=>c.querySelector('textarea[name=removal-reason]')?.focus()),'danger')];
+    const hold=ctl.querySelector('.hold-menu');
+    if(hold){items.unshift(...hold.querySelectorAll('.card-menu > button,.card-menu > .pause-explanation'));hold.remove();}
     add(row,n('span','dot'),add(n('div','card-face rmain'),line,sub.childNodes.length?sub:null),ctl,...moreMenu(x,badge,items),add(n('div','card-more'),n('div','card-more-inner')));
     const saved=host.answerTools?.summary(x,()=>openNode(x,face));if(saved)row.append(saved);
     wireEvents(row,x.id);return row;
