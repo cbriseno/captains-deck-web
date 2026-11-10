@@ -81,6 +81,7 @@ function whoText(card) {
 // On a card the return date is its own tag, so the chip drops it (short).
 function activityText(card, short = false) {
   const a = card.activity || {}, until = a.until && !short ? untilText(a.until) : '';
+  if (a.kind === 'idle') return t('No active turn');
   if (a.kind === 'paused') return until ? t('Paused until {date}', {date: until}) : t('Paused');
   if (a.kind === 'deferred') return until ? t('Deferred until {date}', {date: until}) : t('Deferred');
   if (a.kind === 'decision') return card.bucket === 'underway' ? t('Waiting for your answer') : '';
@@ -106,7 +107,7 @@ function phaseText(card, short = false) {
 // Unknown Codex stays unknown even when a pane exists or the last report says working.
 function activityUnconfirmed(card) {
   if (card.native && 'unconfirmed' in card.native) return card.native.unconfirmed !== false || !!card.native.retained_at ||
-    !['pane', 'current_state.pane'].includes(card.native.source);
+    !['pane', 'current_state.pane', 'agent.activity'].includes(card.native.source);
   return !card.activity || ['unknown', 'last_seen_working'].includes(card.activity.kind);
 }
 function workingText(cards, short = false) {

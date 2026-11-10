@@ -75,6 +75,17 @@ Explicit configured homes remain visible even before they contain tasks.
 `FM_ROOT_OVERRIDE` optionally selects a separate Firstmate code checkout; an existing owner `bin/` endpoint takes precedence for compatibility.
 Every child process still receives the owning `FM_HOME`.
 
+The connected producer must expose `work bootstrap` with schema `fm-work-bootstrap.v1` and publish its existing fleet journal.
+Enable publication by creating `config/fleet-ledger` in that Firstmate home before starting Deck.
+Deck takes one canonical bootstrap, then reads only complete added journal lines and sends changes through `/api/stream`.
+The same projection serves the board and retained history, including while no browser is connected.
+Turn activity comes from accepted semantic busy records at bootstrap and subsequent owner events; an idle turn does not complete a task or release a lane.
+Missing activity and unavailable worker liveness remain unknown.
+Unpublished external edits and a crash between saving canonical state and publishing its event require canonical recovery.
+After journal replacement, truncation or disappearance, restart only the affected Deck process to bootstrap again; the UI reports lost continuity rather than claiming to be current.
+Browser reconnection receives the current base and preserves an unchanged question's editor, draft, focus and selection.
+Linux execution does not certify native macOS hooks, remote proxy behavior or a global subsecond update bound; those require independent acceptance on the target installation.
+
 | Environment | Default | Purpose |
 | --- | --- | --- |
 | `CD_WEB_LANGUAGE` | `en` | Explicit per-installation UI language: `en`, `es`, or a regional variant |
@@ -296,6 +307,7 @@ Identifiers are server-issued opaque owner/card IDs; clients cannot supply files
 | GET | `/api/locale` | Instance language, regional locale and plain-text UI catalog |
 | GET | `/health` | Readiness: 503 while the first snapshot is loading or unavailable, 200 after a valid snapshot |
 | GET | `/api/board?home=ID` | Four states, sources, owner declarations and session CSRF |
+| GET | `/api/stream?home=ID` | Current base on connection, then SSE changes from the same projection |
 | GET | `/api/ticket/KEY` | Full task context or current question/options |
 | GET | `/api/ticket/KEY/report` | The call's linked report file, only a `.md`/`.txt` under the owner's `data/TASK/` |
 | POST | `/api/ticket/KEY/answer` | Explicit answer: value, note, occurrence, request_id |
@@ -305,11 +317,11 @@ Identifiers are server-issued opaque owner/card IDs; clients cannot supply files
 | GET | `/api/delivery/OWNER/TASK/explanation` | Actual explanation receipt, ACK and reply |
 | POST | `/api/delivery/OWNER/TASK/explanation` | Explicit request through the existing owner intake |
 
-The listener can answer requests before discovery, Herdr and bearings finish.
+The listener can answer requests before canonical bootstrap finishes.
 During this startup interval the board reports `loading=true`; empty homes or history do not mean the owner has no retained work.
-Health reports `ok=false`, `collector_at=0` and HTTP 503 until the first valid snapshot arrives.
-Its `loading` and `error` fields distinguish a pending read from a reported collector failure.
-Health confirms collector readiness; source timestamps and errors on the board describe freshness separately.
+Health reports `ok=false` and HTTP 503 until bootstrap completes or when the projection fails.
+Its `loading` and `error` fields distinguish a pending bootstrap from a reported projection failure.
+Health confirms process readiness; per-home availability and errors on the board describe source freshness separately.
 
 ## Validation
 

@@ -251,6 +251,7 @@
   "{count} underway": "{count} underway",
   "{count} ready to start": "{count} ready to start",
   "Working now": "Working now",
+  "No active turn": "No active turn",
   "Waiting on another task": "Waiting on another task",
   "Paused": "Paused",
   "Paused until {date}": "Paused until {date}",

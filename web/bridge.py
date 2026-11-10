@@ -452,6 +452,13 @@ class Board:
         call = question.get('call') or {}
         is_action = call.get('kind') == 'action'
         row = self.projection.readers[identity]['model'].rows[task]
+        turn = self.projection.readers[identity]['model'].activity.get(task, {})
+        worker = (item.get('raw') or {}).get('worker_liveness') or {}
+        kind = ('decision' if question.get('open') else 'delivered' if item['state'] == 'done' else
+                'paused' if item['state'] in ('paused', 'stopping') else
+                'working' if item['state'] == 'active' and turn.get('state') == 'busy' and worker.get('state') != 'dead' else
+                'idle' if item['state'] == 'active' and turn.get('state') == 'idle' and worker.get('state') != 'dead' else
+                'ready' if item['state'] == 'ready' else 'unknown')
         stamp = re.search(r'^Captain hold set: (\S+)', row.get('body') or '', re.M)
         identity_value = stamp[1] + '#' + str(len(re.findall(r'^Resolution recorded by fm-(?:captain|decision)-hold\.', row.get('body') or '', re.M))) if stamp else ''
         return dict(key=digest(identity, task, bucket)[:40], task=task,
@@ -460,7 +467,10 @@ class Board:
             summary=human.get('summary') or '', project=projects.get(item['raw'].get('project')),
             presentation=dict(status=human.get('card_status'), summary=human.get('summary')),
             context=dict(phase='human' if question.get('open') else 'unknown'),
-            activity=dict(kind='unknown', agent='unknown'), dependencies=[], native=dict(unconfirmed=True),
+            activity=dict(kind=kind, agent='none' if worker.get('state') == 'dead' else
+                          'working' if kind == 'working' and worker.get('state') == 'alive' else
+                          'present' if worker.get('state') == 'alive' else 'unknown', turn=turn),
+            dependencies=[], native=dict(unconfirmed=turn.get('state') not in ('busy', 'idle'), source='agent.activity'),
             time=self.projected_time(item['updated_at']), question=(question.get('call') or {}).get('question', ''),
             answered=False, attention_kind=('action' if is_action else 'question') if question.get('open') else None,
             action=dict(call, error='') if is_action else None,

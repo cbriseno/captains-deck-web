@@ -251,6 +251,7 @@
   "{count} underway": "{count} en curso",
   "{count} ready to start": "Listas para empezar: {count}",
   "Working now": "Trabajando ahora",
+  "No active turn": "Sin turno activo",
   "Waiting on another task": "Espera otra tarea",
   "Paused": "En pausa",
   "Paused until {date}": "En pausa hasta {date}",
