@@ -76,9 +76,9 @@ async function mountBoard(initial, clock = Date.UTC(2026, 0, 15, 12), tickets = 
   class FixedDate extends Date { constructor(...args) { args.length ? super(...args) : super(clock); } static now() { return clock; } }
   let current = initial;
   const fetch = async (url, options = {}) => {
-    requests.push({url, method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null});
+    requests.push({url, method: options.method || 'GET', headers: options.headers, body: options.body ? JSON.parse(options.body) : null});
     if (url.startsWith('api/locale')) return { ok: true, json: async () => ({ locale: Object.keys(messages).length ? 'es' : 'en', messages }) };
-    if (url.startsWith('api/board')) return { ok: true, json: async () => ({...JSON.parse(JSON.stringify(current)), history:setup.history?.records || []}) };
+    if (url.startsWith('api/board')) { await setup.boardReady; return { ok: true, json: async () => ({...JSON.parse(JSON.stringify(current)), history:setup.history?.records || []}) }; }
     if (url.startsWith('api/history')) return { ok: true, json: async () => JSON.parse(JSON.stringify(setup.history || {records: [], details: [], omitted: 0, scope: ''})) };
     if (setup.explanation && url.endsWith('/explanation')) return { ok: true, json: async () => JSON.parse(JSON.stringify(setup.explanation)) };
     if (setup.delivery && url.startsWith('api/delivery/') && !url.endsWith('/explanation')) return { ok: true, json: async () => JSON.parse(JSON.stringify(setup.delivery)) };
@@ -119,6 +119,10 @@ async function mountBoard(initial, clock = Date.UTC(2026, 0, 15, 12), tickets = 
     host.sourceStatus();
   },setView() {},refreshAges() {},model:{nodes:[]}});
 
+  if (setup.trace) {
+    Object.assign(context, {innerWidth:1000, innerHeight:700, devicePixelRatio:1});
+    vm.runInContext(fs.readFileSync(path.join(root, 'static/deck-trace.js'), 'utf8'), context);
+  }
   vm.runInContext(fs.readFileSync(path.join(root, 'static/i18n.js'), 'utf8') + '\nthis.DeckI18n = DeckI18n;', context);
   vm.runInContext(fs.readFileSync(path.join(root, 'static/deck-answers.js'), 'utf8'), context);
   vm.runInContext(fs.readFileSync(path.join(root, 'static/app.js'), 'utf8'), context);
@@ -130,6 +134,24 @@ async function mountBoard(initial, clock = Date.UTC(2026, 0, 15, 12), tickets = 
 const underwayList = (doc) => doc.getElementById('board').children.find(s => s.dataset.kind === 'underway').querySelector('.cards');
 const placeholders = (list) => list.children.filter(n => n.className === 'empty');
 const cardsIn = (list) => list.children.filter(n => n.className === 'task-card');
+
+test('early diagnostic events wait for the initial board session without losing usage', async () => {
+  let ready;
+  const boardReady = new Promise(resolve => { ready = resolve; });
+  const view = await mountBoard(board([]), undefined, {}, {}, {trace:true, boardReady});
+  const traces = () => view.requests.filter(r => r.url === '/api/diagnostics/trace');
+  view.doc.getElementById('board-search').listeners.change[0]();
+  await view.flush();
+  assert.equal(traces().length, 0);
+  ready();
+  await view.flush();
+  assert.equal(traces().length, 2);
+  assert.ok(traces().every(r => r.headers['X-Deck-CSRF'] === 'synthetic'));
+  assert.deepEqual(traces().map(r => r.body.events[0].action).sort(), ['open', 'search']);
+  view.doc.getElementById('board-search').listeners.change[0]();
+  await view.flush();
+  assert.equal(traces().length, 3);
+});
 
 
 const supervisorClock = Date.UTC(2026, 0, 15, 12);

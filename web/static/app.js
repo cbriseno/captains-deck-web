@@ -7,6 +7,8 @@ const S = { board: null, home: '', online: false, view: 'board', query: '',
   busy: false, csrf: '', modal: null, opener: null, generation: 0, historyGeneration: 0,
   boardRequest: 0, boardApplied: 0,
   lastRead: 0, receipt: null, drafts: new Map(), historyTimer: null, linkHandled: false };
+let sessionReady;
+const initialSession = new Promise(resolve => { sessionReady = resolve; });
 // v14 supersedes the previous Compact preference.
 const labels = { charted: t("Up next"), underway: t("Underway"), captains_call: t("Needs you"), landed: t("Delivered") };
 const phaseLabels = { human: t("Waiting for your answer"), dependency: t("Waiting on another task"), integration: t("Finishing up"), technical: t("On hold"), active: t("In progress"), unknown: t("Status unclear"), waiting: t("Waiting"), reported: t("Reported done") };
@@ -250,6 +252,7 @@ function applyBoard(data) {
     const oldCall = selectedCall && S.board?.columns.flatMap(c => c.cards).find(c => c.key === selectedCall)?.inline_call;
     const firstRead = !S.csrf;
     S.online = true; S.lastRead = Date.now(); S.csrf = data.csrf;
+    if (S.csrf) sessionReady();
     if (firstRead) window.DeckTrace?.use('open', 'page');
     // Failed collection must not erase an already useful board.
     if (!(data.error && !data.columns.some(c => c.cards.length) && S.board)) S.board = data;
@@ -891,7 +894,11 @@ setInterval(() => { sourceStatus(); refreshTimes(); deckUI?.refreshAges(); deckU
 if ('serviceWorker' in navigator) navigator.serviceWorker.getRegistrations().then(regs => { for (const reg of regs) if (reg.scope === new URL('./', location.href).href) reg.unregister(); }).catch(() => {});
 poll(); loadReceipts();
 
-window.DeckTrace?.setSender((events,exporting)=>api('/api/diagnostics/trace',{events,exporting}));
+window.DeckTrace?.setSender(async (events,exporting)=>{
+  // Controls can be used while the first board read is still obtaining CSRF.
+  await initialSession;
+  return api('/api/diagnostics/trace',{events,exporting});
+});
 for (const [id,target] of [['board-search','board'],['history-search','history']]) {
   $(id).addEventListener('change', () => window.DeckTrace?.use('search', target));
 }
