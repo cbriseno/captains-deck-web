@@ -68,6 +68,24 @@ class EventProjectionTests(unittest.TestCase):
         self.assertEqual(self.card()['activity']['agent'], 'none')
         self.assertNotEqual(self.card()['activity']['kind'], 'working')
 
+    def test_terminal_or_paused_status_tail_suppresses_active_work_cue_only(self):
+        self.model.activity['task'] = dict(state='busy')
+        self.model.status = {'task': 'working [at=100]: started\n'}
+        self.item['state'] = 'active'
+        self.assertEqual(self.card()['activity']['kind'], 'working')
+        self.model.activity['task'] = dict(state='idle')
+        self.model.status['task'] = 'paused [at=99]: old wait'
+        self.assertEqual(self.card()['activity']['kind'], 'idle')
+        self.model.activity['task'] = dict(state='busy')
+        for state, expected in [('done', 'idle'), ('failed', 'idle'),
+                                ('paused', 'paused'), ('parked', 'paused')]:
+            with self.subTest(state=state):
+                self.model.status['task'] = f'working [at=100]: started\n{state} [at=101]: ended'
+                card = self.card()
+                self.assertEqual(card['activity']['kind'], expected)
+                self.assertEqual(card['activity']['turn']['state'], 'busy')
+                self.assertEqual(self.item['state'], 'active')
+
     def test_question_pause_and_delivery_keep_their_meanings_during_busy_turn(self):
         self.model.activity['task'] = dict(state='busy')
         for state, kind in [('paused', 'paused'), ('stopping', 'paused'), ('done', 'delivered')]:

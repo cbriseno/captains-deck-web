@@ -360,6 +360,15 @@ def row_identity(row, section):
     return f'{stamp[1]}#{count}'
 
 
+def latest_status_state(text):
+    """The state token on the last task status line, if one is recorded."""
+    for line in reversed(str(text or '').splitlines()):
+        match = re.match(r'^\s*([a-zA-Z_-]+)(?=\s|:|$)', line)
+        if match:
+            return match[1].lower()
+    return ''
+
+
 def conversation_page(t, task, chat, locale="en"):
     """Read-only text of one agent conversation; tool calls are left out."""
     def when(epoch):
@@ -455,12 +464,18 @@ class Board:
         call = question.get('call') or {}
         is_action = call.get('kind') == 'action'
         row = self.projection.readers[identity]['model'].rows[task]
-        turn = self.projection.readers[identity]['model'].activity.get(task, {})
+        model = self.projection.readers[identity]['model']
+        turn = model.activity.get(task, {})
+        status_state = latest_status_state(getattr(model, 'status', {}).get(task, ''))
         worker = (item.get('raw') or {}).get('worker_liveness') or {}
         delivery_available = self.delivery_record(owner, task) is not None
+        active_working = (item['state'] == 'active' and turn.get('state') == 'busy'
+                          and worker.get('state') != 'dead')
+        status_stops_working = active_working and status_state in ('done', 'failed', 'paused', 'parked')
         kind = ('decision' if question.get('open') else 'delivered' if item['state'] == 'done' else
-                'paused' if item['state'] in ('paused', 'stopping') else
-                'working' if item['state'] == 'active' and turn.get('state') == 'busy' and worker.get('state') != 'dead' else
+                'paused' if item['state'] in ('paused', 'stopping') or status_stops_working and status_state in ('paused', 'parked') else
+                'idle' if status_stops_working and status_state in ('done', 'failed') else
+                'working' if active_working else
                 'idle' if item['state'] == 'active' and turn.get('state') == 'idle' and worker.get('state') != 'dead' else
                 'ready' if item['state'] == 'ready' else 'unknown')
         stamp = re.search(r'^Captain hold set: (\S+)', row.get('body') or '', re.M)
