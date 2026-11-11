@@ -53,6 +53,12 @@ window.createDeckUI = function (host) {
     const group=id?(byId.get(keyOf(x.home,id))||byId.get(id)):null;
     return (group&&label(group))||(typeof declared==='object'&&declared?.label)||'';
   }
+  function projectDisplay(project) {
+    const value=typeof project==='string'?project:project?.label||'';
+    const id=typeof project==='string'?project:project?.id||'';
+    if([value,id].some(x=>['workspace','proyecto sin registrar'].includes(String(x).trim().toLowerCase())))return t('Workspace');
+    return value||t('Project not reported');
+  }
   // Unknown observation is not an explicit dependency/hold. It has its own
   // subgroup and never contributes to the confirmed work count.
   const isStopping = x => x.kind === 'task' && x.state === 'stopping';
@@ -608,11 +614,11 @@ window.createDeckUI = function (host) {
     const previous = questionEditors.get('question:'+c.key);
     if (previous?._reading === reading) return previous;
     const x=questionNode(c),own=byId.get(taskNodeId(c.home,c.task)),card=setColor(n('article','task-card card qcard'),x||{id:c.key});card._reading=reading;card.dataset.node='question:'+c.key;card.dataset.key='question:'+c.key;card.dataset.state=own?.state||'waiting';
-    const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}if(ui.selected==='question:'+c.key&&detailOpen()){clearFocus(true);return;}ui.selected='question:'+c.key;ui.pin=ui.focus?'question:'+c.key:'';announceFocus(ui.pin,c.title);openCard(c,face);highlight();},'card-open');face.dataset.key='question:'+c.key;face.setAttribute('aria-controls','detail');face.setAttribute('aria-expanded',String(ui.selected==='question:'+c.key));add(face,n('span','title',c.question||c.title));const q=c.question_summary;if(q){if(q.question&&q.question!==(c.question||c.title))face.append(n('span','cctx question',q.question));if(q.context)face.append(n('span','cctx question-context',q.context));} if(x?.state==='done')face.append(n('span','deck-origin',t('Origin delivered · decision still open')));const origin=menuItem('link',t('Go to source task'),e=>{e.stopPropagation();revealQuestionOrigin(c);});origin.disabled=!canRevealOrigin(own);add(card,cardKind('ask','ask',t('Decide'),{id:c.key},own||{kind:'task',task:c.task,home:c.home},[origin]),add(n('div','card-face'),face),add(n('div','card-more'),n('div','card-more-inner')));host.inlineAnswer(c,face,card);host.answerTools?.dropCard(card,c.key,()=>openCard(c,face));wireEvents(card,'question:'+c.key);return card;
+    const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}if(ui.selected==='question:'+c.key&&detailOpen()){clearFocus(true);return;}ui.selected='question:'+c.key;ui.pin=ui.focus?'question:'+c.key:'';announceFocus(ui.pin,c.title);openCard(c,face);highlight();},'card-open');face.dataset.key='question:'+c.key;face.setAttribute('aria-controls','detail');face.setAttribute('aria-expanded',String(ui.selected==='question:'+c.key));add(face,n('span','title',c.question||c.title));const q=c.question_summary;if(q){if(q.question&&q.question!==(c.question||c.title))face.append(n('span','cctx question',q.question));if(q.context)face.append(n('span','cctx question-context',q.context));if(q.recommendation)face.append(n('span','cctx question-recommendation',t('Recommended: {choice}',{choice:q.recommendation.label})+(q.recommendation.reason?' · '+q.recommendation.reason:'')));} if(x?.state==='done')face.append(n('span','deck-origin',t('Origin delivered · decision still open')));const origin=menuItem('link',t('Go to source task'),e=>{e.stopPropagation();revealQuestionOrigin(c);});origin.disabled=!canRevealOrigin(own);add(card,cardKind('ask','ask',t('Decide'),{id:c.key},own||{kind:'task',task:c.task,home:c.home},[origin]),add(n('div','card-face'),face),add(n('div','card-more'),n('div','card-more-inner')));host.inlineAnswer(c,face,card);host.answerTools?.dropCard(card,c.key,()=>openCard(c,face));wireEvents(card,'question:'+c.key);return card;
   }
   function needs(cards) {
     const groups=new Map();for(const c of cards){const key=projectOf(questionNode(c))?.id || c.project?.id || c.home; if(!groups.has(key))groups.set(key,[]);groups.get(key).push(c);}
-    return [...groups].map(([key,list])=>{const open=list.length===1||ui.stacks.has(key)||list.some(c=>ui.selected==='question:'+c.key);const btn=b((projectOf(questionNode(list[0]))?.title||list[0].project?.label||t('Project not reported'))+(list.length>1?' · '+t('{count} questions',{count:list.length})+(open?' ▾':' ▸'):''),()=>{ui.stacks.has(key)?ui.stacks.delete(key):ui.stacks.add(key);render(true,'filter');},'stack-h');if(list.length>1)structural(btn,{kind:'count',suffix:' · '+t('{count} questions',{count:list.length})+(open?' ▾':' ▸')});btn.disabled=list.length===1;btn.dataset.control='questions:'+key;btn.setAttribute('aria-expanded',String(open));return add(n('div','stackq'),btn,...(open?list.map(questionCard):[]));});
+    return [...groups].map(([key,list])=>{const open=list.length===1||ui.stacks.has(key)||list.some(c=>ui.selected==='question:'+c.key);const btn=b((projectDisplay(projectOf(questionNode(list[0]))?.title||list[0].project||t('Project not reported')))+(list.length>1?' · '+t('{count} questions',{count:list.length})+(open?' ▾':' ▸'):''),()=>{ui.stacks.has(key)?ui.stacks.delete(key):ui.stacks.add(key);render(true,'filter');},'stack-h');if(list.length>1)structural(btn,{kind:'count',suffix:' · '+t('{count} questions',{count:list.length})+(open?' ▾':' ▸')});btn.disabled=list.length===1;btn.dataset.control='questions:'+key;btn.setAttribute('aria-expanded',String(open));return add(n('div','stackq'),btn,...(open?list.map(questionCard):[]));});
   }
   function readyList(){return model.nodes.filter(x=>x.kind==='task'&&x.state==='ready').sort((a,b)=>(a.turn??Infinity)-(b.turn??Infinity));}
   function move(x,target,position) {
@@ -648,8 +654,10 @@ window.createDeckUI = function (host) {
   function jumpAttention(x){
     if(ui.view!=='board')host.setView('board');
     if(ui.needsClosed){ui.needsClosed=false;save('deck-needs-closed',false);render(true,'filter');}
+    const isQuestion=String(x).startsWith('question:'),call=isQuestion&&attentionCards().find(c=>'question:'+c.key===x);
+    if(call){ui.selected=x;ui.stacks.add(call.project?.id||call.home);render(true,'filter');}
     const el=[...$('board').querySelectorAll('.attention-list .task-card')].find(el=>el.dataset.key===x||el.dataset.node===x);
-    if(!el)return;el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.remove('attention-flash');void el.offsetWidth;el.classList.add('attention-flash');el.querySelector('.card-open')?.focus({preventScroll:true});
+    if(!el)return;el.scrollIntoView({block:'center',behavior:'smooth'});el.classList.remove('attention-flash');void el.offsetWidth;el.classList.add('attention-flash');const opener=el.querySelector('.card-open');opener?.focus({preventScroll:true});if(call&&opener){if(detailOpen()&&S.openerKey!=='question:'+call.key)closeDetail();if(!detailOpen())opener.click();}
   }
   // Review uses the owner's occurrence guard, independently of work revisions.
   async function changeReview(x,payload) {
@@ -694,25 +702,25 @@ window.createDeckUI = function (host) {
     return {decisions,unknown:(r.usage.unknown||[]).filter(x=>!decisions.includes(x)),missing:Math.max(0,(r.usage.tasks?.unknown||0)-decisions.length)};
   }
   function usageChip(r){
-    const u=r.usage;if(!u)return n('span','usage-line unknown',t('Spend not recorded'));
+    const u=r.usage;if(!u)return n('span','usage-line unknown',t('Cost unavailable'));
     const k=u.tasks||{},{missing,decisions}=usageUnknown(r);
-    if(!u.by?.length)return n('span','usage-line'+(missing?' unknown':''),missing?t('Spend unknown'):(k.no_agent||decisions.length)&&!k.not_started?t('Your decision: no agent spend'):t('No spend yet'));
+    if(!u.by?.length)return n('span','usage-line'+(missing?' unknown':''),missing?t('Cost unavailable'):(k.no_agent||decisions.length)&&!k.not_started?t('Your decision: no agent spend'):t('No spend yet'));
     const el=n('span','usage-line',(u.usd_complete||decisions.length&&!missing&&u.by.every(x=>x.usd_known)?'≈ ':'≥ ')+money(u.usd)+' · '+megaTokens(u.tokens)+(missing?' · '+t(missing===1?'{count} task unknown':'{count} tasks unknown',{count:missing}):'')+(k.running?' · '+t('in progress'):''));
     el.title=t('API list-price equivalent. Not a charge to your subscription.');return structural(el);
   }
   function usageDetail(r){
-    const u=r.usage;if(!u)return null;const box=n('div','usage-detail');
-    box.append(n('p','usage-h',t('Spend by harness, model and effort')));
-    for(const x of u.by||[])box.append(structural(n('p','usage-row',harnessName(x.harness)+' · '+modelName(x.model)+' · '+t('effort {level}',{level:(effortLabels[x.effort]?t(effortLabels[x.effort]):x.effort||t('effort:unknown'))})+' — '+(x.usd_known?money(x.usd):t('price unknown'))+' · '+megaTokens(x.tokens)+' · '+t(x.sessions===1?'{count} session':'{count} sessions',{count:x.sessions}))));
+    const u=r.usage;if(!u)return null;const box=n('details','usage-detail');box.append(n('summary','',t('Spend details')));const content=n('div','usage-detail-content');
+    content.append(n('p','usage-h',t('Spend by harness, model and effort')));
+    for(const x of u.by||[])content.append(structural(n('p','usage-row',harnessName(x.harness)+' · '+modelName(x.model)+' · '+t('effort {level}',{level:(effortLabels[x.effort]?t(effortLabels[x.effort]):x.effort||t('effort:unknown'))})+' — '+(x.usd_known?money(x.usd):t('price unknown'))+' · '+megaTokens(x.tokens)+' · '+t(x.sessions===1?'{count} session':'{count} sessions',{count:x.sessions}))));
     const k=u.tasks||{};
-    if(k.running)box.append(n('p','usage-note',t(k.running===1?'{count} task still running: its figure keeps growing.':'{count} tasks still running: their figures keep growing.',{count:k.running})));
-    if(k.not_started)box.append(n('p','usage-note',t(k.not_started===1?'{count} task not started: no spend.':'{count} tasks not started: no spend.',{count:k.not_started})));
+    if(k.running)content.append(n('p','usage-note',t(k.running===1?'{count} task still running: its figure keeps growing.':'{count} tasks still running: their figures keep growing.',{count:k.running})));
+    if(k.not_started)content.append(n('p','usage-note',t(k.not_started===1?'{count} task not started: no spend.':'{count} tasks not started: no spend.',{count:k.not_started})));
     const {decisions,unknown}=usageUnknown(r);
-    for(const x of decisions)box.append(n('p','usage-note',t('Your decision: {task} — no agent spend.',{task:x.title||x.task})));
-    if(k.no_agent)box.append(n('p','usage-note',t('{count} of your decisions: no agent spend.',{count:k.no_agent})));
-    for(const x of unknown)box.append(n('p','usage-note unknown',t('Unknown: {task} has no identified agent session.',{task:x.title||x.task})));
-    if((u.excludes||[]).includes('coordinator'))box.append(n('p','usage-note unknown',t('Not included: Firstmate coordination, shared by every request.')));
-    box.append(n('p','usage-note',t('USD = tokens × public API list price of each model. Your Claude and Codex subscriptions are not charged this way.')));
+    for(const x of decisions)content.append(n('p','usage-note',t('Your decision: {task} — no agent spend.',{task:x.title||x.task})));
+    if(k.no_agent)content.append(n('p','usage-note',t('{count} of your decisions: no agent spend.',{count:k.no_agent})));
+    for(const x of unknown)content.append(n('p','usage-note unknown',t('Unknown: {task} has no identified agent session.',{task:x.title||x.task})));
+    if((u.excludes||[]).includes('coordinator'))content.append(n('p','usage-note unknown',t('Not included: Firstmate coordination, shared by every request.')));
+    content.append(n('p','usage-note',t('USD = tokens × public API list price of each model. Your Claude and Codex subscriptions are not charged this way.')));box.append(content);
     return box;
   }
 
@@ -747,7 +755,7 @@ window.createDeckUI = function (host) {
     const opened=ui.expanded.has(r.id)||!!app.query,wrap=setColor(n('section','request-row'),r);wrap.dataset.node=r.id;wrap.dataset.kind='request';wrap.dataset.relationScope=r.id;
     const toggle=()=>{opened?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');};
     const title=b('',toggle,'request-title');title.dataset.control='request:'+r.id;title.setAttribute('aria-expanded',String(opened));add(title,n('span','fold'),n('span','dot'),n('span','request-name',label(r)));
-    const work=r.tasks,completed=work.filter(x=>x.state==='done').length,bar=n('span','request-bar');bar.style.setProperty('--p',Math.round(100*completed/Math.max(1,work.length))+'%');bar.setAttribute('aria-hidden','true');const meta=add(n('div','request-meta'),window.DeckAnonymize.project(n('span','request-project',projectOf(r)?.title||r.project?.label||r.project||projectOf(work[0])?.title||t('Project not reported')),projectOf(r)?.owner_id||r.project?.id||r.project||r.home),add(n('span','request-progress'),bar,structural(n('span','request-count',t(work.length===1?'{done} of {total} task done':'{done} of {total} tasks done',{done:completed,total:work.length})))));
+    const work=r.tasks,completed=work.filter(x=>x.state==='done').length,bar=n('span','request-bar');bar.style.setProperty('--p',Math.round(100*completed/Math.max(1,work.length))+'%');bar.setAttribute('aria-hidden','true');const requestProject=r.project||projectOf(r)?.title||projectOf(work[0])?.title||t('Project not reported'),meta=add(n('div','request-meta'),window.DeckAnonymize.project(n('span','request-project',projectDisplay(requestProject)),projectOf(r)?.owner_id||r.project?.id||r.project||r.home),add(n('span','request-progress'),bar,structural(n('span','request-count',t(work.length===1?'{done} of {total} task done':'{done} of {total} tasks done',{done:completed,total:work.length})))));
     const attention=r.calls.filter(c=>!c.answered),reviews=work.filter(reviewNeeded);
     if(attention.length)meta.append(structural(b(attention.length>1?t('Needs you · {count}',{count:attention.length}):t('Needs you'),()=>jumpAttention(attention[0].attention_kind==='action'?attention[0].key:'question:'+attention[0].key),'request-chip needs-chip')));
     if(r.calls.some(c=>c.answered)||r.tasks.some(x=>(x.raw?.recorded_answers||[]).some(a=>a.application?.state==='pending')||x.question?.answer?.application?.state==='pending'))meta.append(n('span','reading-note',t('Reading your answer')));
@@ -1047,6 +1055,11 @@ window.createDeckUI = function (host) {
     }
     section.append(list);content.append(section);
   }
+  function questionRelationships(home,task) {
+    const call=attentionCards().find(c=>c.home===home&&c.task===task);if(!call)return;
+    const own=byId.get(taskNodeId(home,task));
+    relationshipDetail({id:'question:'+call.key,kind:'task',home,parent:own?.parent,title:call.question||call.title});
+  }
   function findRelationNode(id) {
     const visible=el=>el&&el.getClientRects().length&&!el.closest('[hidden]');
     const nodes=[...$('workspace').querySelectorAll('[data-node]')];
@@ -1095,5 +1108,5 @@ window.createDeckUI = function (host) {
     cancelHover();ui.pin='';announceFocus('');ui.selected='';ui.hover='';highlight();
   },true);
   window.addEventListener('resize',()=>{render(true,'filter');});document.addEventListener('scroll',highlight,true);document.addEventListener('transitionend',e=>{if(e.target.classList.contains('card-more'))highlight();});
-  return {showAction(c){$('detail-kicker').textContent=t('Action required');actionDetail(c);},aliasFor(home,task){return objectId(model.nodes.find(x=>x.home===home&&x.task===task));},decorateIdentity(home,task){const own=model.nodes.find(x=>x.home===home&&x.task===task);if(own)reviewObject(own);},decisionOrigin(home,task){const own=byId.get(taskNodeId(home,task));return originOf(own);},historyMenu(item,explain){return moreMenu(item,idBadge(item),[menuItem('help',t('Ask for an explanation'),explain)]);},render,decorate,clearFocus,refreshAges,refreshReceipts,hueFor,locateCall(key){ui.needsClosed=false;save('deck-needs-closed',false);ui.scope='';ui.column='needs';app.query='';$('board-search').value='';ui.selected='question:'+key;const call=attentionCards().find(c=>c.key===key);if(call?.attention_kind==='action')ui.selected=taskNodeId(call.home,call.task);if(call)ui.stacks.add(call.project?.id||call.home);render(true,'filter');return [...document.querySelectorAll('.qcard .card-open,.action-card .card-open')].find(x=>x.dataset.key===(call?.attention_kind==='action'?key:'question:'+key));},addMenuItem(card,icon,text,fn){const menu=card.querySelector('.cmeta .card-menu');if(!menu)return;const item=menuItem(icon,text,fn);item.setAttribute('role','menuitem');item.addEventListener('click',()=>{menu.hidden=true;menu.parentElement.querySelector('.card-menu-btn')?.setAttribute('aria-expanded','false');});menu.append(item);},hasOrigin(home,task){const own=model.nodes.find(x=>x.home===home&&x.task===task);return canRevealOrigin(own);},revealTask(home,task){const own=model.nodes.find(x=>x.home===home&&x.task===task);if(own?.question?.origin_task)revealQuestionOrigin({home,task});else if(own){ui.selected='';reveal(own);}},setView(view){ui.view=view;ui.signature='';ui.nextRenderMode='filter';},get model(){return model;}};
+  return {showAction(c){$('detail-kicker').textContent=t('Action required');actionDetail(c);},aliasFor(home,task){return objectId(model.nodes.find(x=>x.home===home&&x.task===task));},decorateIdentity(home,task){const own=model.nodes.find(x=>x.home===home&&x.task===task);if(own)reviewObject(own);},decisionOrigin(home,task){const own=byId.get(taskNodeId(home,task));return originOf(own);},historyMenu(item,explain){return moreMenu(item,idBadge(item),[menuItem('help',t('Ask for an explanation'),explain)]);},render,decorate,clearFocus,refreshAges,refreshReceipts,hueFor,projectDisplay,questionRelationships,locateCall(key){ui.needsClosed=false;save('deck-needs-closed',false);ui.scope='';ui.column='needs';app.query='';$('board-search').value='';ui.selected='question:'+key;const call=attentionCards().find(c=>c.key===key);if(call?.attention_kind==='action')ui.selected=taskNodeId(call.home,call.task);if(call)ui.stacks.add(call.project?.id||call.home);render(true,'filter');return [...document.querySelectorAll('.qcard .card-open,.action-card .card-open')].find(x=>x.dataset.key===(call?.attention_kind==='action'?key:'question:'+key));},addMenuItem(card,icon,text,fn){const menu=card.querySelector('.cmeta .card-menu');if(!menu)return;const item=menuItem(icon,text,fn);item.setAttribute('role','menuitem');item.addEventListener('click',()=>{menu.hidden=true;menu.parentElement.querySelector('.card-menu-btn')?.setAttribute('aria-expanded','false');});menu.append(item);},hasOrigin(home,task){const own=model.nodes.find(x=>x.home===home&&x.task===task);return canRevealOrigin(own);},revealTask(home,task){const own=model.nodes.find(x=>x.home===home&&x.task===task);if(own?.question?.origin_task)revealQuestionOrigin({home,task});else if(own){ui.selected='';reveal(own);}},setView(view){ui.view=view;ui.signature='';ui.nextRenderMode='filter';},get model(){return model;}};
 };

@@ -62,7 +62,7 @@ function hashOf(text) { let h = 2166136261; for (const ch of String(text)) { h ^
 // The project Firstmate recorded for a task, in its own color everywhere.
 function projectTag(project) {
   if (!project?.label) return null;
-  const n = node('span', 'project-tag', project.label); const hue=deckUI?.hueFor?.(project.id) ?? hashOf(project.id)%11;n.dataset.hue=String(hue);n.style.setProperty('--pc', `var(--h${hue})`);
+  const n = node('span', 'project-tag', deckUI?.projectDisplay?.(project) || project.label); const hue=deckUI?.hueFor?.(project.id) ?? hashOf(project.id)%11;n.dataset.hue=String(hue);n.style.setProperty('--pc', `var(--h${hue})`);
   return window.DeckAnonymize.project(n,project.id);
 }
 function refreshTimes() {
@@ -354,7 +354,7 @@ async function loadHistory() {
         append(head,node('span','fold'),node('span','dot'),node('span','st',row.request?.label||t('Request not recorded')),structural(node('span','cnt')),node('span','meta'));
         groups.set(groupKey,{group,head,list:node('div','history-list'),projects:new Map()});append(group,head,groups.get(groupKey).list);
       }
-      const g=groups.get(groupKey);g.list.append(article);if(row.project?.label)g.projects.set(row.project.id,row.project.label);
+      const g=groups.get(groupKey);g.list.append(article);if(row.project?.label)g.projects.set(row.project.id,deckUI?.projectDisplay?.(row.project)||row.project.label);
     }
     for (const g of groups.values()) { g.head.querySelector('.cnt').textContent = String(g.list.children.length); g.head.querySelector('.meta').append(...[...g.projects].map(([id, label]) => window.DeckAnonymize?.project(node('span', '', label), id) ?? node('span', '', label))); }
     $('history-filters').replaceChildren(...[['all','All history'],['final','Results only']].map(([value,text])=>{const filter=button(t(text),()=>{S.historyFilter=value;S.historyLimit=40;loadHistory();});filter.setAttribute('aria-pressed',String((S.historyFilter||'all')===value));return filter;}));
@@ -613,6 +613,14 @@ function renderCall(ticket, draftOverride) {
   // answer, as the approved v11b demo; opened, it adds only the report, the
   // answer status and folded provenance. Re-check and origin are in its «…» menu.
   if (hostCard()?.matches('.qcard')) {
+    const summary = ticket.question_summary;
+    if (summary?.context) content.append(leadText('call-context', summary.context));
+    if (summary?.recommendation) {
+      const recommendation = summary.recommendation;
+      content.append(node('p', 'call-recommendation', t('Recommended: {choice}', {choice: recommendation.label}) +
+        (recommendation.reason ? ' · ' + recommendation.reason : '')));
+    }
+    deckUI?.questionRelationships?.(ticket.home, ticket.task);
     if (instructions) content.append(instructions);
     const link = reportLink(c.link, key); if (link) content.append(link);
     const state = node('div'); state.id = 'answer-status'; state.setAttribute('role', 'status'); content.append(state);

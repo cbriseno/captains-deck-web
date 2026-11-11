@@ -661,10 +661,15 @@ class Board:
         elif card.bucket == 'captains_call' and owner:
             try:
                 content = self.content(card, owner)
+                options = [o for o in content['presentation']['options'] if o['value'] != 'reconcile']
+                recommendation = next((o for o in options if o['value'] == content.get('recommend')), None)
                 question_summary = {'question': content['presentation']['decide'],
                                     'context': content['presentation']['about'],
-                                    'options': [o for o in content['presentation']['options']
-                                                if o['value'] != 'reconcile']}
+                                    'options': options,
+                                    'recommendation': ({'value': recommendation['value'],
+                                                       'label': recommendation['label'],
+                                                       'reason': recommendation.get('hint', '')}
+                                                      if recommendation else None)}
                 answered = answered or self.answer_saved(card, owner, content, saved_answers)
             except Refusal as exc:
                 question_summary = {'question': '', 'context': str(exc), 'options': []}
