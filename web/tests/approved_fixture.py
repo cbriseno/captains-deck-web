@@ -11,14 +11,8 @@ from fixtures import fixture, bridge, start_fixture
 root = Path(sys.argv[1]).resolve()
 root.mkdir(parents=True, exist_ok=True)
 os.environ['HERDR_PLUGIN_STATE_DIR'] = str(root / 'plugin-state')
-board, home = fixture(root)
+board, home = fixture(root, timeline=os.environ.get('CD_TEST_TIMELINE') == '1')
 base = Path(home.path)
-if os.environ.get('CD_TEST_TIMELINE') == '1':
-    for cards in board.collector.snap.cols.values():
-        for card in cards:
-            if card.task == 'web':
-                card.pane_key = 'fixture:agent'
-
 now = time.time()
 known = {'value': '2026-10-30', 'precision': 'date', 'source': 'fixture date'}
 updated = {'value': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now - 3600)), 'precision': 'instant', 'source': 'fixture status'}

@@ -20,13 +20,13 @@ test('request spend preserves unknowns, captain decisions and narrow layouts',{s
     requests.isolated.usage={usd:0,usd_complete:false,tokens:0,tasks:{},by:[{harness:'other',model:'unpriced-model',effort:'unknown',usd_known:false,tokens:0,sessions:1}]};
     snapshot.requests.push({id:'decision',label:'Decision only',project:'project:isolated',tasks:['task:second'],usage:{tasks:{no_agent:1},by:[],unknown:[]}});
     snapshot.tasks.find(x=>x.key==='task:second').request={id:'decision',label:'Decision only',project:'project:isolated'};
-    fs.writeFileSync(file,JSON.stringify(snapshot));
+    fs.writeFileSync(file,JSON.stringify(snapshot));fs.appendFileSync(path.join(proof,'home/state/fleet-ledger.jsonl'),JSON.stringify({home:path.join(proof,'home'),event:'fixture.snapshot',value:snapshot})+'\n');
     run('open',[url]);
-    evaluate(`async () => {for(let i=0;i<100;i++){if(document.querySelector('.request-row'))break;await new Promise(r=>setTimeout(r,50));}document.querySelector('.request-group[data-k=done] .col-h button[aria-expanded=false]')?.click();return true;}`);
+    evaluate(`async () => {for(let i=0;i<100;i++){if(document.querySelector('.request-row .usage-line')?.textContent.includes('3.28'))break;await new Promise(r=>setTimeout(r,50));}document.querySelector('.request-group[data-k=done] .col-h button[aria-expanded=false]')?.click();return true;}`);
     const read=()=>evaluate(`() => [...document.querySelectorAll('.request-row')].map(r=>({id:r.dataset.node,line:r.querySelector('.usage-line')?.textContent,detail:r.querySelector('.usage-detail')?.textContent}))`);
     let rows=read(),row=id=>rows.find(r=>r.id.endsWith(':req:'+id));
     assert.match(row('run').line,/≥ US\$3\.28.*7.5 M tokens.*1 tarea desconocida.*en curso/);
-    assert.equal(row('paused').line,'Gasto desconocido');assert.equal(row('waiting').line,'Gasto sin registrar');assert.equal(row('result').line,'Sin gasto aún');
+    assert.equal(row('paused').line,'Costo no disponible');assert.equal(row('waiting').line,'Costo no disponible');assert.equal(row('result').line,'Sin gasto aún');
     evaluate(`() => {for(const button of document.querySelectorAll('.request-title[aria-expanded=false]'))button.click();return true;}`);
     rows=read();assert.match(row('run').detail,/Captain choice.*sin gasto de agente/);assert.match(row('run').detail,/Desconocido.*Missing transcript/);
     assert.match(row('run').detail,/Codex.*GPT-6.1 Sol.*esfuerzo alto.*1 sesión/);assert.match(row('run').detail,/No incluye.*coordinación/);

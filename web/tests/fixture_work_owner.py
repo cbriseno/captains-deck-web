@@ -6,6 +6,13 @@ import sys
 
 root = Path(os.environ['FM_HOME'])
 command = sys.argv[2]
+if command == 'bootstrap':
+    journal = root / 'state/fleet-ledger.jsonl'
+    stat = journal.stat()
+    print(json.dumps({'schema': 'fm-work-bootstrap.v1', 'home': str(root),
+                      'position': [stat.st_dev, stat.st_ino, 0], 'enabled': True,
+                      'snapshot': json.loads((root / 'work-snapshot.json').read_text())}))
+    sys.exit()
 # Simulate a refused/failed observational owner read through the real adapter.
 if command in ('capabilities', 'snapshot', 'bootstrap') and (root / 'work-source-failed').exists():
     sys.exit('fixture owner read unavailable')

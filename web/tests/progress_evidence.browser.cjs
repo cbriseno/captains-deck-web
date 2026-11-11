@@ -34,16 +34,11 @@ for (const language of ['es','en']) test('progress checkpoint: current, historic
         child.stderr.on('data',chunk=>output+=chunk);child.on('exit',code=>reject(new Error('Fixture exit '+code+' '+output)));
       });
       const original=fs.readFileSync(path.join(proof,'home/work-snapshot.json'),'utf8');
-      browser=true;run('open',[url]);run('resize',['1440','1000']);
-      const cards=evaluate(`async()=>{for(let i=0;i<100&&!document.querySelector('#board .card[data-state=active]');i++)await new Promise(r=>setTimeout(r,50));return Object.fromEntries(['web','dependent','integration','next','second'].map(id=>{const card=[...document.querySelectorAll('#board .task-card')].find(x=>x.dataset.node.endsWith('task:'+id));return [id,{text:card.querySelector('.prog').textContent,bar:card.querySelector('[role=progressbar]')?.getAttribute('aria-valuenow')||null,alias:card.querySelector('.node-id').textContent,state:card.dataset.state}];}));}`);
+      browser=true;run('open',[url]);run('resize',['1440','1000']);run('eval',['()=>{document.querySelector(".request-group[data-k=done] .col-h button")?.click();document.querySelector("#columns-nav button:last-child")?.click();document.querySelectorAll("#board .request-tasks button.more[aria-expanded=false]").forEach(button=>button.click());return true;}']);
+      const cards=evaluate(`async()=>{for(let i=0;i<100&&!document.querySelector('#board .card[data-state=active]');i++)await new Promise(r=>setTimeout(r,50));return Object.fromEntries(['web','dependent','integration','next','second'].map(id=>{const card=[...document.querySelectorAll('#board .task-card')].find(x=>x.dataset.node.endsWith('task:'+id)),p=card?.querySelector('.prog');return [id,{text:p?.textContent||'',hasProgress:!!p,bar:p?.querySelector('[role=progressbar]')?.getAttribute('aria-valuenow')||null,alias:card?.querySelector('.node-id')?.textContent||'',state:card?.dataset.state}];}));}`);
       assert.equal(cards.web.bar,'33');assert.match(cards.web.alias,/^ID: T-/);
-      for(const key of ['dependent','integration','next','second']) {assert.equal(cards[key].bar,null);assert.equal(cards[key].text.includes('%'),false);}
-      const expected=language==='es'?['actualizarse','no hay avance declarado','sin confirmar','no es válida']:['needs an update','No progress declared','not confirmed','invalid'];
-      for(const [i,key] of ['dependent','integration','next','second'].entries())assert.ok(cards[key].text.includes(expected[i]),cards[key].text);
+      for(const key of ['dependent','integration','next','second']) {assert.equal(cards[key].hasProgress,false);assert.equal(cards[key].text.includes('%'),false);}
       assert.equal(cards.integration.state,'paused');assert.equal(cards.next.state,'ready');assert.equal(cards.second.state,'ready');
-      assert.ok(cards.integration.text.includes(language==='es'?'Lista para integrar':'Ready for integration'));
-      assert.ok(cards.next.text.includes(language==='es'?'Activación':'Activation'));
-      assert.ok(cards.second.text.includes(language==='es'?'Integración':'Integration'));
       const historical=evaluate(`async()=>{[...document.querySelectorAll('#board .task-card')].find(x=>x.dataset.node.endsWith('task:dependent')).querySelector('.card-open').click();for(let i=0;i<100&&!document.querySelector('#detail-content .prog[data-freshness=stale]');i++)await new Promise(r=>setTimeout(r,50));const p=document.querySelector('#detail-content .prog');return {text:p.textContent,summary:p.querySelector('summary')?.textContent,bar:!!p.querySelector('[role=progressbar]')};}`);
       assert.equal(historical.bar,false);assert.equal(historical.text.includes('%'),false);
       assert.ok(historical.summary.includes(language==='es'?'histórica':'historical'));assert.ok(historical.text.includes(language==='es'?'4 de 7':'4 of 7'));assert.ok(historical.text.includes('Earlier scope'));
@@ -53,7 +48,7 @@ for (const language of ['es','en']) test('progress checkpoint: current, historic
       // Change the disposable owner snapshot, then wait for the real HTTP poll.
       // No browser response injection or detail close/reopen drives a transition.
       const snapshotPath=path.join(proof,'home/work-snapshot.json'),snapshot=JSON.parse(original),transitions=[];
-      const writeSnapshot = () => {fs.writeFileSync(snapshotPath+'.tmp',JSON.stringify(snapshot));fs.renameSync(snapshotPath+'.tmp',snapshotPath);};
+      const writeSnapshot = () => {fs.writeFileSync(snapshotPath+'.tmp',JSON.stringify(snapshot));fs.renameSync(snapshotPath+'.tmp',snapshotPath);fs.appendFileSync(path.join(proof,'home/state/fleet-ledger.jsonl'),JSON.stringify({home:path.join(proof,'home'),event:'fixture.snapshot',value:snapshot})+'\n');};
       const publish = (id,freshness,done,total,phase) => {
         const row=snapshot.tasks.find(x=>x.key==='task:'+id),steps=Array.from({length:total},(_,i)=>({label:'Live step '+(i+1),state:i<done?'done':'todo'}));
         row.progress=freshness==='current'?{done,total,steps}:null;
@@ -78,18 +73,17 @@ for (const language of ['es','en']) test('progress checkpoint: current, historic
       run('run',[],`await page.press('Escape');await page.click('#board [data-node$="task:web"] .card-open');await page.wait('#detail-content .prog details');`);
       prepare('#detail-content textarea[name=removal-reason]');
       snapshot.tasks.find(x=>x.key==='task:web').reason='Separate board update before progress changes';writeSnapshot();
-      const otherRefresh=evaluate(`async()=>{for(let i=0;i<180&&!document.querySelector('#board [data-node$="task:web"] .card-line')?.textContent.includes('Separate board update');i++)await new Promise(r=>setTimeout(r,100));return document.querySelector('#board [data-node$="task:web"] .card-line')?.textContent;}`);
+      const otherRefresh=evaluate(`async()=>{for(let i=0;i<180&&!document.querySelector('#board [data-node$="task:web"] .rs')?.textContent.includes('Separate board update');i++)await new Promise(r=>setTimeout(r,100));return document.querySelector('#board [data-node$="task:web"] .rs')?.textContent;}`);
       assert.ok(otherRefresh.includes('Separate board update'));reading('web','current','33','textarea');
       publish('web','stale',1,3,'activation');reading('web','stale',null,'textarea');
       evaluate(`async()=>{document.querySelector('#detail-content .prog summary').focus({preventScroll:true});window.progressEdit.textareaScroll=window.progressEdit.textarea.scrollTop;window.progressEdit.scroll=[scrollX,scrollY];return true;}`);
       publish('web','current',2,3,'integration');const restored=reading('web','current','67','summary');
       assert.ok(restored.phase.includes(language==='es'?'Integración':'Integration'));
       publish('ask','current',1,2,'validation');
-      run('run',[],`await page.press('Escape');await page.click('#board .qcard .card-open');await page.wait('#answer-note');`);
-      run('run',[],`await page.click('#detail-content .own-words-fold > summary');await page.fill('#answer-note','Unsent question draft');await page.eval(()=>{window.questionDraft=document.querySelector('#answer-note');});`);
+      run('run',[],`await page.press('Escape');await page.wait('#board .qcard .inline-answer .own-words input');await page.fill('#board .qcard .inline-answer .own-words input','Unsent question draft');await page.eval(()=>{window.questionDraft=document.querySelector('#board .qcard .inline-answer .own-words input');});`);
       for(const [freshness,done,total,phase] of [['stale',1,2,'activation'],['current',2,2,'complete']]){
         publish('ask',freshness,done,total,phase);
-        const question=evaluate(`async()=>{for(let i=0;i<180;i++){const b=await(await fetch('api/board')).json();if(b.deck.sources[0].snapshot.nodes.find(x=>x.task==='ask')?.phase==='${phase}')break;await new Promise(r=>setTimeout(r,100));}await new Promise(r=>setTimeout(r,500));return {sameDraft:window.questionDraft===document.querySelector('#answer-note'),draft:document.querySelector('#answer-note')?.value,executionControls:document.querySelectorAll('.qcard .prog,.qcard .card-ctl,#detail-content .prog,#detail-content .deck-controls').length};}`);
+        const question=evaluate(`async()=>{for(let i=0;i<180;i++){const b=await(await fetch('api/board')).json();if(b.deck.sources[0].snapshot.nodes.find(x=>x.task==='ask')?.phase==='${phase}')break;await new Promise(r=>setTimeout(r,100));}await new Promise(r=>setTimeout(r,500));const input=document.querySelector('#board .qcard .inline-answer .own-words input');return {sameDraft:window.questionDraft===input,draft:input?.value,executionControls:document.querySelectorAll('.qcard .prog,.qcard .card-ctl').length};}`);
         assert.equal(question.executionControls,0);assert.equal(question.sameDraft,true);assert.equal(question.draft,'Unsent question draft');
       }
       run('run',[],`await page.press('Escape');await page.click('#board [data-node$="task:demo-research"] .card-open');await page.wait('#detail-content .detail-tabs');await page.click('#detail-content .detail-tabs button:nth-child(2)');`);

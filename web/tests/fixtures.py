@@ -81,7 +81,7 @@ class FakeCollector:
         pass
 
 
-def fixture(root):
+def fixture(root, timeline=False):
     root=Path(root); home=root/'home'
     for part in ('bin','state/decision-cards','data/demo-research','data/phone'):
         (home/part).mkdir(parents=True,exist_ok=True)
@@ -117,6 +117,11 @@ def fixture(root):
      'landed':[{'id':'demo-research','what':'Demo research: opciones ordenadas para el viaje','owner':'(main)','closed':'2026-10-24'},{'id':'phone','what':'Atención del teléfono preparada; validación física pendiente','owner':'(main)','closed':'2026-10-25'}]}
     snap=f.Snapshot();snap.homes=f.inject_all_crew([h]);snap.home=snap.homes[0];snap.collected_at=now
     snap.cols,snap.totals=f.make_cards(h,payload,{}, {}, {},snap.homes)
+    if timeline:
+        for cards in snap.cols.values():
+            for card in cards:
+                if card.task == 'web':
+                    card.pane_key = 'fixture:agent'
     raw={h.label:(payload,now,h.path)}
     collector=FakeCollector(snap,raw)
     board=bridge.Board(root/'web-data','https://terminal.example.test',collector)
