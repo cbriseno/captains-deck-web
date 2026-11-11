@@ -3,8 +3,7 @@
 from pathlib import Path
 import os
 import sys
-import threading
-from fixtures import fixture, bridge
+from fixtures import fixture, bridge, start_fixture
 import activity_fleet
 root=Path(sys.argv[1]).resolve();root.mkdir(parents=True,exist_ok=True)
 os.environ['HERDR_PLUGIN_STATE_DIR']=str(root/'plugin-state')
@@ -19,7 +18,13 @@ else:
     if existing:
         identity.write_text(existing[0])
         if not existing[1]:(root/'home/open').unlink(missing_ok=True)
-port=8788
+start_fixture(board,home)
+port=int(os.environ.get('CD_TEST_PORT','8788'))
 server=bridge.Server((bridge.LOOPBACK,port),board,bridge.Security(port))
-print(f'Fixture at {bridge.local_origin(port)}, owner {home.path}',flush=True)
-server.serve_forever()
+server.security=bridge.Security(server.server_port)
+print(f'Fixture at {bridge.local_origin(server.server_port)}, owner {home.path}',flush=True)
+try:
+    server.serve_forever()
+finally:
+    server.server_close()
+    board.stop()

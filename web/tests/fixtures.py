@@ -124,3 +124,38 @@ def fixture(root):
     # to prepare snapshots; production Board reads through its event projection.
     board.collector=collector
     return board,h
+
+
+def start_fixture(board, home):
+    """Install the disposable owner, bootstrap it and refuse an empty preview."""
+    base = Path(home.path)
+    for part in ('bin', 'config', 'state'):
+        (base / part).mkdir(parents=True, exist_ok=True)
+    snapshot = base / 'work-snapshot.json'
+    if not snapshot.exists():
+        tasks = []
+        snap = board.collector.snap
+        states = {'captains_call': 'captain', 'underway': 'running',
+                  'charted': 'ready', 'landed': 'done'}
+        for column, cards in snap.cols.items():
+            for card in cards:
+                tasks.append(dict(key='task:' + card.task, title=card.title,
+                    project='project:fixture', state=states[column], rev='r1',
+                    question={'open': column == 'captains_call'}))
+        snapshot.write_text(json.dumps(dict(schema='fm-work-snapshot.v1',
+            projects=[dict(key='project:fixture', label='Deck · fixture', rev='r1')],
+            subprojects=[], tasks=tasks, sigue=[])))
+    (base / 'bin/work-owner.py').write_text(Path(__file__).with_name('fixture_work_owner.py').read_text())
+    (base / 'bin/fm_work_projection.py').write_text(Path(__file__).with_name('fixture_projection.py').read_text())
+    endpoint = base / 'bin/fm-tasks-axi.sh'
+    endpoint.write_text('#!/bin/sh\nexec python3 "$(dirname "$0")/work-owner.py" "$@"\n')
+    endpoint.chmod(0o755)
+    (base / 'config/fleet-ledger').touch()
+    (base / 'state/fleet-ledger.jsonl').touch()
+    board.start()
+    with board.projection.condition:
+        ready = board.projection.condition.wait_for(lambda: not board.projection.loading, timeout=10)
+        data = board.projection.read()
+    if not ready or data['error'] or not any(c['cards'] for c in data['columns']):
+        board.stop()
+        raise RuntimeError('Fixture did not load tasks: ' + (data['error'] or 'empty board'))

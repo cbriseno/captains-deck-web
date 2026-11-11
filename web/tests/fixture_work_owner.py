@@ -7,9 +7,21 @@ import sys
 root = Path(os.environ['FM_HOME'])
 command = sys.argv[2]
 # Simulate a refused/failed observational owner read through the real adapter.
-if command in ('capabilities', 'snapshot') and (root / 'work-source-failed').exists():
+if command in ('capabilities', 'snapshot', 'bootstrap') and (root / 'work-source-failed').exists():
     sys.exit('fixture owner read unavailable')
 raw = json.loads((root / 'work-snapshot.json').read_text())
+if command == 'bootstrap':
+    stat = (root / 'state/fleet-ledger.jsonl').stat()
+    print(json.dumps(dict(schema='fm-work-bootstrap.v1', snapshot=raw,
+        enabled=True, position=[stat.st_dev, stat.st_ino, stat.st_size])))
+    sys.exit()
+
+
+def save():
+    (root / 'work-snapshot.json').write_text(json.dumps(raw))
+    with (root / 'state/fleet-ledger.jsonl').open('a') as out:
+        out.write(json.dumps(dict(home=str(root), event='fixture.snapshot', value=raw)) + '\n')
+
 if command == 'capabilities':
     print(json.dumps({'schema': 'fm-work-capabilities.v1', 'contract_major': 1,
                       'ops': ['set_priority', 'set_pause', 'clear_pause', 'add_dep', 'remove_dep', 'move', 'request_removal'],
@@ -44,7 +56,7 @@ if '.' in command:
         raw['events'].append(dict(event='resume.refused', scope=target, at='2026-11-08T19:01:00Z', running=6, cap=6))
     result = dict(state='received' if state in ('pending', 'queued') else 'applied',
                   request_id=operation['request_id'], pause_state=state, impact=impact)
-    (root / 'work-snapshot.json').write_text(json.dumps(raw))
+    save()
     (root / ('request-' + operation['request_id'] + '.json')).write_text(json.dumps(result))
     print(json.dumps(result));sys.exit()
 impact = {'affected': {'running': [], 'queued': [operation['target']], 'waiting_behind': []}, 'still_paused': ['task:integration'], 'sigue_after': raw['sigue']}
@@ -72,6 +84,6 @@ if operation['op'] == 'set_pause':
     result['state'] = 'received';result['message'] = 'Fixture: llegando a punto seguro.';row['pause'] = {'own': {'reason': operation['reason']}, 'inherited': None, 'safe_point': 'pending'};row['state'] = 'stopping'
 if operation['op'] != 'request_removal':
     row['rev'] = 'r2'
-    (root / 'work-snapshot.json').write_text(json.dumps(raw))
+    save()
 (root / ('request-' + operation['request_id'] + '.json')).write_text(json.dumps(result))
 print(json.dumps(result))

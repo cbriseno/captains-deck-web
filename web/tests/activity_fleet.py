@@ -150,7 +150,9 @@ def fleet(root, firstmate_fields=False, language='en'):
     data = payload(now, firstmate_fields)
     snap = f.Snapshot(); snap.homes = f.inject_all_crew([h]); snap.home = snap.homes[0]; snap.collected_at = now
     snap.cols, snap.totals = f.make_cards(h, data, {}, {}, {}, snap.homes)
-    board = bridge.Board(root / 'web-data', '', FakeCollector(snap, {h.label: (data, now, h.path)}), language=language)
+    collector = FakeCollector(snap, {h.label: (data, now, h.path)})
+    board = bridge.Board(root / 'web-data', '', collector, language=language)
+    board.collector = collector
     return board, h
 
 

@@ -6,7 +6,7 @@ from pathlib import Path
 import sys
 import time
 
-from fixtures import fixture, bridge
+from fixtures import fixture, bridge, start_fixture
 
 root = Path(sys.argv[1]).resolve()
 root.mkdir(parents=True, exist_ok=True)
@@ -21,7 +21,7 @@ if os.environ.get('CD_TEST_TIMELINE') == '1':
 
 now = time.time()
 known = {'value': '2026-10-30', 'precision': 'date', 'source': 'fixture date'}
-updated = {'value': now - 3600, 'precision': 'instant', 'source': 'fixture status'}
+updated = {'value': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime(now - 3600)), 'precision': 'instant', 'source': 'fixture status'}
 unknown = {'value': None, 'precision': 'unknown', 'source': 'not reported'}
 projects = [{'key': 'project:deck', 'label': 'Deck privado · fixture', 'visibility': 'private', 'priority': {'own': 0}, 'updated': updated, 'rev': 'r1'},
             {'key': 'project:public', 'label': 'Deck público · fixture', 'visibility': 'public', 'installs': 'project:deck', 'priority': {'own': None}, 'updated': unknown, 'rev': 'r1'}]
@@ -110,7 +110,7 @@ if os.environ.get('CD_TEST_ACTIONS') == '1':
                 'precision': 'instant', 'source': 'fixture.creation'}
     by_task = {row['key']: row for row in tasks}
     by_task['task:web']['created'] = creation(12 * 60)
-    by_task['task:web']['updated'] = {'value': now - 60, 'precision': 'instant', 'source': 'fixture.update'}
+    by_task['task:web']['updated'] = creation(60)
     projects[0]['created'] = creation(3 * 3600)
     subs[0]['created'] = creation(2 * 86400)
     tasks.extend([
@@ -202,8 +202,6 @@ if os.environ.get('CD_TEST_RELATIONS') == '1':
                             project=request['project'])
                 task.pop('subproject', None)
 (base / 'work-snapshot.json').write_text(json.dumps(snapshot))
-(base / 'bin/work-owner.py').write_text(Path(__file__).with_name('fixture_work_owner.py').read_text())
-p = base / 'bin/fm-tasks-axi.sh'; p.write_text('#!/bin/sh\nexec python3 "$(dirname "$0")/work-owner.py" "$@"\n'); p.chmod(0o755)
 if os.environ.get('CD_TEST_INVENTORY') == '1':
     gates, _ = bridge.fm.make_cards(home, {'gates': [{'id': '(main-inventory)',
         'title': 'in-flight backlog item has no child metadata: fixture-missing',
@@ -212,6 +210,7 @@ if os.environ.get('CD_TEST_INVENTORY') == '1':
     unknown, _ = bridge.fm.make_cards(home, {'in_flight': [{'id': 'unverified-worker',
         'name': 'Unverified observation', 'state': 'unknown', 'state_source': 'none'}]}, {}, {}, {})
     board.collector.snap.cols['underway'].extend(unknown['underway'])
+start_fixture(board, home)
 port = int(os.environ.get('CD_TEST_PORT', '0'))
 server = bridge.Server((bridge.LOOPBACK, port), board, bridge.Security(port or 8788))
 server.security = bridge.Security(server.server_port)
@@ -220,3 +219,4 @@ try:
     server.serve_forever()
 finally:
     server.server_close()
+    board.stop()
