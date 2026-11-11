@@ -751,8 +751,12 @@ window.createDeckUI = function (host) {
     if(!entry.data.events.length)box.append(n('p','meta',t('No recorded activity yet.')));
     return box;
   }
+  function requestHasDetail(r){
+    const id=ui.revealing||(detailOpen()?app.opener?.closest('[data-node]')?.dataset.node:'');
+    return r.id===id||r.tasks.some(x=>x.id===id);
+  }
   function requestRow(r,peers){
-    const opened=ui.expanded.has(r.id)||!!app.query,wrap=setColor(n('section','request-row'),r);wrap.dataset.node=r.id;wrap.dataset.kind='request';wrap.dataset.relationScope=r.id;
+    const opened=ui.expanded.has(r.id)||!!app.query||requestHasDetail(r),wrap=setColor(n('section','request-row'),r);wrap.dataset.node=r.id;wrap.dataset.kind='request';wrap.dataset.relationScope=r.id;
     const toggle=()=>{opened?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');};
     const title=b('',toggle,'request-title');title.dataset.control='request:'+r.id;title.setAttribute('aria-expanded',String(opened));add(title,n('span','fold'),n('span','dot'),n('span','request-name',label(r)));
     const work=r.tasks,completed=work.filter(x=>x.state==='done').length,bar=n('span','request-bar');bar.style.setProperty('--p',Math.round(100*completed/Math.max(1,work.length))+'%');bar.setAttribute('aria-hidden','true');const requestProject=r.project||projectOf(r)?.title||projectOf(work[0])?.title||t('Project not reported'),meta=add(n('div','request-meta'),window.DeckAnonymize.project(n('span','request-project',projectDisplay(requestProject)),projectOf(r)?.owner_id||r.project?.id||r.project||r.home),add(n('span','request-progress'),bar,structural(n('span','request-count',t(work.length===1?'{done} of {total} task done':'{done} of {total} tasks done',{done:completed,total:work.length})))));
@@ -777,7 +781,7 @@ window.createDeckUI = function (host) {
       const body=n('div','request-tasks'),done=work.filter(x=>x.state==='done'&&!['final','partial'].includes((x.outcome||x.raw?.outcome||x.card?.outcome)?.role)&&visible(x)),rank={active:0,stopping:1,unknown:2,ready:3,waiting:4,paused:5,done:6};
       const asking=new Set(r.calls.filter(c=>!c.answered).map(c=>keyOf(c.home,c.task)));
       body.append(...work.filter(x=>!done.includes(x)&&!asking.has(keyOf(x.home,x.task))&&visible(x)).sort((a,b)=>rank[a.state]-rank[b.state]).map(requestTaskRow));
-      if(done.length){const show=ui.steps.has(r.id),fold=b(t(show?'Hide {count} finished tasks':'View {count} finished tasks',{count:done.length}),()=>{show?ui.steps.delete(r.id):ui.steps.add(r.id);render(true,'filter');},'more');fold.setAttribute('aria-expanded',String(show));body.append(structural(fold));if(show)body.append(...done.map(requestTaskRow));}
+      if(done.length){const show=ui.steps.has(r.id)||requestHasDetail(r),fold=b(t(show?'Hide {count} finished tasks':'View {count} finished tasks',{count:done.length}),()=>{show?ui.steps.delete(r.id):ui.steps.add(r.id);render(true,'filter');},'more');fold.setAttribute('aria-expanded',String(show));body.append(structural(fold));if(show)body.append(...done.map(requestTaskRow));}
       if(!body.children.length)body.append(n('p','meta',t('What remains is in Needs you.')));const spend=usageDetail(r);if(spend)body.prepend(spend);const logOpen=ui.logOpen.has(r.id),logFold=b(t(logOpen?'Hide activity log':'View activity log'),()=>{logOpen?ui.logOpen.delete(r.id):ui.logOpen.add(r.id);render(true,'filter');},'more log-fold');logFold.setAttribute('aria-expanded',String(logOpen));body.append(logFold);if(logOpen)body.append(activityLog(r));
       wrap.append(body);
     }
@@ -808,7 +812,7 @@ window.createDeckUI = function (host) {
       const peers=rows.filter(r=>requestState(r)===state);if(!peers.length)continue;
       const group=n('section','request-group');group.dataset.k=state;group.id='state-column-'+state;
       const folded=ui.groups.has(state),toggle=b('',()=>{folded?ui.groups.delete(state):ui.groups.add(state);render(true,'filter');});add(toggle,n('span','fold'),n('span','dot'),n('span','',t(title)));toggle.setAttribute('aria-expanded',String(!folded));
-      group.append(add(n('div','request-group-head col-h'),toggle,structural(n('span','n',String(peers.length)))));if(!folded)group.append(add(n('div','request-table'),...peers.map(r=>requestRow(r,peers))));list.append(group);
+      group.append(add(n('div','request-group-head col-h'),toggle,structural(n('span','n',String(peers.length)))));const shown=folded?peers.filter(requestHasDetail):peers;if(shown.length)group.append(add(n('div','request-table'),...shown.map(r=>requestRow(r,peers))));list.append(group);
     }
     if(!rows.length)list.append(n('p','meta',t('No requests match.')));syncChildren(board,[side,list]);
   }
@@ -859,7 +863,7 @@ window.createDeckUI = function (host) {
     const diagnostics=$('deck-diagnostics');diagnostics.replaceChildren(...(app.board.diagnostics||[]).map(d=>add(n('div','deck-diagnostic'),n('strong','',t('Inventory needs attention')),n('p','',d.owner+' · '+d.message))));diagnostics.hidden=!diagnostics.children.length;
     const counts={needs:asks.length+act.length,now:run.length+stopping.length,waiting:sorted('waiting').length,paused:sorted('paused').length,done:done.length};
     $('columns-nav').replaceChildren();
-    const detail=$('detail'),wasOpen=detailOpen();parkDetail();
+    const detail=$('detail'),wasOpen=detailOpen(),wasParked=wasOpen&&detail.parentElement===$('detail-panel');parkDetail();
     // Hidden views render when selected; they need no DOM work for a board update.
     if(ui.mixer)mixer();
     if(ui.view==='projects')tree();
@@ -881,7 +885,8 @@ window.createDeckUI = function (host) {
       if(animation&&previous?.lane===row.dataset.activity)animation.currentTime=previous.at;
       activityObserver.observe(row);
     }
-    if(wasOpen&&detailPosition)window.scrollTo(detailPosition.left,detailPosition.top);
+    if(wasOpen&&wasParked&&detail.closest('.task-card'))detail.closest('.task-card').scrollIntoView({block:'start',behavior:'instant'});
+    else if(wasOpen&&detailPosition)window.scrollTo(detailPosition.left,detailPosition.top);
   }
   async function openNode(x,opener) {
     cancelHover();
@@ -935,9 +940,22 @@ window.createDeckUI = function (host) {
     host.answerTools?.composer(area,'api/control/'+encodeURIComponent(x.home)+'/upload',files,refresh,()=>area.isConnected&&!ui.busy,true);
     panel.append(send,area);box.append(panel);if(app.modal?.type==='call')content.append(box);else content.prepend(box);
   }
-  function reveal(x) {
-    ui.scope='';ui.view='board';ui.column=colOf(x);if(!visible(x)){app.query='';$('board-search').value='';}const request=requestFor(x),r=requestRows(model.nodes.filter(y=>y.kind==='task')).find(y=>y.id===(request?.id||x.id));if(r){ui.expanded.add(r.id);ui.groups.delete(requestState(r));ui.steps.add(r.id);}host.setView('board');render(true,'filter');
-    const el=[...$('board').querySelectorAll('[data-node]')].find(y=>!$('detail').contains(y)&&y.dataset.node===x.id && y.getClientRects().length);if(el){el.scrollIntoView({block:'nearest'});const opener=el.querySelector('.card-open,.mix-name');if(opener)openNode(x,opener);}
+  async function reveal(x) {
+    // Navigation positions the final layout; folding the old detail must not move it afterward.
+    const animations=document.documentElement.dataset.animations;
+    document.documentElement.dataset.animations='false';motion.cancel();
+    try{
+      const find=()=>[...$('board').querySelectorAll('[data-node]')].find(y=>!$('detail').contains(y)&&y.dataset.node===x.id&&y.getClientRects().length);
+      let el=ui.view==='board'&&!ui.scope?find():null;
+      if(el?.closest('.request-group')?.dataset.k==='done'&&!ui.groups.has('done'))el=null;
+      if(!el){
+        ui.scope='';ui.column=colOf(x);if(!visible(x)){app.query='';$('board-search').value='';}
+        const request=requestFor(x),r=requestRows(model.nodes.filter(y=>y.kind==='task')).find(y=>y.id===(request?.id||x.id));
+        if(r){ui.expanded.add(r.id);ui.steps.add(r.id);if(requestState(r)==='done')ui.groups.add('done');}ui.revealing=x.id;
+        host.setView('board');el=find();
+      }
+      if(el){const opener=el.querySelector('.card-open,.mix-name');if(opener)await openNode(x,opener);if(detailOpen())el.scrollIntoView({block:'start',behavior:'instant'});}
+    }finally{ui.revealing='';document.documentElement.dataset.animations=animations;}
   }
   function renderImpact(value) {
     const box=n('div','impact');

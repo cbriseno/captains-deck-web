@@ -394,7 +394,7 @@ function placeDetail(opener) {
   if (detail.parentElement !== slot) { slot.append(detail); void card.offsetHeight; }
   card.dataset.open = 'true';
   const top = card.getBoundingClientRect?.().top;
-  if (top > window.innerHeight * 0.6) card.scrollIntoView({block: 'start', behavior: 'smooth'});
+  if (top > window.innerHeight * 0.6) card.scrollIntoView({block: 'start', behavior: document.documentElement.dataset.animations === 'false' ? 'instant' : 'smooth'});
 }
 // A card that leaves the board hands its detail back to the panel, so a
 // receipt is never lost.

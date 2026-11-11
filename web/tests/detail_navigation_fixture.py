@@ -13,8 +13,12 @@ tasks = [dict(key='task:origin', title='Origin task', state='running',
               blocked_by=[dict(ref='task:destination', open=False)]),
          dict(key='task:destination', title='Destination task', state='done',
               question=dict(open=False, call=dict(question='Closed question')))]
+tasks[1].pop('question')
+tasks[1]['outcome'] = dict(role='final', review='reviewed')
+tasks.extend(dict(key=f'task:finished-{i}', title=f'Finished task {i}', state='done',
+                  outcome=dict(role='final', review='reviewed')) for i in range(480))
 requests = []
-for task, name in zip(tasks, ['origin', 'destination']):
+for task, name in zip(tasks, ['origin', 'destination'] + [f'finished-{i}' for i in range(480)]):
     task.update(project='project:demo', request=dict(id=name))
     requests.append(dict(id=name, label=name.title() + ' request',
                          project='project:demo', tasks=[task['key']]))
@@ -43,7 +47,9 @@ class Handler(SimpleHTTPRequestHandler):
                 return
             value = (body if self.path.startswith('/api/board') else
                      dict(locale='en', messages={}) if self.path.startswith('/api/locale') else
-                     dict(events=[], agents={}) if self.path.startswith('/api/timeline') else {})
+                     dict(events=[], agents={}) if self.path.startswith('/api/timeline') else
+                     dict(title='Destination task', summary='Delivered result', details='Synthetic delivery',
+                          sources=[], links=[]) if self.path.startswith('/api/delivery/') else {})
             self.send_response(200)
             self.send_header('Content-Type', 'application/json')
             self.end_headers()

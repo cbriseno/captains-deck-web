@@ -38,7 +38,7 @@ function fixture(layout, options = {}) {
   root.querySelector = selector => selector === '#board' ? board : selector === '#connector-key' ? legend : null;
   root.append(legend);
   root.ownerDocument = {createElementNS: (_, tag) => new Element(tag), createElement: tag => new Element(tag)};
-  const window = {matchMedia: () => ({matches: state.phone})};
+  const window = {innerWidth: root.clientWidth, innerHeight: root.clientHeight, matchMedia: () => ({matches: state.phone})};
   vm.runInNewContext(source, {window});
   const args = {edges: [], members: new Set(), focus: 'a', root, find: id => nodes.get(id), label: id => id,
     t: (s, fields = {}) => s.replace(/\{(\w+)\}/g, (_, key) => fields[key]), motion: {animating: false}};
@@ -120,7 +120,7 @@ test('geometry cache survives document and root scroll; resize, expansion and ch
   const edges = [edge('a', 'b')];
   const initial = f.draw({edges}); assert.equal(initial.cacheHit, false);
   assert.equal(f.draw({edges}).cacheHit, true);
-  f.state.shiftX = 17; f.state.shiftY = -190; f.root.scrollLeft = 13; f.root.scrollTop = 47;
+  f.state.shiftX = 17; f.state.shiftY = -70; f.root.scrollLeft = 13; f.root.scrollTop = 47;
   const scrolled = f.draw({edges}); assert.equal(scrolled.cacheHit, true);
   assert.equal(JSON.stringify(scrolled.paths), JSON.stringify(initial.paths)); geometry(f, scrolled);
   f.root.clientWidth = f.root.scrollWidth = 800;
@@ -150,6 +150,16 @@ test('phone draws as the approved demo; motion suppresses SVG; hidden, self and 
   f.nodes.get('b').hidden = true;
   const result = f.draw({edges: [...edges, edge('a', 'missing'), edge('a', 'a')]});
   assert.equal(result.visibleRoutes, 0); assert.equal(f.descendants(f.root).filter(el => el.tagName === 'svg').length, 0);
+});
+
+test('off-screen cards do not grow the routing grid; endpoints return on scroll', () => {
+  const f = fixture([['a', 40, 120, 170, 90], ['b', 550, 260, 170, 90],
+    ...Array.from({length: 480}, (_, i) => ['done:'+i, 30+i%300, 2000+i*120, 170, 90])], {scrollHeight: 60000});
+  const result = f.draw({edges: [edge('a', 'b'), edge('a', 'done:0')]});
+  assert.equal(result.visibleRoutes, 1); assert.equal(result.obstacleCount, 2);
+  assert.ok(result.grid[0] * result.grid[1] < 1000);
+  f.state.shiftY = -2000;
+  assert.equal(f.draw({edges: [edge('done:0', 'done:1')]}).routed, 1);
 });
 
 test('direction, question/completion styles, focus classification and delimited identifiers remain distinct', () => {
@@ -260,7 +270,7 @@ test('real browser: SVG endpoints align after scroll, resize and card expansion;
     }`);
     assert.equal(headerCheck.routed,1);assert.equal(headerCheck.unrouted,0);assert.ok(Math.abs(headerCheck.port.x-headerCheck.expected)<.2,'header port uses the union of its visible overflowing parts');
     await run('resize', '390', '844');
-    assert.equal(await evaluate(`()=>{draw();return document.querySelectorAll('svg.links').length;}`), 1);
+    assert.equal(await evaluate(`()=>{draw();return document.querySelectorAll('svg.links').length;}`), 0, 'off-screen endpoints leave no lines');
     if (process.env.CD_TEST_EVIDENCE) {
       fs.mkdirSync(process.env.CD_TEST_EVIDENCE, {recursive: true});
       fs.writeFileSync(path.join(process.env.CD_TEST_EVIDENCE, 'relations-browser-checks.json'), JSON.stringify(checks, null, 2));

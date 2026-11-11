@@ -208,7 +208,12 @@
     // Absolute SVG coordinates start at the root's padding edge, including its own scroll offset.
     const dx = (root.scrollLeft || 0) - (root.clientLeft || 0) - rr.left;
     const dy = (root.scrollTop || 0) - (root.clientTop || 0) - rr.top;
-    const visible = el => el && el.getClientRects().length && !el.closest('[hidden]');
+    // Route only between on-screen endpoints. Off-screen relationships remain in details.
+    const visible = el => {
+      if (!el || !el.getClientRects().length || el.closest('[hidden]')) return false;
+      const r = el.getBoundingClientRect();
+      return r.bottom > 0 && r.top < window.innerHeight && r.right > 0 && r.left < window.innerWidth;
+    };
     const measure = el => {
       let r = el.getBoundingClientRect();
       if (el.matches(headerSelector)) {
