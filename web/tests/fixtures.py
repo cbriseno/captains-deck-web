@@ -118,5 +118,9 @@ def fixture(root):
     snap=f.Snapshot();snap.homes=f.inject_all_crew([h]);snap.home=snap.homes[0];snap.collected_at=now
     snap.cols,snap.totals=f.make_cards(h,payload,{}, {}, {},snap.homes)
     raw={h.label:(payload,now,h.path)}
-    board=bridge.Board(root/'web-data','https://terminal.example.test',FakeCollector(snap,raw))
+    collector=FakeCollector(snap,raw)
+    board=bridge.Board(root/'web-data','https://terminal.example.test',collector)
+    # The browser fixture and adapter tests use the disposable owner directly
+    # to prepare snapshots; production Board reads through its event projection.
+    board.collector=collector
     return board,h
