@@ -879,10 +879,15 @@ def remote_routes(captain_path: str) -> list[tuple[str, str]]:
 def discover_homes(verbose: bool = False) -> list[Home]:
     candidates: list[str] = []
 
+    json_homes = os.environ.get("FM_FLOW_HOMES_JSON", "").strip()
+    env_homes = os.environ.get("FM_FLOW_HOMES", "").strip()
+    homes_only = homes_only_default()
+    use_config_homes = not (homes_only and (json_homes or env_homes))
+
     # explicit config: label=path lines
     cfg = os.path.join(_plugin_config_dir(), "homes.conf")
     explicit: list[tuple[str, str]] = []
-    if os.path.isfile(cfg):
+    if use_config_homes and os.path.isfile(cfg):
         try:
             with open(cfg) as fh:
                 for line in fh:
@@ -894,13 +899,11 @@ def discover_homes(verbose: bool = False) -> list[Home]:
         except OSError:
             pass
 
-    json_homes = os.environ.get("FM_FLOW_HOMES_JSON", "")
     if json_homes:
         parsed = json.loads(json_homes)
         if not isinstance(parsed, dict) or any(not isinstance(k, str) or not k or not isinstance(v, str) or not v for k, v in parsed.items()):
             raise ValueError('FM_FLOW_HOMES_JSON must map labels to nonempty paths')
         explicit.extend((label, os.path.expanduser(path)) for label, path in parsed.items())
-    env_homes = os.environ.get("FM_FLOW_HOMES", "").strip()
     if env_homes:
         for item in env_homes.replace(",", " ").split():
             if "=" in item:
@@ -910,7 +913,7 @@ def discover_homes(verbose: bool = False) -> list[Home]:
     # homes_only pins discovery to the explicit FM_FLOW_HOMES / homes.conf
     # list. A bare homes_only with nothing configured falls back to the scan,
     # so a typo cannot make the board show nothing.
-    only_explicit = bool(explicit or json_homes) and homes_only_default()
+    only_explicit = bool(explicit or json_homes) and homes_only
     if only_explicit and not explicit:
         return []
     single = ""

@@ -51,6 +51,25 @@ class EventProjectionTests(unittest.TestCase):
         self.assertIsNone(source['code'])
         self.assertEqual(source['error'], '')
 
+    def test_rejected_bootstrap_keeps_its_actionable_owner_message(self):
+        from localization import Localization
+        self.board.home_identity = lambda home: 'home'
+        self.board.deck_controls = SimpleNamespace(
+            invoke=lambda home, command: {'state': 'rejected', 'code': 'owner_failed',
+                'message': 'Missing backlog data/backlog.md; create it with In flight, Queued and Done sections before opening the board.'},
+            actions=lambda capabilities: [])
+        self.board.columns = []
+        self.board.titles = lambda: {}
+        self.board.t = Localization('es').t
+        self.board.projection.readers.clear()
+        self.board.projection.stop_event.set()
+        self.board.projection.run()
+        source = self.board.projection.body['deck']['sources'][0]
+        self.assertFalse(source['available'])
+        self.assertEqual(source['code'], 'bootstrap-rejected')
+        self.assertEqual(source['error'], 'Falta data/backlog.md; créalo con las secciones In flight, Queued y Done antes de abrir el tablero.')
+        self.assertEqual(self.board.projection.body['sources'][0]['error'], source['error'])
+
     def test_turn_end_preserves_task_and_worker_facts(self):
         self.model.activity['task'] = dict(state='busy', source='claude-hook', seq=1)
         self.assertEqual(self.card()['activity']['kind'], 'working')

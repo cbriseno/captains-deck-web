@@ -71,6 +71,7 @@ FM_FLOW_HOMES_ONLY=1 python3 web/launch.py run
 ```
 
 For paths containing spaces, use `homes.conf` (one `label=path` per line) or `FM_FLOW_HOMES_JSON` (a JSON object mapping labels to paths).
+With homes-only enabled, a supplied `FM_FLOW_HOMES` or `FM_FLOW_HOMES_JSON` list replaces `homes.conf` for that run.
 Explicit configured homes remain visible even before they contain tasks.
 `FM_ROOT_OVERRIDE` optionally selects a separate Firstmate code checkout; an existing owner `bin/` endpoint takes precedence for compatibility.
 Every child process still receives the owning `FM_HOME`.

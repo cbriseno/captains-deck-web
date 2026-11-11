@@ -52,6 +52,13 @@ class EventProjection:
         try:
             for home in self.homes:
                 base = self.board.deck_controls.invoke(home, 'bootstrap')
+                if base.get('state') == 'rejected':
+                    identity = self.board.home_identity(home)
+                    self.sources[identity] = dict(
+                        home=identity, available=False, snapshot={}, answerable=False,
+                        code='bootstrap-rejected',
+                        error=self.board.t(base.get('message') or 'Firstmate rejected the event bootstrap.'))
+                    continue
                 self.install(home, base)
             with self.condition:
                 self.loading = False
@@ -132,9 +139,12 @@ class EventProjection:
 
     def publish(self):
         for identity, source in self.sources.items():
-            self.readers[identity]['model'].capabilities = source['capabilities']
+            reader = self.readers.get(identity)
+            if reader is None:
+                continue
+            reader['model'].capabilities = source['capabilities']
             source['capabilities']['actions'] = self.board.deck_controls.actions(source['capabilities'])
-            self.board.deck_controls.cache[self.readers[identity]['home'].path] = (0, source)
+            self.board.deck_controls.cache[reader['home'].path] = (0, source)
         self.cursor += 1
         self.body = self.base()
         self.condition.notify_all()
@@ -147,6 +157,8 @@ class EventProjection:
             history = []
             titles = self.board.titles()
             for source in sources:
+                if source['home'] not in self.readers:
+                    continue
                 model = self.readers[source['home']]['model']
                 projects = {n['id']: dict(id=n['id'], label=n['title']) for n in source['snapshot']['nodes'] if n['kind']=='project'}
                 for item in source['snapshot']['nodes']:

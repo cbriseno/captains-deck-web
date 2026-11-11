@@ -113,6 +113,20 @@ def test_homes_only_limits_discovery_to_the_explicit_list(tmp_path: Path) -> Non
     assert os.path.realpath(scan_home) not in paths
 
 
+def test_homes_only_uses_supplied_list_instead_of_user_config(tmp_path: Path) -> None:
+    with _patches() as mp:
+        _isolate(mp, tmp_path)
+        configured = _make_home(tmp_path, "configured-home")
+        supplied = _make_home(tmp_path, "supplied-home")
+        (tmp_path / "cfg").mkdir()
+        (tmp_path / "cfg" / "homes.conf").write_text(f"configured={configured}\n")
+        mp.setenv("FM_FLOW_HOMES_JSON", json.dumps({"supplied": str(supplied)}))
+        mp.delenv("FM_FLOW_HOMES")
+        mp.setenv("FM_FLOW_HOMES_ONLY", "1")
+        paths = _paths(flow.discover_homes())
+    assert paths == {os.path.realpath(supplied)}
+
+
 def test_homes_only_without_a_list_falls_back_to_the_scan(tmp_path: Path) -> None:
     with _patches() as mp:
         scan_home = _isolate(mp, tmp_path)

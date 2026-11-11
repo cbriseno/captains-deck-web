@@ -173,6 +173,7 @@ function sourceStatus() {
   const stale = at && Date.now() / 1000 - at > 360;
   const failed = S.board.error || sources.some(s => s.error) || (S.board.deck?.sources || []).some(s => !s.available);
   const disabledEvents = (S.board.deck?.sources || []).filter(s => s.code === 'events-disabled');
+  const rejectedBootstrap = (S.board.deck?.sources || []).find(s => s.code === 'bootstrap-rejected');
   const disconnected = !S.online;
   // Freshness is one short phrase; the exact read time is on hover.
   const read = {label: 'Source read', epoch: S.lastRead / 1000};
@@ -186,6 +187,7 @@ function sourceStatus() {
   $('connection').title = S.lastRead ? t('Source read') + ' · ' + exactTime(read) + ' · ' + t('updated {ago}', {ago: ago(read)}) : '';
   if (disconnected) notice(t("You’re offline. Your draft is safe. Check the question again once you’re back."));
   else if (disabledEvents.length) notice(disabledEvents.map(s => s.error).join('\n'));
+  else if (rejectedBootstrap) notice(rejectedBootstrap.error);
   else if (failed) notice(t("Couldn’t refresh one source. Some cards may be out of date."));
   else if (!S.board.loading && !S.board.homes.length) notice(t('Standalone mode. Connect Firstmate to show tasks and enable controls.'));
   else notice('');

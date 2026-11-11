@@ -341,6 +341,7 @@
   " · needs a check": " · hay que revisarla",
   "You’re offline. Your draft is safe. Check the question again once you’re back.": "Estás sin conexión. Tu borrador está a salvo. Revisa la pregunta al volver.",
   "Couldn’t refresh one source. Some cards may be out of date.": "No se pudo actualizar una fuente. Algunas tarjetas pueden estar viejas.",
+  "Missing backlog data/backlog.md; create it with In flight, Queued and Done sections before opening the board.": "Falta data/backlog.md; créalo con las secciones In flight, Queued y Done antes de abrir el tablero.",
   "Nothing needs you right now.": "Nada te necesita ahora.",
   "Nothing finished recently. Try History for older work.": "Nada terminado hace poco. Busca en Historial lo anterior.",
   "Nothing here.": "Nada por aquí.",
