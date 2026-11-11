@@ -28,9 +28,9 @@ class EventProjectionTests(unittest.TestCase):
                          outcome=None, raw={'worker_liveness': {'state': 'alive'}},
                          updated_at=None, question={})
 
-    def card(self):
+    def card(self, human=None):
         with patch.object(bridge, 'home_id', return_value='home'):
-            return self.board.projected_card({'home': 'home'}, self.item, {},
+            return self.board.projected_card({'home': 'home'}, self.item, human or {},
                                              'underway', {}, {})
 
     def test_disabled_journal_explains_activation_in_the_installation_language(self):
@@ -124,6 +124,23 @@ class EventProjectionTests(unittest.TestCase):
         with patch.object(bridge, 'home_id', return_value='home'):
             self.assertTrue(self.card()['delivery_available'])
             self.assertEqual(self.board.records(self.home)[0], [row])
+
+    def test_cancelled_task_suppresses_delivery_and_stale_worker_status(self):
+        closure = dict(kind='cancelled', reason='Captain cancelled', at='2026-11-11T20:00:00Z')
+        self.item.update(state='done', closure=closure)
+        self.model.rows['task'] = dict(state='done')
+        self.model.history = {'task'}
+        self.model.presentations = {'task': {'presentation': {'closure': closure}}}
+        self.model.activity['task'] = dict(state='busy')
+        card = self.card(dict(card_status='Validating promotion', summary='Old worker state'))
+        self.assertEqual(card['presentation'], dict(status=None, summary=None))
+        self.assertEqual(card['summary'], '')
+        self.assertIsNone(card['outcome'])
+        self.assertEqual(card['closure'], closure)
+        self.assertEqual(card['activity'], dict(kind='cancelled', agent='none', turn={}))
+        self.assertFalse(card['delivery_available'])
+        with patch.object(bridge, 'home_id', return_value='home'):
+            self.assertIsNone(self.board.delivery_record(self.home, 'task'))
 
     def test_missing_report_and_captain_hold_are_not_retained_deliveries(self):
         self.model.rows['task'] = {'state': 'done', 'kind': 'host', 'body': ''}

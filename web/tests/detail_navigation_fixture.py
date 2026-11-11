@@ -8,6 +8,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import bridge
 from deck_control import project_snapshot
+from localization import Localization
 
 tasks = [dict(key='task:origin', title='Origin task', state='running',
               blocked_by=[dict(ref='task:destination', open=False)]),
@@ -17,6 +18,9 @@ tasks[1].pop('question')
 tasks[1]['outcome'] = dict(role='final', review='reviewed')
 tasks.extend(dict(key=f'task:finished-{i}', title=f'Finished task {i}', state='done',
                   outcome=dict(role='final', review='reviewed')) for i in range(480))
+tasks[2].update(closure=dict(kind='cancelled', reason='Cancelled by the captain', at='2026-11-11T20:00:00Z'),
+                summary='Validating batch promotion…', validation_pending='Stale worker status',
+                outcome=dict(role='final', review='needed'))
 requests = []
 for task, name in zip(tasks, ['origin', 'destination'] + [f'finished-{i}' for i in range(480)]):
     task.update(project='project:demo', request=dict(id=name))
@@ -46,7 +50,7 @@ class Handler(SimpleHTTPRequestHandler):
                 self.wfile.write(b': synthetic fixture\n\n')
                 return
             value = (body if self.path.startswith('/api/board') else
-                     dict(locale='en', messages={}) if self.path.startswith('/api/locale') else
+                     Localization('es' if 'locale=es' in self.headers.get('Referer', '') else 'en').client() if self.path.startswith('/api/locale') else
                      dict(events=[], agents={}) if self.path.startswith('/api/timeline') else
                      dict(title='Destination task', summary='Delivered result', details='Synthetic delivery',
                           sources=[], links=[]) if self.path.startswith('/api/delivery/') else {})

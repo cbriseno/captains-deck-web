@@ -99,6 +99,7 @@ function activityText(card, short = false) {
     held: t('On hold'), finished: t('Done, not closed yet'), stopped: t('Stopped'), ready: t('Ready to start'), queued: t('Queued') }[a.kind] || '';
 }
 function phaseText(card, short = false) {
+  if (card.closure?.kind === 'cancelled') return t('Cancelled');
   if (card.answered) return t('Answer saved');
   if (card.bucket === 'landed') return t('Delivered');
   const run = card.presentation?.run_step;

@@ -513,14 +513,17 @@ window.createDeckUI = function (host) {
     for(const p of model.nodes.filter(x=>x.kind==='project'))descend(p,0,tasksOf(p).some(t=>t.state!=='done')?active:empty);
     for(const x of model.nodes.filter(x=>!x.parent&&x.kind==='task'))descend(x,0,active);root.replaceChildren(active,empty);
   }
+  const closureOf=x=>x.closure||x.raw?.closure||x.card?.closure;
+  const cancelled=x=>closureOf(x)?.kind==='cancelled';
   function taskCard(x, turn, list=[]) {
     const resultRole=(x.outcome||x.raw?.outcome||x.card?.outcome)?.role;
     const card=setColor(n('article','task-card card'+(x.state==='done'&&!['final','partial'].includes(resultRole)?' done-card':'')),x);card.dataset.node=x.id;card.dataset.key=x.card?.key || x.id;card.dataset.state=x.state;card.dataset.open=String(ui.selected===x.id);
     const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}openNode(x,face);},'card-open');face.dataset.key=card.dataset.key;face.setAttribute('aria-expanded',String(ui.selected===x.id));face.setAttribute('aria-controls','detail');
     const top=add(n('span','card-top'),turn !== undefined?structural(n('span','turn',String(x.turn || turn+1))):null,n('span','where',pathOf(x)||projectLabel(x)||t('Project not reported')));
     add(face,top,n('span','title',label(x)));
-    if(x.state==='done'){const outcome=x.outcome||x.raw?.outcome||x.card?.outcome;if(outcome?.role)face.append(n('span','outcome-badge',t({final:'Result',partial:'Progress update',step:'Finished step'}[outcome.role]||'Delivered work')));if(outcome?.review)face.append(n('span','review-badge',t(outcome.review==='needed'?'Not reviewed':'Reviewed')));face.append(time('Completed',x.completed_at));const pending=questions().filter(c=>{const own=byId.get(taskNodeId(c.home,c.task));return own?.question?.origin_task===x.owner_id;});if(pending.length)face.append(structural(n('span','deck-origin',t('Origin delivered · {count} open decisions',{count:pending.length}))));}else{const reason=pauseText(x)||waitingText(x);if(reason){const line=n('span','meta card-line',reason);if(x.reason_time&&reason===x.reason)structural(line,'time');face.append(line);}if(questions().some(c=>questionNode(c)?.id===x.id))face.append(n('span','has-q',t('Has a question for you')));add(face,progress(x),dates(x));}
-    if(x.state==='done'&&['final','partial'].includes((x.outcome||x.raw?.outcome||x.card?.outcome)?.role)){
+    if(cancelled(x)){face.append(n('span','outcome-badge',t('Cancelled')),time('Completed',x.completed_at));}
+    else if(x.state==='done'){const outcome=x.outcome||x.raw?.outcome||x.card?.outcome;if(outcome?.role)face.append(n('span','outcome-badge',t({final:'Result',partial:'Progress update',step:'Finished step'}[outcome.role]||'Delivered work')));if(outcome?.review)face.append(n('span','review-badge',t(outcome.review==='needed'?'Not reviewed':'Reviewed')));face.append(time('Completed',x.completed_at));const pending=questions().filter(c=>{const own=byId.get(taskNodeId(c.home,c.task));return own?.question?.origin_task===x.owner_id;});if(pending.length)face.append(structural(n('span','deck-origin',t('Origin delivered · {count} open decisions',{count:pending.length}))));}else{const reason=pauseText(x)||waitingText(x);if(reason){const line=n('span','meta card-line',reason);if(x.reason_time&&reason===x.reason)structural(line,'time');face.append(line);}if(questions().some(c=>questionNode(c)?.id===x.id))face.append(n('span','has-q',t('Has a question for you')));add(face,progress(x),dates(x));}
+    if(!cancelled(x)&&x.state==='done'&&['final','partial'].includes((x.outcome||x.raw?.outcome||x.card?.outcome)?.role)){
       const summary=x.card?.summary||x.raw?.summary,validation=x.card?.validation_pending||x.raw?.validation_pending;
       if(summary)face.append(n('span','result-summary',summary));if(validation)face.append(n('span','notice',validation));
     }
@@ -558,13 +561,14 @@ window.createDeckUI = function (host) {
   // title with inline ID and pills, one summary line, progress and Pause on the
   // right, and «…». Priority shows only when it is High or Critical.
   function requestTaskRow(x){
-    const outcome=x.outcome||x.raw?.outcome||x.card?.outcome||{},result=['final','partial'].includes(outcome.role);
+    const outcome=x.outcome||x.raw?.outcome||x.card?.outcome||{},result=!cancelled(x)&&['final','partial'].includes(outcome.role);
     const row=setColor(n('article','task-card card task-row'+(result?' result':'')),x);row.dataset.node=x.id;row.dataset.key=x.card?.key||x.id;row.dataset.state=x.state;row.dataset.open=String(ui.selected===x.id);
     const face=b('',()=>{if(row.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}openNode(x,face);},'card-open');face.dataset.key=row.dataset.key;face.setAttribute('aria-expanded',String(ui.selected===x.id));face.setAttribute('aria-controls','detail');face.append(n('span','title',label(x)));
     const badge=inlineId(x),pill=(text,cls='')=>n('span','rtag'+cls,text);
-    const line=add(n('div','rt'),face,badge,result?pill(t(outcome.role==='partial'?'Progress update':outcome.review==='needed'?'Result · not reviewed':'Result')):null,['P0','P1'].includes(x.priority)?pill(t(x.priority==='P0'?'Critical priority':'High priority'),' prio'):null);
+    const line=add(n('div','rt'),face,badge,cancelled(x)?pill(t('Cancelled')):result?pill(t(outcome.role==='partial'?'Progress update':outcome.review==='needed'?'Result · not reviewed':'Result')):null,['P0','P1'].includes(x.priority)?pill(t(x.priority==='P0'?'Critical priority':'High priority'),' prio'):null);
     const sub=n('div','rs'),text=x.card?.summary||x.raw?.summary||x.summary;
-    if(x.state==='done'){sub.textContent=[x.card?.validation_pending||x.raw?.validation_pending||x.validation_pending,text].filter(Boolean).join(' · ');const pending=questions().filter(c=>byId.get(taskNodeId(c.home,c.task))?.question?.origin_task===x.owner_id);if(pending.length)sub.append(structural(n('span','deck-origin',t('Origin delivered · {count} open decisions',{count:pending.length}))));}
+    if(cancelled(x)){sub.textContent=t('Cancelled');}
+    else if(x.state==='done'){sub.textContent=[x.card?.validation_pending||x.raw?.validation_pending||x.validation_pending,text].filter(Boolean).join(' · ');const pending=questions().filter(c=>byId.get(taskNodeId(c.home,c.task))?.question?.origin_task===x.owner_id);if(pending.length)sub.append(structural(n('span','deck-origin',t('Origin delivered · {count} open decisions',{count:pending.length}))));}
     else{sub.textContent=pauseText(x)||(x.state==='active'&&text)||waitingText(x);if(questions().some(c=>questionNode(c)?.id===x.id))sub.append(n('span','has-q',t('Has a question for you')));}
     const ctl=n('div','card-ctl rctl');if(x.state==='active')ctl.append(progress(x));if(x.state!=='done')ctl.append(pauseButton(x));
     const chain=new Set(ancestors(x).map(y=>y.id)),related=relationshipEdges().some(e=>chain.has(e.from)||e.to===x.id);
@@ -629,7 +633,7 @@ window.createDeckUI = function (host) {
   }
   const requestFor=x=>ancestors(x).find(y=>y.kind==='request');
   const activityEpoch=value=>{const e=event(value);return e?.epoch||Date.parse(e?.date||'')/1000||0;};
-  const reviewNeeded=x=>x.state==='done'&&(x.outcome||x.raw?.outcome||x.card?.outcome)?.review==='needed';
+  const reviewNeeded=x=>!cancelled(x)&&x.state==='done'&&(x.outcome||x.raw?.outcome||x.card?.outcome)?.review==='needed';
   function requestRows(tasks){
     const groups=new Map(model.nodes.filter(x=>x.kind==='request').map(x=>[x.id,{...x,tasks:[],calls:[]}]));
     const legacyId=x=>'legacy:'+(projectOf(x)?.id||x.home);
@@ -895,7 +899,10 @@ window.createDeckUI = function (host) {
     cancelHover();
     if(ui.selected===x.id&&detailOpen()){clearFocus(true);return;}
     ui.selected=x.id;ui.pin=ui.focus?x.id:'';ui.hover='';announceFocus(ui.pin,label(x));
-    if(x.state==='done'&&(x.question?.call||x.raw?.pause?.own?.kind==='captain')&&!app.historyRows?.some(r=>r.home===x.home&&r.task===x.task)&&x.card?.delivery_available!==true){
+    if(cancelled(x)){
+      showDetail(label(x),'',t('Cancelled'),opener);app.modal={type:'control',node:x.id};
+      $('detail-content').replaceChildren(n('p','fact',t('Cancelled')),n('p','',closureOf(x).reason||''));
+    }else if(x.state==='done'&&(x.question?.call||x.raw?.pause?.own?.kind==='captain')&&!app.historyRows?.some(r=>r.home===x.home&&r.task===x.task)&&x.card?.delivery_available!==true){
       showDetail(label(x),'',t('Question closed'),opener);app.modal={type:'completed-call',node:x.id};
       const content=$('detail-content');content.replaceChildren(time('Completed',x.completed_at),n('p','question',x.question?.call?.question||x.reason||label(x)),n('p','fact',t('Question closed')),b(t('See answer status'),host.showAnswers));
       const list=n('ul');for(const edge of model.edges.filter(e=>e.from===x.id)){const other=byId.get(edge.to);const link=b(label(other),()=>{if(other)reveal(other);},'link');link.disabled=!other;list.append(add(n('li'),link,n('span','meta',edge.completed?t('Completed blocker'):t('Waits for this'))));}if(list.children.length)content.append(add(n('section','deps'),n('h3','',t('Dependencies')),list));

@@ -468,11 +468,13 @@ class Board:
         turn = model.activity.get(task, {})
         status_state = latest_status_state(getattr(model, 'status', {}).get(task, ''))
         worker = (item.get('raw') or {}).get('worker_liveness') or {}
-        delivery_available = self.delivery_record(owner, task) is not None
+        closure = item.get('closure') or human.get('closure') or {}
+        cancelled = closure.get('kind') == 'cancelled'
+        delivery_available = not cancelled and self.delivery_record(owner, task) is not None
         active_working = (item['state'] == 'active' and turn.get('state') == 'busy'
                           and worker.get('state') != 'dead')
         status_stops_working = active_working and status_state in ('done', 'failed', 'paused', 'parked')
-        kind = ('decision' if question.get('open') else 'delivered' if item['state'] == 'done' else
+        kind = ('cancelled' if cancelled else 'decision' if question.get('open') else 'delivered' if item['state'] == 'done' else
                 'paused' if item['state'] in ('paused', 'stopping') or status_stops_working and status_state in ('paused', 'parked') else
                 'idle' if status_stops_working and status_state in ('done', 'failed') else
                 'working' if active_working else
@@ -482,14 +484,14 @@ class Board:
         identity_value = stamp[1] + '#' + str(len(re.findall(r'^Resolution recorded by fm-(?:captain|decision)-hold\.', row.get('body') or '', re.M))) if stamp else ''
         return dict(key=digest(identity, task, bucket)[:40], task=task,
             title=card_field(human.get('card_title'), 'card_title') or readable_title(item['title'], titles, self.t), original_title=item['title'], bucket=bucket, home=identity,
-            owner=owner.label, request=item['request'], outcome=item['outcome'],
-            summary=human.get('summary') or '', project=projects.get(item['raw'].get('project')),
-            delivery_available=delivery_available,
-            presentation=dict(status=human.get('card_status'), summary=human.get('summary')),
+            owner=owner.label, request=item['request'], outcome=None if cancelled else item['outcome'],
+            summary='' if cancelled else human.get('summary') or '', project=projects.get(item['raw'].get('project')),
+            delivery_available=delivery_available, closure=closure,
+            presentation=dict(status=None if cancelled else human.get('card_status'), summary=None if cancelled else human.get('summary')),
             context=dict(phase='human' if question.get('open') else 'unknown'),
-            activity=dict(kind=kind, agent='none' if worker.get('state') == 'dead' else
+            activity=dict(kind=kind, agent='none' if cancelled or worker.get('state') == 'dead' else
                           'working' if kind == 'working' and worker.get('state') == 'alive' else
-                          'present' if worker.get('state') == 'alive' else 'unknown', turn=turn),
+                          'present' if worker.get('state') == 'alive' else 'unknown', turn={} if cancelled else turn),
             dependencies=[], native=dict(unconfirmed=turn.get('state') not in ('busy', 'idle'), source='agent.activity'),
             time=self.projected_time(item['updated_at']), question=(question.get('call') or {}).get('question', ''),
             answered=False, attention_kind=('action' if is_action else 'question') if question.get('open') else None,
@@ -819,6 +821,9 @@ class Board:
         model = reader['model']
         record = model.rows.get(task)
         if not record:
+            return None
+        human = getattr(model, 'presentations', {}).get(task, {}).get('presentation', {})
+        if (human.get('closure') or record.get('closure') or {}).get('kind') == 'cancelled':
             return None
         if task in model.history:
             return record

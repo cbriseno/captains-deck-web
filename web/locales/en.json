@@ -1225,5 +1225,6 @@
   "Tool calls are not shown.": "Tool calls are not shown.",
   "Invalid conversation link.": "Invalid conversation link.",
   "This conversation isn’t recorded on this computer.": "This conversation isn’t recorded on this computer.",
-  "Usage is recorded locally without titles, search text or answers. Two rotating logs use up to about 20 MiB. Export saves a ZIP to Downloads; nothing is sent online.": "Usage is recorded locally without titles, search text or answers. Two rotating logs use up to about 20 MiB. Export saves a ZIP to Downloads; nothing is sent online."
+  "Usage is recorded locally without titles, search text or answers. Two rotating logs use up to about 20 MiB. Export saves a ZIP to Downloads; nothing is sent online.": "Usage is recorded locally without titles, search text or answers. Two rotating logs use up to about 20 MiB. Export saves a ZIP to Downloads; nothing is sent online.",
+  "Cancelled": "Cancelled"
 }

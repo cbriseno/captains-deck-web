@@ -5,3 +5,4 @@ require('./approved_board.browser.cjs');
 require('./relay_settings.browser.cjs');
 require('./request_usage.browser.cjs');
 require('./detail_navigation.browser.cjs');
+require('./cancelled.browser.cjs');

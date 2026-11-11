@@ -108,7 +108,7 @@ def project_snapshot(raw):
                               'inherited_reason': inherited.get('reason') if isinstance(inherited, dict) else None},
                     'progress': dict(progress, completed=progress.get('done')) if isinstance(progress, dict) else None,
                     'progress_evidence': row.get('progress_evidence'), 'declared_progress': row.get('declared_progress'),
-                    'request': row.get('request'), 'outcome': row.get('outcome'),
+                    'request': row.get('request'), 'outcome': row.get('outcome'), 'closure': row.get('closure'),
                     'outcome_occurrence': row.get('outcome_occurrence'),
                     'phase': row.get('phase'), 'verified_gates': row.get('verified_gates'),
                     'question': row.get('question'), 'root_blocker': row.get('root_blocker'), 'frees': row.get('frees'),
