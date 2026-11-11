@@ -948,8 +948,8 @@ window.createDeckUI = function (host) {
     const animations=document.documentElement.dataset.animations;
     document.documentElement.dataset.animations='false';motion.cancel();
     try{
-      const find=()=>[...$('board').querySelectorAll('[data-node]')].find(y=>!$('detail').contains(y)&&y.dataset.node===x.id&&y.getClientRects().length);
-      let el=ui.view==='board'&&!ui.scope?find():null;
+      const find=()=>[...$('board').querySelectorAll('[data-node]')].find(y=>!$('detail').contains(y)&&y.dataset.node===x.id);
+      let el=ui.view==='board'&&!ui.scope&&visible(x)?find():null;
       if(el?.closest('.request-group')?.dataset.k==='done'&&!ui.groups.has('done'))el=null;
       if(!el){
         ui.scope='';ui.column=colOf(x);if(!visible(x)){app.query='';$('board-search').value='';}
