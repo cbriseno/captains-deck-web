@@ -23,6 +23,7 @@ if verb=='request-status':
 b=json.load(sys.stdin)
 impact={'affected':{'running':['task:slow'],'queued':[],'waiting_behind':[]}}
 if verb.endswith('.preview'):
+ time.sleep(9)
  print(json.dumps(dict(impact=impact,can_pause=True,agents_needed=1,agents_running=0,agents_cap=2)));sys.exit()
 with (p/'writes').open('a') as f:f.write(verb+'\\n')
 time.sleep(9)

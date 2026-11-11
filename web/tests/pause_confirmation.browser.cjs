@@ -4,7 +4,7 @@ const fs=require('node:fs'),os=require('node:os'),path=require('node:path');
 const {spawn,spawnSync}=require('node:child_process');
 const test=require('node:test');
 
-test('slow pause/resume and a lost reply converge using the original receipt',{timeout:120000},async()=>{
+test('slow impact previews, pause/resume and a lost reply converge using the original receipt',{timeout:120000},async()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'deck-confirmation-'));
   const env={...process.env,CHROME_DEVTOOLS_AXI_SESSION:'deck-confirmation-'+process.pid};
   for(const k of ['CHROME_DEVTOOLS_AXI_BROWSER_URL','CHROME_DEVTOOLS_AXI_AUTO_CONNECT','CHROME_DEVTOOLS_AXI_USER_DATA_DIR','CHROME_DEVTOOLS_AXI_MCP_SERVER_URL'])delete env[k];

@@ -220,7 +220,12 @@ class DeckControls:
         # pause/resume command short can leave a recorded request unfinished.
         pause_write = command in {verbs[1] for verbs in SIGNAL_ACTIONS.values()} or (
             command == 'apply' and (payload or {}).get('op') in ('set_pause', 'clear_pause'))
-        timeout = None if pause_write else 120 if command == 'bootstrap' else 60 if command == 'snapshot' else 8
+        # Impact previews read the same work graph and worker evidence as a
+        # snapshot, plus capacity. The owner's lock alone may wait five seconds;
+        # the short metadata budget can expire before a healthy preview returns.
+        impact_read = command in ('pause.preview', 'resume.preview') or (
+            command == 'preview' and (payload or {}).get('op') in ('set_pause', 'clear_pause'))
+        timeout = None if pause_write else 120 if command == 'bootstrap' else 60 if command == 'snapshot' or impact_read else 8
         try:
             result = subprocess.run(shell_command(script, *args),
                                     input=json.dumps(payload, ensure_ascii=False) if payload is not None else None,
