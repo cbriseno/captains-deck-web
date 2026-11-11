@@ -530,13 +530,15 @@ function reportLink(link, key) {
     return a;
   }
   const open = button(t('See the full report'), async () => {
-    const content = $('detail-content'), saved = [...content.childNodes], title = $('detail-title').textContent, kicker = $('detail-kicker').textContent;
+    const content = $('detail-content'), saved = Array.from(content.childNodes || content.children || []), title = $('detail-title').textContent, kicker = $('detail-kicker').textContent;
+    open.setAttribute('aria-expanded', 'true');
     $('detail-title').textContent = t('Full report'); $('detail-kicker').textContent = t('Report');
-    const back = button(t('Back to decision'), () => { content.replaceChildren(...saved); $('detail-title').textContent = title; $('detail-kicker').textContent = kicker; open.focus(); }, 'more');
+    const back = button(t('Back to decision'), () => { content.replaceChildren(...saved); $('detail-title').textContent = title; $('detail-kicker').textContent = kicker; open.setAttribute('aria-expanded', 'false'); open.focus(); }, 'more');
     content.replaceChildren(back, node('p', 'muted', t('Loading…')));
     try { const data = await api('api/ticket/' + encodeURIComponent(key) + '/report'); content.replaceChildren(back, markdown(data.text)); }
     catch (err) { content.replaceChildren(back, node('p', 'notice error', err.message)); }
   }, 'report-link');
+  open.setAttribute('aria-expanded', 'false');
   return open;
 }
 // Card editors share the guarded ticket intake and its durable drafts.

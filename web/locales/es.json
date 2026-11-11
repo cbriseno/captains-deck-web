@@ -312,7 +312,6 @@
   "{count} {unit} ago": "hace {count} {unit}",
   "Needs you": "Te necesita",
   "Active": "Activo",
-  "Complete": "Completo",
   "Current step: {name}": "Paso actual: {name}",
   "Back to decision": "Volver a la decisión",
   "Waiting on your answer": "Espera tu respuesta",
