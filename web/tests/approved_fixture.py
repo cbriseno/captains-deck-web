@@ -29,6 +29,12 @@ for column in board.collector.snap.cols.values():
                'state': state, 'priority': {'own': 2}, 'created': known, 'updated': updated, 'rev': 'r1',
                'pause': {'own': {'reason': 'Fixture own pause', 'kind': 'parked'} if state == 'paused_own' else None, 'inherited': None, 'safe_point': 'none'},
                'blocked_by': [], 'frees': {'direct': [], 'chain_count': 0}, 'question': {'open': card.task == 'ask', 'origin_task': 'task:demo-research' if card.task == 'ask' else None}, 'progress': None}
+        if card.task == 'ask':
+            # Current cards receive choices from the owner's native question call.
+            decision = json.loads((base / 'state/decision-cards/ask.json').read_text())['card']
+            row['question']['call'] = dict(question=decision['decide'], context=decision['about'],
+                options=[dict(id=option['value'], label=option['label'], detail=option['hint'])
+                         for option in decision['options']], recommended=decision['recommend_value'])
         if state == 'done': row['completed'] = known
         if card.task == 'web': row['progress'] = {'done': 1, 'total': 3, 'steps': [{'label': 'Medido', 'state': 'done'}, {'label': 'Conectar', 'state': 'active'}, {'label': 'Verificar', 'state': 'todo'}]}
         if card.task == 'dependent': row['blocked_by'] = [{'ref': 'task:next', 'by': 'firstmate', 'open': True}, {'ref': 'task:demo-research', 'by': 'captain', 'open': False}];row['root_blocker'] = 'task:next'

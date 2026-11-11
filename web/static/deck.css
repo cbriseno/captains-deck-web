@@ -599,6 +599,7 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .attention-list .card-open .deck-origin,.attention-list .card-open .notice{display:block;margin-top:4px}
 .attention-list .cacts,.attention-list .option-list{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0;padding-top:12px}
 .attention-list .cacts button,.attention-list .cacts a,.attention-list .option-choice{display:inline-flex;align-items:center;gap:6px;width:auto;height:30px;min-height:30px;margin:0;padding:0 12px;border:1px solid var(--control);border-radius:6px;background:var(--surface);color:var(--ink);font-size:13px;font-weight:500;white-space:nowrap;text-decoration:none;box-shadow:none}
+.attention-list .option-choice{max-width:100%;height:auto;padding:6px 12px;white-space:normal;overflow-wrap:anywhere;text-align:left}
 .attention-list .cacts button:hover:enabled,.attention-list .option-choice:hover:enabled{background:var(--hover)}
 .attention-list .cacts .primary,.attention-list .option-choice.recommended-choice{background:var(--accent);border-color:var(--accent);color:var(--surface)}
 .attention-list .cacts .primary:hover,.attention-list .option-choice.recommended-choice:hover:enabled{background:color-mix(in srgb,var(--accent) 88%,var(--ink))}
