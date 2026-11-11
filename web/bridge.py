@@ -457,6 +457,7 @@ class Board:
         row = self.projection.readers[identity]['model'].rows[task]
         turn = self.projection.readers[identity]['model'].activity.get(task, {})
         worker = (item.get('raw') or {}).get('worker_liveness') or {}
+        delivery_available = self.delivery_record(owner, task) is not None
         kind = ('decision' if question.get('open') else 'delivered' if item['state'] == 'done' else
                 'paused' if item['state'] in ('paused', 'stopping') else
                 'working' if item['state'] == 'active' and turn.get('state') == 'busy' and worker.get('state') != 'dead' else
@@ -468,6 +469,7 @@ class Board:
             title=card_field(human.get('card_title'), 'card_title') or readable_title(item['title'], titles, self.t), original_title=item['title'], bucket=bucket, home=identity,
             owner=owner.label, request=item['request'], outcome=item['outcome'],
             summary=human.get('summary') or '', project=projects.get(item['raw'].get('project')),
+            delivery_available=delivery_available,
             presentation=dict(status=human.get('card_status'), summary=human.get('summary')),
             context=dict(phase='human' if question.get('open') else 'unknown'),
             activity=dict(kind=kind, agent='none' if worker.get('state') == 'dead' else
@@ -786,8 +788,30 @@ class Board:
             if not reader:
                 return [], ''
             model = reader['model']
-            rows = [r for i,r in model.rows.items() if i in model.history]
+            rows = [r for i,r in model.rows.items() if self.delivery_record(home, i) is not None]
             return copy.deepcopy(rows), self.t('Includes everything Firstmate still keeps, not just recent ones.')
+
+    def delivery_record(self, home, task):
+        """The same retained-history eligibility powers cards and delivery routes."""
+        reader = self.projection.readers.get(home_id(home))
+        if not reader:
+            return None
+        model = reader['model']
+        record = model.rows.get(task)
+        if not record:
+            return None
+        if task in model.history:
+            return record
+        if record.get('state') != 'done':
+            return None
+        hold = record.get('hold') or {}
+        if hold.get('kind') == 'captain' or re.search(r'\(hold-kind:\s*captain\)', str(record.get('body') or '')):
+            return None
+        try:
+            report = fm.delivery_read(home.path, fm.delivery_task_prefix(task) + 'report.md', fm.DELIVERY_FILE_LIMIT)
+        except (OSError, ValueError):
+            return None
+        return record if report.strip() else None
 
     def delivered_project(self, home, rows, record, human):
         """A delivery's tag: the project it declared, else its repository's.

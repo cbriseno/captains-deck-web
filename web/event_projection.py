@@ -157,7 +157,7 @@ class EventProjection:
                     bucket = ('captains_call' if (item.get('question') or {}).get('open') else
                               'landed' if item['state'] == 'done' else 'underway' if item['state'] in ('active', 'stopping') else 'charted')
                     columns[bucket].append(self.board.projected_card(source, item, human, bucket, titles, projects))
-                    if task in model.history:
+                    if self.board.delivery_record(self.board.home(source['home']), task) is not None:
                         card = columns[bucket][-1]
                         history.append(dict(task=task, home=source['home'], owner=card['owner'],
                             title=card['title'], alias=item['alias'], project=card['project'],

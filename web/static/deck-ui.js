@@ -878,11 +878,11 @@ window.createDeckUI = function (host) {
     cancelHover();
     if(ui.selected===x.id&&detailOpen()){clearFocus(true);return;}
     ui.selected=x.id;ui.pin=ui.focus?x.id:'';ui.hover='';announceFocus(ui.pin,label(x));
-    if(x.state==='done'&&(x.question?.call||x.raw?.pause?.own?.kind==='captain')&&!app.historyRows?.some(r=>r.home===x.home&&r.task===x.task)&&x.card?.bucket!=='landed'){
+    if(x.state==='done'&&(x.question?.call||x.raw?.pause?.own?.kind==='captain')&&!app.historyRows?.some(r=>r.home===x.home&&r.task===x.task)&&x.card?.delivery_available!==true){
       showDetail(label(x),'',t('Question closed'),opener);app.modal={type:'completed-call',node:x.id};
       const content=$('detail-content');content.replaceChildren(time('Completed',x.completed_at),n('p','question',x.question?.call?.question||x.reason||label(x)),n('p','fact',t('Question closed')),b(t('See answer status'),host.showAnswers));
       const list=n('ul');for(const edge of model.edges.filter(e=>e.from===x.id)){const other=byId.get(edge.to);const link=b(label(other),()=>{if(other)reveal(other);},'link');link.disabled=!other;list.append(add(n('li'),link,n('span','meta',edge.completed?t('Completed blocker'):t('Waits for this'))));}if(list.children.length)content.append(add(n('section','deps'),n('h3','',t('Dependencies')),list));
-    }else if(x.state==='done'&&x.home){await host.openDelivery(x.home,x.task,opener);}
+    }else if(x.state==='done'&&x.home&&x.card?.delivery_available!==false){await host.openDelivery(x.home,x.task,opener);}
     else if(x.card){await openCard(x.card,opener,true);if(!detailOpen())return;if(x.state!=='done')decorate(x);}
     else{showDetail(label(x),'',kinds[x.kind],opener);app.modal={type:'control',node:x.id};const content=$('detail-content');content.replaceChildren(dates(x),summary(x),progress(x,true));const slot=opener.closest('.mix') || opener.closest('.task-card');if(slot){slot.append($('detail'));$('detail').hidden=false;$('detail-panel').dataset.active='false';}decorate(x);}
     if(detailOpen()&&x.kind==='task'&&host.answerTools&&(x.raw?.recorded_answers?.length||x.question?.answer)) {const content=$('detail-content'),panel=await host.answerTools.panel(x.home,x.task,x.state,x.card?.herdr_url);if(ui.selected===x.id&&detailOpen())content.append(panel);}

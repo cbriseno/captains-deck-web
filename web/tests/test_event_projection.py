@@ -4,6 +4,7 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from fixtures import bridge
 from event_projection import EventProjection, delta
@@ -28,8 +29,9 @@ class EventProjectionTests(unittest.TestCase):
                          updated_at=None, question={})
 
     def card(self):
-        return self.board.projected_card({'home': 'home'}, self.item, {},
-                                         'underway', {}, {})
+        with patch.object(bridge, 'home_id', return_value='home'):
+            return self.board.projected_card({'home': 'home'}, self.item, {},
+                                             'underway', {}, {})
 
     def test_disabled_journal_explains_activation_in_the_installation_language(self):
         from localization import Localization
@@ -73,6 +75,30 @@ class EventProjectionTests(unittest.TestCase):
             self.assertEqual(self.card()['activity']['kind'], kind)
         self.item['question'] = {'open': True}
         self.assertEqual(self.card()['activity']['kind'], 'decision')
+
+    def test_retained_completed_report_is_eligible_for_card_and_history(self):
+        row = {'state': 'done', 'kind': 'host', 'body': ''}
+        self.model.rows['task'] = row
+        self.model.history = set()
+        self.item['state'] = 'done'
+        report = self.root / 'data/task/report.md'
+        report.parent.mkdir(parents=True)
+        report.write_text('Retained report')
+        with patch.object(bridge, 'home_id', return_value='home'):
+            self.assertTrue(self.card()['delivery_available'])
+            self.assertEqual(self.board.records(self.home)[0], [row])
+
+    def test_missing_report_and_captain_hold_are_not_retained_deliveries(self):
+        self.model.rows['task'] = {'state': 'done', 'kind': 'host', 'body': ''}
+        self.model.history = set()
+        self.item['state'] = 'done'
+        with patch.object(bridge, 'home_id', return_value='home'):
+            self.assertFalse(self.card()['delivery_available'])
+            report = self.root / 'data/task/report.md'
+            report.parent.mkdir(parents=True)
+            report.write_text('Retained report')
+            self.model.rows['task']['body'] = '(hold-kind: captain)'
+            self.assertFalse(self.card()['delivery_available'])
 
     def test_only_complete_lines_for_this_home_are_applied(self):
         applied = []

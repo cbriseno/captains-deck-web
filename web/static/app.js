@@ -229,7 +229,7 @@ function repeatsDependencies(card, text) {
 }
 function openCard(card, opener, asTask = false) {
   if (detailOpen() && S.openerKey === (opener?.dataset.key || card.key)) { closeDetail(); return; }
-  if (card.bucket === 'landed' && card.home) return openDelivery(card.home, card.task, opener); return openTicket(card.key, opener, asTask);
+  if (card.bucket === 'landed' && card.home && card.delivery_available !== false) return openDelivery(card.home, card.task, opener); return openTicket(card.key, opener, asTask);
 }
 function supervisorText(s) {
   if (!s || !s.observed_at) return t("Firstmate hasn’t said what it’s doing.");
