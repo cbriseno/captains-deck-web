@@ -529,16 +529,15 @@ function reportLink(link, key) {
     const a = node('a', 'report-link', t('See the full report ↗')); a.href = link; a.target = '_blank'; a.rel = 'noopener noreferrer';
     return a;
   }
-  const box = node('div', 'call-report'), view = node('div', 'call-report-text'); view.hidden = true;
   const open = button(t('See the full report'), async () => {
-    const show = view.hidden; view.hidden = !show; open.setAttribute('aria-expanded', String(show));
-    if (!show || view.dataset.loaded) return;
-    view.replaceChildren(node('p', 'muted', t('Loading…')));
-    try { const data = await api('api/ticket/' + encodeURIComponent(key) + '/report'); view.replaceChildren(prose(data.text)); view.dataset.loaded = 'true'; }
-    catch (err) { view.replaceChildren(node('p', 'notice error', err.message)); }
+    const content = $('detail-content'), saved = [...content.childNodes], title = $('detail-title').textContent, kicker = $('detail-kicker').textContent;
+    $('detail-title').textContent = t('Full report'); $('detail-kicker').textContent = t('Report');
+    const back = button(t('Back to decision'), () => { content.replaceChildren(...saved); $('detail-title').textContent = title; $('detail-kicker').textContent = kicker; open.focus(); }, 'more');
+    content.replaceChildren(back, node('p', 'muted', t('Loading…')));
+    try { const data = await api('api/ticket/' + encodeURIComponent(key) + '/report'); content.replaceChildren(back, markdown(data.text)); }
+    catch (err) { content.replaceChildren(back, node('p', 'notice error', err.message)); }
   }, 'report-link');
-  open.setAttribute('aria-expanded', 'false');
-  return append(box, open, view);
+  return open;
 }
 // Card editors share the guarded ticket intake and its durable drafts.
 // The last reading of each inline question, so a refresh repaints it at its height.
