@@ -8,7 +8,7 @@ window.createDeckUI = function (host) {
   const pref = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Current page still works. */ } };
   const ui = {pin:'',view:'board', scope:'', selected:'', hover:'', column:'', closed:new Set(pref('deck-closed', [])), hasClosedPreference:pref('deck-closed',null)!==null, initialized:false, tree:new Set(),
-    order:pref('deck-request-sort','recent'),expanded:new Set(pref('deck-expanded-requests',[])),needsClosed:pref('deck-needs-closed',false),density:pref('deck-density','auto'),animations:pref('deck-animations',true),groups:new Set(['done']),steps:new Set(),logOpen:new Set(),logs:new Map(), reordering:false, pausedOpen:pref('deck-paused-open',true),done:pref('deck-done', true), focus:pref('deck-focus', true), hoverDelay:Math.max(0,Math.min(10,Number(pref('deck-hover-delay',1))||0)), mixer:false, stacks:new Set(), log:[], busy:false, drag:null, signature:'', generation:0,renderedQuery:null,nextRenderMode:''};
+    order:pref('deck-request-sort','recent'),expanded:new Set(pref('deck-expanded-requests',[])),needsClosed:pref('deck-needs-closed',false),density:pref('deck-density','auto'),animations:pref('deck-animations',true),groups:new Set(['done']),steps:new Set(),logOpen:new Set(),usageOpen:new Set(),logs:new Map(), reordering:false, pausedOpen:pref('deck-paused-open',true),done:pref('deck-done', true), focus:pref('deck-focus', true), hoverDelay:Math.max(0,Math.min(10,Number(pref('deck-hover-delay',1))||0)), mixer:false, stacks:new Set(), log:[], busy:false, drag:null, signature:'', generation:0,renderedQuery:null,nextRenderMode:''};
   const motion=window.createDeckMotion({t,settled:highlight});
   const announceFocus=(_id,text='')=>{const status=$('focus-status');if(status)status.textContent=ui.focus?(text?t('Focused: {name}',{name:text}):t('Focus cleared')):t('Focus disabled');};
   let hoverTimer=0, hoverTarget=null, keyboardFocus=false;
@@ -709,7 +709,7 @@ window.createDeckUI = function (host) {
     el.title=t('API list-price equivalent. Not a charge to your subscription.');return structural(el);
   }
   function usageDetail(r){
-    const u=r.usage;if(!u)return null;const box=n('details','usage-detail');box.append(n('summary','',t('Spend details')));const content=n('div','usage-detail-content');
+    const u=r.usage;if(!u)return null;const box=n('details','usage-detail');box.open=ui.usageOpen.has(r.id);box.append(n('summary','',t('Spend details')));const content=n('div','usage-detail-content');
     content.append(n('p','usage-h',t('Spend by harness, model and effort')));
     for(const x of u.by||[])content.append(structural(n('p','usage-row',harnessName(x.harness)+' · '+modelName(x.model)+' · '+t('effort {level}',{level:(effortLabels[x.effort]?t(effortLabels[x.effort]):x.effort||t('effort:unknown'))})+' — '+(x.usd_known?money(x.usd):t('price unknown'))+' · '+megaTokens(x.tokens)+' · '+t(x.sessions===1?'{count} session':'{count} sessions',{count:x.sessions}))));
     const k=u.tasks||{};
@@ -815,6 +815,7 @@ window.createDeckUI = function (host) {
   function render(force=false,mode='state') {
     if(!app.board)return;
     const traceStart=performance.now(), oldColumns=new Map();
+    for(const row of $('board').querySelectorAll('.request-row')){const spend=row.querySelector('.usage-detail');if(spend)spend.open?ui.usageOpen.add(row.dataset.node):ui.usageOpen.delete(row.dataset.node);}
     for(const el of document.querySelectorAll('#board .task-card[data-key]')){const actual=el.closest('.col')?.dataset.k;oldColumns.set(el.dataset.key,actual);const x=byId.get(el.dataset.node);if(!el.closest('.request-board')&&x&&actual&&!el.classList.contains('qcard')&&!el.classList.contains('action-card')&&(colOf(x)!==actual||x.state!==el.dataset.state))window.DeckTrace?.mismatch(el.dataset.key,actual,colOf(x));}
     // SSE already identifies a new reading; only local renders need a content comparison.
     const cardSignature=mode==='refresh'?null:app.board.columns.map(c=>[c.id,c.cards.map(x=>[x.key,x.title,x.question,x.question_summary,x.attention_kind,x.action,x.answered,x.project,host.cardLine(x),host.phaseText(x),x.dependencies,x.time?.epoch,x.time?.date,x.summary,x.presentation])]);
@@ -865,7 +866,7 @@ window.createDeckUI = function (host) {
     const board=$('board');questionEditors=new Map([...board.querySelectorAll('.qcard')].map(card=>[card.dataset.key,card]));reviewCards=new Map([...board.querySelectorAll('.review-card')].map(card=>[card.dataset.node,card]));board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';
     renderRequests(board,ts,asks,act);
     mountPausePreview();
-    if(wasOpen){const face=[...document.querySelectorAll('.card-open')].find(y=>y.dataset.key===app.openerKey && y.getClientRects().length);if(face){app.opener=face;host.placeDetail(face);face.setAttribute('aria-expanded','true');face.closest('.task-card').dataset.open='true';}else if(ui.selected&&byId.has(ui.selected)){const group=[...document.querySelectorAll('[data-node]')].find(y=>y.dataset.node===ui.selected && y.getClientRects().length);if(group){group.append(detail);detail.hidden=false;$('detail-panel').dataset.active='false';}}}
+    if(wasOpen){const face=[...board.querySelectorAll('.card-open')].find(y=>!detail.contains(y)&&y.dataset.key===app.openerKey && y.getClientRects().length);if(face){app.opener=face;host.placeDetail(face);face.setAttribute('aria-expanded','true');face.closest('.task-card').dataset.open='true';}else if(ui.selected&&byId.has(ui.selected)){const group=[...(ui.view==='projects'?$('project-tree'):board).querySelectorAll('[data-node]')].find(y=>!detail.contains(y)&&y.dataset.node===ui.selected && y.getClientRects().length);if(group){group.append(detail);detail.hidden=false;$('detail-panel').dataset.active='false';}}}
     if(wasOpen){refreshDetailProgress(focused);refreshDetailPause(focused);if(app.modal?.type==='action'){const current=actions().find(c=>c.key===app.modal.key);if(current&&JSON.stringify(current.action)!==app.modal.reading)actionDetail(current);}}
     if(focusNode&&focusLabel&&!document.contains(focused)){const el=[...document.querySelectorAll('[data-node]')].filter(y=>y.dataset.node===focusNode&&y.getClientRects().length).flatMap(y=>[...y.querySelectorAll('[aria-label]')]).find(y=>y.getAttribute('aria-label')===focusLabel);el?.focus({preventScroll:true});}
     if(focused?.isConnected && document.activeElement!==focused && (focused.matches('input,textarea,select')||wasOpen&&focusedInDetail))focused.focus({preventScroll:true});
@@ -935,8 +936,8 @@ window.createDeckUI = function (host) {
     panel.append(send,area);box.append(panel);if(app.modal?.type==='call')content.append(box);else content.prepend(box);
   }
   function reveal(x) {
-    ui.scope='';ui.view='board';ui.column=colOf(x);const r=requestFor(x);if(r){ui.expanded.add(r.id);ui.groups.delete(requestState(r));ui.steps.add(r.id);}host.setView('board');render(true,'filter');
-    const el=[...document.querySelectorAll('[data-node]')].find(y=>y.dataset.node===x.id && y.getClientRects().length);if(el){el.scrollIntoView({block:'nearest'});const opener=el.querySelector('.card-open,.mix-name');if(opener)openNode(x,opener);}
+    ui.scope='';ui.view='board';ui.column=colOf(x);if(!visible(x)){app.query='';$('board-search').value='';}const request=requestFor(x),r=requestRows(model.nodes.filter(y=>y.kind==='task')).find(y=>y.id===(request?.id||x.id));if(r){ui.expanded.add(r.id);ui.groups.delete(requestState(r));ui.steps.add(r.id);}host.setView('board');render(true,'filter');
+    const el=[...$('board').querySelectorAll('[data-node]')].find(y=>!$('detail').contains(y)&&y.dataset.node===x.id && y.getClientRects().length);if(el){el.scrollIntoView({block:'nearest'});const opener=el.querySelector('.card-open,.mix-name');if(opener)openNode(x,opener);}
   }
   function renderImpact(value) {
     const box=n('div','impact');
