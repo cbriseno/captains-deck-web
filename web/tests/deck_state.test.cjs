@@ -50,3 +50,9 @@ test('retained tasks recover a project container from the recorded canonical ide
   assert.equal(rows.find(row=>row.kind==='project').title,'retired');
   assert.equal(rows.filter(row=>row.kind==='project').length,1);
 });
+
+test('a declared pause overrides the active snapshot for presentation', () => {
+  assert.equal(state.displayState({state:'active',card:{activity:{kind:'paused'}}}),'paused');
+  assert.equal(state.displayState({state:'active',card:{activity:{kind:'working'}}}),'active');
+  assert.equal(state.displayState({state:'done',card:{activity:{kind:'paused'}}}),'done');
+});

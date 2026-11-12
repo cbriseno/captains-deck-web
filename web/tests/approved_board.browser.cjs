@@ -105,6 +105,17 @@ test('approved Deck: hierarchy, controls, receipts, inline questions, history, t
     assert.equal(phone.overflow,0);assert.equal(phone.width,390);assert.equal(phone.height,844);assert.equal(phone.recommended,true);assert.equal(phone.draft,'Borrador del fixture');
     run('resize',['360','844']);assert.equal(evaluate(`()=>document.documentElement.scrollWidth-innerWidth`),0);
     evaluate(`async()=>{${wait}document.querySelector('#history-tab').click();await wait(()=>document.querySelector('.history-row'));document.querySelector('.history-row').click();await wait(()=>document.querySelector('#explain-request'));return {dialog:document.querySelectorAll('dialog').length,report:document.querySelector('#detail-content').textContent.includes('informe')};}`);
+    // A busy worker's declared pause must agree across the request and detail.
+    snapshot=JSON.parse(fs.readFileSync(path.join(proof,'home/work-snapshot.json')));
+    snapshot.tasks=snapshot.tasks.filter(x=>x.key==='task:web');
+    snapshot.tasks[0].request={id:'pause-demo',label:'Pausa declarada',project:'project:deck'};
+    snapshot.requests=[{id:'pause-demo',key:'request:pause-demo',scope:'req:pause-demo',label:'Pausa declarada',project:'project:deck',tasks:['task:web']}];
+    fs.writeFileSync(path.join(proof,'home/work-snapshot.json'),JSON.stringify(snapshot));
+    const home=path.join(proof,'home'), journal=path.join(home,'state/fleet-ledger.jsonl');
+    for(const event of [{event:'fixture.snapshot',value:snapshot},{event:'agent.activity',task:'web',value:{gen:'pause-test',seq:1,state:'busy'}},{event:'task.status',task:'web',state:'paused',text:'until later',ts:1792922000}]) fs.appendFileSync(journal,JSON.stringify({home,...event})+'\n');
+    run('resize',['1970','1250']);run('open',[url]);
+    const paused=evaluate(`async()=>{${wait}await wait(()=>document.querySelector('.request-row[data-node$="req:pause-demo"]'));const row=()=>document.querySelector('.request-row[data-node$="req:pause-demo"]');if(row().querySelector('.request-title').getAttribute('aria-expanded')==='false')row().querySelector('.request-title').click();await wait(()=>row().querySelector('.task-row .card-open'));row().querySelector('.task-row .card-open').click();await wait(()=>row().textContent.includes('No hay hora de fin para esta pausa'));return {signal:row().querySelector('.request-signal').textContent,line:row().querySelector('.task-row .rs').textContent};}`);
+    assert.equal(paused.signal,'En pausa');assert.equal(paused.line,'En pausa');
     const evidence={initial,hierarchy,consultation,failedReceipt,advice,question,changed,lines,keyboard,phone,contrastFailures:contrast.length};
     if(process.env.CD_TEST_EVIDENCE){fs.mkdirSync(process.env.CD_TEST_EVIDENCE,{recursive:true});fs.writeFileSync(path.join(process.env.CD_TEST_EVIDENCE,'browser-fixture-checks.json'),JSON.stringify(evidence,null,2));}
   } finally {

@@ -156,6 +156,7 @@ window.createDeckUI = function (host) {
   function ownPause(x) { return x.pause?.own === true; }
   function waitingText(x){if(x.reason)return x.reason;const edges=model.edges.filter(e=>e.from===x.id&&!e.completed);if(edges.length)return t('Waits for {name}',{name:edges.map(e=>label(byId.get(e.to))).join(', ')});if(x.raw?.state==='captain')return t('Waiting for your answer');return x.card?host.cardLine(x.card)||host.phaseText(x.card):'';}
   function pauseText(x) {
+    if (x.state === 'active' && window.DeckState.displayState(x) === 'paused') return host.phaseText(x.card);
     if(x.pause?.state==='unconfirmed')return t('Safe point not confirmed');
     if (x.state === 'stopping' || x.pause?.state==='pending') return t('Reaching a safe point');
     if (ownPause(x)) return t('Own pause');
@@ -653,7 +654,7 @@ window.createDeckUI = function (host) {
   }
   // Approved demo situation(): «En curso» only while a task has a live agent.
   // Queued (ready), held or unconfirmed work is waiting, never in progress.
-  function requestState(r){if(ownPause(r)||['pending','paused','queued','unconfirmed','failed'].includes(r.pause?.state))return 'paused';return r.tasks.some(x=>x.state==='active')?'now':r.tasks.some(x=>['stopping','paused'].includes(x.state))?'paused':r.calls.some(x=>!x.answered)||r.tasks.some(x=>x.state!=='done')?'waiting':'done';}
+  function requestState(r){if(ownPause(r)||['pending','paused','queued','unconfirmed','failed'].includes(r.pause?.state))return 'paused';return r.tasks.some(x=>window.DeckState.displayState(x)==='active')?'now':r.tasks.some(x=>['stopping','paused'].includes(window.DeckState.displayState(x)))?'paused':r.calls.some(x=>!x.answered)||r.tasks.some(x=>x.state!=='done')?'waiting':'done';}
   function orderedRequests(rows){return [...rows].sort(ui.order==='mine'?(a,b)=>a.home.localeCompare(b.home)||(a.manual??Infinity)-(b.manual??Infinity): (a,b)=>activityEpoch(b.updated_at)-activityEpoch(a.updated_at));}
   function jumpAttention(x){
     if(ui.view!=='board')host.setView('board');
@@ -763,7 +764,7 @@ window.createDeckUI = function (host) {
     const opened=ui.expanded.has(r.id)||!!app.query||requestHasDetail(r),wrap=setColor(n('section','request-row'),r);wrap.dataset.node=r.id;wrap.dataset.kind='request';wrap.dataset.relationScope=r.id;
     const toggle=()=>{opened?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');};
     const work=r.tasks,attention=r.calls.filter(c=>!c.answered),completed=work.filter(x=>x.state==='done').length;
-    const activity=attention.length?'question':work.some(x=>x.state==='active')?'active':work.some(x=>x.state==='paused')?'paused':work.some(x=>x.state!=='done')?'waiting':'done';wrap.dataset.activity=activity;
+    const activity=attention.length?'question':work.some(x=>window.DeckState.displayState(x)==='active')?'active':work.some(x=>window.DeckState.displayState(x)==='paused')?'paused':work.some(x=>x.state!=='done')?'waiting':'done';wrap.dataset.activity=activity;
     const title=b('',toggle,'request-title');title.dataset.control='request:'+r.id;title.setAttribute('aria-expanded',String(opened));add(title,n('span','fold'),n('span','dot'),n('span','request-name',label(r)),activity==='done'?null:n('span','request-signal',t({active:'Active',waiting:'Waiting',paused:'Paused',question:'Needs you'}[activity])));
     const bar=n('span','request-bar');bar.style.setProperty('--p',Math.round(100*completed/Math.max(1,work.length))+'%');bar.setAttribute('aria-hidden','true');const requestProject=r.project||projectOf(r)?.title||projectOf(work[0])?.title||t('Project not reported'),meta=add(n('div','request-meta'),window.DeckAnonymize.project(n('span','request-project',projectDisplay(requestProject)),projectOf(r)?.owner_id||r.project?.id||r.project||r.home),add(n('span','request-progress'),bar,structural(n('span','request-count',t(work.length===1?'{done} of {total} task done':'{done} of {total} tasks done',{done:completed,total:work.length})))));
     if(work.length===1&&work[0].state!=='done'){const x=work[0],stage=progress(x),step=x.progress_evidence?.current===true&&x.progress_evidence?.freshness==='current'&&x.progress?.steps?.find(s=>s.state==='active');if(step)stage.append(n('span','prog-phase',t('Current step: {name}',{name:step.label||step.title||''})));stage.classList.add('request-stage');meta.append(stage);}

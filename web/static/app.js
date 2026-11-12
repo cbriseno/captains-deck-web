@@ -102,6 +102,7 @@ function phaseText(card, short = false) {
   if (card.closure?.kind === 'cancelled') return t('Cancelled');
   if (card.answered) return t('Answer saved');
   if (card.bucket === 'landed') return t('Delivered');
+  if (card.activity?.kind === 'paused') return activityText(card, short);
   const run = card.presentation?.run_step;
   if (run) return runLabels[run.state];
   return activityText(card, short) || (card.bucket === 'charted' && card.context.phase === 'unknown' ? t('Queued') : card.context.label || phaseLabels[card.context.phase]);
