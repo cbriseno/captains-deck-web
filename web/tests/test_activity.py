@@ -1,5 +1,5 @@
 """The board says what is happening now, from the reproduced busy-looking fleet."""
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 import http.client
 import json
 import threading
@@ -36,26 +36,62 @@ class ActivityTruthTests(unittest.TestCase):
     def cards(self, board):
         return {c['task']: c for col in board.board()['columns'] for c in col['cards']}
 
+    def event_board(self, name, tasks, turns=None, statuses=None):
+        from fixtures import fixture, start_fixture, publish_fixture
+        board, home = fixture(Path(self.tmp.name) / name)
+        start_fixture(board, home); self.addCleanup(board.stop)
+        snapshot = json.loads((Path(home.path) / 'work-snapshot.json').read_text())
+        snapshot['tasks'] = tasks
+        publish_fixture(board, home, snapshot)
+        journal = Path(home.path) / 'state/fleet-ledger.jsonl'
+        with journal.open('a') as out:
+            for task, turn in (turns or {}).items():
+                out.write(json.dumps({'home':str(Path(home.path).resolve()), 'event':'agent.activity',
+                    'task':task, 'value':{'gen':'fixture','seq':1,'state':turn}})+'\n')
+            for task, state in (statuses or {}).items():
+                out.write(json.dumps({'home':str(Path(home.path).resolve()), 'event':'task.status',
+                    'task':task,'state':state,'text':'Fixture report','ts':1792922000,
+                    'declared_at':1792921938})+'\n')
+        projection=board.projection
+        with projection.condition:
+            self.assertTrue(projection.condition.wait_for(lambda:
+                all(t in projection.readers[bridge.home_id(home)]['model'].activity for t in (turns or {})) and
+                all(t in projection.readers[bridge.home_id(home)]['model'].status for t in (statuses or {})),timeout=5))
+        return board,home,snapshot
+
     def test_only_agents_reported_working_count_as_working_now(self):
-        cards = self.cards(self.board())
-        expected = {
-            'api-pagination': ('working', 'working'), 'search-index': ('working', 'working'),
-            'docs-refresh': ('working', 'working'),
-            # crew state reports the validation run as working; it is not the agent.
-            'release-notes': ('validating', 'validation'),
-            'billing-export': ('validation_gate', 'present'),
-            'cache-migration': ('paused', 'none'), 'log-rotation': ('paused', 'none'),
-            'notes-sync': ('finished', 'present'), 'mobile-publish': ('blocked', 'present'),
-            # A working verdict read from the status log is not a busy pane.
-            'queue-retry': ('unknown', 'present'),
-            # Working, but its source is replaced by the hold until state_source is exported.
-            'theme-tokens': ('unknown', 'open'),
-        }
-        self.assertEqual({k: (cards[k]['activity']['kind'], cards[k]['activity']['agent']) for k in expected}, expected)
-        for firstmate_fields, working in ((False, 3), (True, 4)):
-            underway = self.board(firstmate_fields).collector.snap.cols['underway']
-            self.assertEqual(len(underway), 11)
-            self.assertEqual(f.activity_counts(underway)['working'], working)
+        def task(name, state='running', live='alive', **extra):
+            return dict(key='task:'+name, title=name, state=state, rev='r1',
+                        worker_liveness={'state':live}, question={'open':False}, **extra)
+        tasks=[task(name) for name in ('api-pagination','search-index','docs-refresh')]
+        tasks += [task('release-notes',run_step={'phase':'validation','state':'running','freshness':'fresh'}),
+                  task('billing-export','paused_own',run_step={'phase':'validation','state':'unknown','freshness':'stale'}),
+                  task('cache-migration','paused_own','dead'),task('log-rotation','paused_own','dead'),
+                  task('notes-sync'),task('mobile-publish','waiting_dep',blocked_by=[{'ref':'task:billing-export','open':True}]),
+                  task('queue-retry'),task('theme-tokens')]
+        turns={name:'busy' for name in ('api-pagination','search-index','docs-refresh')}
+        board,home,snapshot=self.event_board('activity-events',tasks,turns,{'notes-sync':'done'})
+        cards=self.cards(board)
+        expected={'api-pagination':('working','working'),'search-index':('working','working'),
+                  'docs-refresh':('working','working'),'release-notes':('validating','validation'),
+                  'billing-export':('validation_gate','present'),'cache-migration':('paused','none'),
+                  'log-rotation':('paused','none'),'notes-sync':('finished','present'),
+                  'mobile-publish':('blocked','present'),'queue-retry':('unknown','present'),
+                  'theme-tokens':('unknown','present')}
+        self.assertEqual({k:(cards[k]['activity']['kind'],cards[k]['activity']['agent']) for k in expected},expected)
+        self.assertEqual(sum(c['activity']['kind']=='working' for c in cards.values()),3)
+        with (Path(home.path)/'state/fleet-ledger.jsonl').open('a') as out:
+            out.write(json.dumps({'home':str(Path(home.path).resolve()),'event':'agent.activity',
+                'task':'theme-tokens','value':{'gen':'fixture','seq':1,'state':'busy'}})+'\n')
+        with board.projection.condition:
+            self.assertTrue(board.projection.condition.wait_for(lambda:
+                'theme-tokens' in board.projection.readers[bridge.home_id(home)]['model'].activity,timeout=5))
+        self.assertEqual(sum(c['activity']['kind']=='working' for c in self.cards(board).values()),4)
+        from fixtures import publish_fixture
+        task=next(t for t in snapshot['tasks'] if t['key']=='task:theme-tokens')
+        task['worker_liveness']['state']='dead'
+        publish_fixture(board,home,snapshot)
+        self.assertNotEqual(self.cards(board)['theme-tokens']['activity']['kind'],'working')
 
     def test_queued_ready_is_distinct_from_blocked_and_deferred(self):
         from fixtures import fixture, start_fixture, publish_fixture
@@ -83,49 +119,60 @@ class ActivityTruthTests(unittest.TestCase):
         self.assertEqual(cards['scope-choice']['activity']['kind'],'decision')
 
     def test_hold_and_pause_dates_come_only_from_exported_fields(self):
-        board = self.board()
-        today = self.cards(board)
-        # The gate reason says "until <date>", but prose is never parsed for a date.
-        gate = next(c for c in board.collector.snap.cols['charted'] if c.task == 'device-trial')
-        self.assertTrue(gate.doing.startswith('until '))
-        for task, gap in (('device-trial', 'hold_until'), ('cache-migration', 'wait_until'), ('log-rotation', 'wait_until')):
-            self.assertEqual((today[task]['activity']['until'], today[task]['activity']['gap']), ('', gap), task)
-        present = self.cards(self.board(firstmate_fields=True))
-        self.assertEqual(present['device-trial']['activity']['kind'], 'deferred')
-        self.assertRegex(present['device-trial']['activity']['until'], r'^\d{4}-\d{2}-\d{2}$')
-        self.assertEqual(present['cache-migration']['activity']['kind'], 'paused')
-        self.assertRegex(present['cache-migration']['activity']['until'], r'^\d{4}-\d{2}-\d{2}T15:00:00\+00:00$')
-        self.assertFalse(any(c['activity']['gap'] for c in present.values()))
+        from fixtures import publish_fixture
+        tasks=[{'key':'task:device-trial','title':'Trial','state':'waiting_future','rev':'r1',
+                'reason':'until 2999-01-01: trial','question':{'open':False},
+                'pause':{'own':{'kind':'future'},'inherited':None}},
+               *[{'key':'task:'+name,'title':name,'state':'paused_own','rev':'r1',
+                  'worker_liveness':{'state':'dead'},'question':{'open':False}}
+                 for name in ('cache-migration','log-rotation')]]
+        board,home,snapshot=self.event_board('dates-missing',tasks)
+        today=self.cards(board)
+        for task,gap in (('device-trial','hold_until'),('cache-migration','wait_until'),('log-rotation','wait_until')):
+            self.assertEqual((today[task]['activity']['until'],today[task]['activity']['gap']),('',gap),task)
+        future=(datetime.now(timezone.utc)+timedelta(days=7)).replace(hour=15,minute=0,second=0,microsecond=0)
+        snapshot['tasks'][0]['pause']['own']['until']=future.date().isoformat()
+        for task in snapshot['tasks'][1:]:task['wait_until']=future.isoformat()
+        publish_fixture(board,home,snapshot)
+        present=self.cards(board)
+        self.assertEqual((present['device-trial']['activity']['kind'],present['device-trial']['activity']['until']),('deferred',future.date().isoformat()))
+        for task in ('cache-migration','log-rotation'):
+            self.assertEqual((present[task]['activity']['kind'],present[task]['activity']['until']),('paused',future.isoformat()))
+            self.assertEqual(present[task]['activity']['gap'],'')
 
     def test_a_passed_pause_date_or_hold_is_not_presented_as_current(self):
-        board = self.board(True)
-        card = next(c for c in board.collector.snap.cols['underway'] if c.task == 'cache-migration')
-        card.wait_until = '2020-01-01T00:00:00Z'
-        gate = next(c for c in board.collector.snap.cols['charted'] if c.task == 'device-trial')
-        self.assertEqual(gate.hold_bucket, 'dated')
-        gate.hold_until = '2020-01-01'
-        cards = self.cards(board)
-        self.assertEqual((cards['cache-migration']['activity']['kind'], cards['cache-migration']['activity']['until']), ('paused', ''))
-        self.assertEqual((cards['device-trial']['activity']['kind'], cards['device-trial']['activity']['until']), ('held', ''))
-        card.wait_until = ''
-        card.hold_bucket, card.hold_until = 'dated', '2020-01-01'
-        self.assertEqual((f.card_activity(card)['kind'], f.card_activity(card)['until']), ('held', ''))
-        card.hold_until = '2999-01-01'
-        self.assertEqual((f.card_activity(card)['kind'], f.card_activity(card)['until']), ('deferred', '2999-01-01'))
+        from fixtures import publish_fixture
+        tasks=[{'key':'task:cache-migration','title':'Cache','state':'paused_own','rev':'r1',
+                'worker_liveness':{'state':'dead'},'question':{'open':False},'wait_until':'2020-01-01T00:00:00Z'},
+               {'key':'task:device-trial','title':'Trial','state':'waiting_future','rev':'r1',
+                'question':{'open':False},'pause':{'own':{'kind':'future','until':'2020-01-01'},'inherited':None}}]
+        board,home,snapshot=self.event_board('dates-past',tasks)
+        cards=self.cards(board)
+        self.assertEqual((cards['cache-migration']['activity']['kind'],cards['cache-migration']['activity']['until']),('paused',''))
+        self.assertEqual((cards['device-trial']['activity']['kind'],cards['device-trial']['activity']['until']),('held',''))
+        snapshot['tasks'][1]['pause']['own']['until']='2999-01-01'
+        publish_fixture(board,home,snapshot)
+        self.assertEqual((self.cards(board)['device-trial']['activity']['kind'],self.cards(board)['device-trial']['activity']['until']),('deferred','2999-01-01'))
 
     def test_a_malformed_or_offsetless_pause_date_never_breaks_the_board(self):
-        board = self.board(True)
-        card = next(c for c in board.collector.snap.cols['underway'] if c.task == 'cache-migration')
-        cases = {'2999-01-01': '2999-01-01T00:00:00+00:00', '2999-01-01T15:00:00': '2999-01-01T15:00:00+00:00',
-                 '2999-01-01T15:00:00+02:00': '2999-01-01T15:00:00+02:00', '2020-01-01': '', '2020-01-01T15:00:00': ''}
-        for value, until in cases.items():
-            card.wait_until = value
-            self.assertEqual(self.cards(board)['cache-migration']['activity'], {'kind': 'paused', 'agent': 'none', 'until': until, 'gap': '', 'seen_at': 0.0}, value)
-        card.wait_until = 'soon'
-        self.assertEqual(self.cards(board)['cache-migration']['activity'], {'kind': 'paused', 'agent': 'none', 'until': '', 'gap': 'wait_until', 'seen_at': 0.0})
-        gate = next(c for c in board.collector.snap.cols['charted'] if c.task == 'device-trial')
-        gate.hold_until = 'later'
-        self.assertEqual(self.cards(board)['device-trial']['activity'], {'kind': 'held', 'agent': '', 'until': '', 'gap': '', 'seen_at': 0.0})
+        from fixtures import publish_fixture
+        tasks=[{'key':'task:cache-migration','title':'Cache','state':'paused_own','rev':'r1',
+                'worker_liveness':{'state':'dead'},'question':{'open':False}},
+               {'key':'task:device-trial','title':'Trial','state':'waiting_future','rev':'r1',
+                'question':{'open':False},'pause':{'own':{'kind':'future','until':'later'},'inherited':None}}]
+        board,home,snapshot=self.event_board('dates-malformed',tasks)
+        cases={'2999-01-01':'2999-01-01T00:00:00+00:00','2999-01-01T15:00:00':'2999-01-01T15:00:00+00:00',
+               '2999-01-01T15:00:00+02:00':'2999-01-01T15:00:00+02:00','2020-01-01':'','2020-01-01T15:00:00':''}
+        for value,until in cases.items():
+            snapshot['tasks'][0]['wait_until']=value
+            publish_fixture(board,home,snapshot)
+            activity=self.cards(board)['cache-migration']['activity']
+            self.assertEqual((activity['kind'],activity['agent'],activity['until'],activity['gap']),('paused','none',until,''),value)
+        snapshot['tasks'][0]['wait_until']='soon';publish_fixture(board,home,snapshot)
+        activity=self.cards(board)['cache-migration']['activity']
+        self.assertEqual((activity['kind'],activity['agent'],activity['until'],activity['gap']),('paused','none','','wait_until'))
+        gate=self.cards(board)['device-trial']['activity']
+        self.assertEqual((gate['kind'],gate['until'],gate['gap']),('held','',''))
 
     @unittest.skipUnless(hasattr(time, 'tzset'), 'needs time.tzset')
     def test_hold_day_is_compared_with_the_local_calendar_day(self):

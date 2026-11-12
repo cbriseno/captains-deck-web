@@ -205,6 +205,7 @@ class WebTests(unittest.TestCase):
             for state in ('paused','done'):
                 out.write(json.dumps({'home':str(Path(self.home.path).resolve()),'event':'task.status',
                     'task':state,'state':state,'ts':1792922000,
+                    'declared_at':1792921938 if state=='paused' else None,
                     'text':' Root debe completar la aceptación; el código ya está integrado.'})+'\n')
         projection=self.board.projection
         with projection.condition:
@@ -213,7 +214,7 @@ class WebTests(unittest.TestCase):
         cards=self.init()['columns'][1]['cards']
         self.assertEqual([c['context']['phase'] for c in cards],['waiting','reported'])
         for card in cards:
-            self.assertIsNone(card['report']['time']['epoch'])
+            self.assertEqual(card['report']['time']['epoch'],1792921938 if card['task']=='paused' else None)
             self.assertTrue(card['native']['unconfirmed'])
             status,ticket=self.req('/api/ticket/'+card['key'])
             self.assertEqual(status,200)

@@ -7,7 +7,7 @@ browser's view. Mutations go only through the owning home's public intakes; the
 one message the bridge sends is the Deck's fixed pointer to a recorded answer.
 """
 from __future__ import annotations
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 import argparse
 import copy
@@ -475,9 +475,20 @@ class Board:
         status = getattr(model, 'status', {}).get(task, '')
         status_state = latest_status_state(status)
         report_state, report_text, report_at = fm.parse_task_report(status.splitlines(), durable=True)
-        if task in reader.get('event_status', set()):
-            report_at = 0  # task.status carries capture time, not the declaration time.
+        if task in reader.get('event_status', {}):
+            report_at = reader['event_status'][task]
         worker = (item.get('raw') or {}).get('worker_liveness') or {}
+        run = item['raw'].get('run_step') or {}
+        validation = run.get('phase') in ('validation', 'ci')
+        validation_live = (source.get('available', True) and validation and run.get('freshness') == 'fresh'
+                           and run.get('state') in ('running', 'fixing', 'pending', 'ci'))
+        wait_value = item['raw'].get('wait_until')
+        try:
+            wait_at = datetime.fromisoformat(wait_value.replace('Z', '+00:00')) if wait_value else None
+            if wait_at and not wait_at.tzinfo:
+                wait_at = wait_at.replace(tzinfo=timezone.utc)
+        except (AttributeError, TypeError, ValueError):
+            wait_at = None
         raw_pause = item['raw'].get('pause') or {}
         hold = raw_pause.get('condition') or raw_pause.get('own') or {}
         try:
@@ -494,12 +505,15 @@ class Board:
         status_stops_working = active_working and status_state in ('done', 'failed', 'paused', 'parked')
         kind = ('cancelled' if cancelled else 'decision' if question.get('open') else 'delivered' if item['state'] == 'done' else
                 'technical' if coordination else
+                'validating' if validation_live else
+                'validation_gate' if validation and item['state'] == 'paused' else
                 'blocked' if blocked and not active_working else
                 'deferred' if deferred else
                 'held' if hold.get('kind') == 'future' else
                 'paused' if item['state'] in ('paused', 'stopping') or status_stops_working and status_state in ('paused', 'parked') else
                 'idle' if status_stops_working and status_state in ('done', 'failed') else
                 'working' if active_working else
+                'finished' if report_state == 'done' else
                 'idle' if item['state'] == 'active' and turn.get('state') == 'idle' and worker.get('state') != 'dead' else
                 'ready' if item['state'] == 'ready' else 'unknown')
         stamp = re.search(r'^Captain hold set: (\S+)', row.get('body') or '', re.M)
@@ -529,9 +543,13 @@ class Board:
                          'reported' if report_state == 'done' and not active_working else
                          'waiting' if report_state in ('paused', 'parked', 'blocked') and not active_working else 'unknown'),
             activity=dict(kind=kind, agent='none' if cancelled or worker.get('state') == 'dead' else
+                          'validation' if kind == 'validating' else
                           'working' if kind == 'working' and worker.get('state') == 'alive' else
                           'present' if worker.get('state') == 'alive' else 'unknown', turn={} if cancelled else turn,
-                          **({'until': until.isoformat()} if kind == 'deferred' else {})),
+                          **({'until': until.isoformat()} if kind == 'deferred' else
+                             {'until': wait_at.isoformat() if wait_at and wait_at > datetime.now(timezone.utc) else '',
+                              'gap': '' if wait_at else 'wait_until'} if kind == 'paused' else
+                             {'until': '', 'gap': 'hold_until' if 'until' not in hold else ''} if kind == 'held' else {})),
             dependencies=dependencies, native=dict(unconfirmed=turn.get('state') not in ('busy', 'idle'), source='agent.activity'),
             time=self.projected_time((question.get('asked') if question.get('open') else None) or item['updated_at']), question=(question.get('call') or {}).get('question', ''),
             answered=answered, attention_kind=('action' if is_action else 'question') if question.get('open') else None,
@@ -648,7 +666,7 @@ class Board:
                             for candidate in built[bucket]:
                                 status = getattr(reader['model'], 'status', {}).get(row['id'], '')
                                 state, text, at = fm.parse_task_report(status.splitlines(), durable=True)
-                                candidate.declaration = (state, text, 0 if row['id'] in reader.get('event_status', set()) else at)
+                                candidate.declaration = (state, text, reader.get('event_status', {}).get(row['id'], at))
                                 matches.append(candidate)
         if len(matches) != 1:
             raise Refusal('This task changed or is no longer in view. Refresh the board.', 404)

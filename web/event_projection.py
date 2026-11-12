@@ -120,7 +120,8 @@ class EventProjection:
                     if event.get('home') == reader['root']:
                         applied = reader['model'].apply(event)
                         if applied and event.get('event') == 'task.status':
-                            reader.setdefault('event_status', set()).add(event.get('task'))
+                            at = event.get('declared_at')
+                            reader.setdefault('event_status', {})[event.get('task')] = at if type(at) is int and at > 0 else 0
                         changed |= applied
                     reader['offset'] += len(line)
                 return changed
@@ -134,6 +135,7 @@ class EventProjection:
         snapshot = project_snapshot(model.value)
         identity = self.board.home_identity(home)
         return dict(home=identity, available=reader['enabled'], snapshot=snapshot, answerable=reader['answerable'],
+                    main_inventory=model.value.get('main_inventory'),
                     code=None if reader['enabled'] else 'events-disabled',
                     error='' if reader['enabled'] else self.board.t(
                         'Firstmate’s event journal is disabled. Create an empty file at {path} (create the config directory if needed), then restart Deck.',
@@ -201,7 +203,11 @@ class EventProjection:
                 columns=[dict(id=key, title=self.board.t(title), cards=columns[key]) for key,title in self.board.columns],
                 # Snapshots are replacement values. Copy source availability so
                 # a later reader failure cannot mutate an already served base.
-                deck=dict(sources=[dict(source) for source in sources]), diagnostics=[], history=history)
+                deck=dict(sources=[dict(source) for source in sources]),
+                diagnostics=[dict(kind='main-inventory', home=source['home'],
+                                  owner=self.board.home(source['home']).label, message=inventory['reason'])
+                             for source in sources if (inventory := source.get('main_inventory'))
+                             and inventory.get('valid') is False and isinstance(inventory.get('reason'), str)], history=history)
 
     def read(self, selected=''):
         with self.condition:

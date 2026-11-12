@@ -383,13 +383,11 @@ class AdapterHTTPTests(unittest.TestCase):
             self.assertTrue(self.board.projection.condition.wait_for(lambda:not self.board.projection.loading,timeout=10))
 
     def test_inventory_gate_is_diagnostic_without_suppressing_real_blocked_tasks(self):
-        f = bridge.fm
-        gates, _ = f.make_cards(self.home, {'gates': [
-            {'id': '(main-inventory)', 'title': 'in-flight backlog item has no child metadata: missing',
-             'reason': 'main inventory', 'owner': '(main)'},
-            {'id': 'real-blocked', 'title': 'Real missing input', 'blocked_by': 'missing',
-             'reason': 'Dependency is absent', 'owner': '(main)'}]}, {}, {}, {})
-        self.board.collector.snap.cols['charted'].extend(gates['charted'])
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        snapshot['main_inventory']={'valid':False,'reason':'in-flight backlog item has no child metadata: missing'}
+        snapshot['tasks'].append({'key':'task:real-blocked','title':'Real missing input','state':'waiting_dep',
+            'rev':'r1','question':{'open':False},'blocked_by':[{'ref':'task:missing','open':True}]})
+        publish_fixture(self.board,self.home,snapshot)
         data = self.init()
         diagnostic, = data['diagnostics']
         self.assertEqual(diagnostic['kind'], 'main-inventory')
@@ -400,6 +398,9 @@ class AdapterHTTPTests(unittest.TestCase):
         blocked, = [c for c in cards if c['task'] == 'real-blocked']
         self.assertEqual(blocked['activity']['kind'], 'blocked')
         self.assertEqual(blocked['bucket'], 'charted')
+        snapshot['main_inventory']={'valid':True,'reason':None}
+        publish_fixture(self.board,self.home,snapshot)
+        self.assertEqual(self.init()['diagnostics'],[])
 
     def test_removal_consultation_reason_uses_existing_owner_without_delete(self):
         responses = owner(self.home)
