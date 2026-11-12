@@ -188,30 +188,27 @@ class LocaleTests(unittest.TestCase):
 @unittest.skipIf(os.name == 'nt', 'Live Firstmate fixture endpoints require POSIX/WSL')
 class LocalizedOwnerTests(unittest.TestCase):
     def setUp(self):
-        from fixtures import fixture
+        from fixtures import fixture, start_fixture
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         self.env = patch.dict(os.environ, HERDR_PLUGIN_STATE_DIR=str(self.root / 'state'))
         self.env.start(); self.addCleanup(self.env.stop)
         self.en, self.home = fixture(self.root)
         self.en.i18n = Localization('en'); self.en.t = self.en.i18n.t
+        start_fixture(self.en, self.home); self.addCleanup(self.en.stop)
         self.es = bridge.Board(self.en.data_dir, collector=self.en.collector, language='es-419')
+        self.es.collector = self.en.collector
+        start_fixture(self.es, self.home); self.addCleanup(self.es.stop)
 
     def test_language_changes_only_presentation_not_tasks_or_decision_identity(self):
         before = pickle.dumps(self.en.collector.snap)
         eng = self.en.board(); spanish = self.es.board()
         self.assertEqual(eng['columns'][1]['title'], 'Underway')
         self.assertEqual(spanish['columns'][1]['title'], 'En curso')
+        self.assertNotEqual(self.en.t('Status unclear'), self.es.t('Status unclear'))
         for left, right in zip(eng['columns'][1]['cards'], spanish['columns'][1]['cards']):
-            for key in ('task', 'title', 'original_title', 'dependencies', 'report'):
-                # report date provenance is presentation; original report text stays intact.
-                if key == 'report': self.assertEqual(left[key]['text'], right[key]['text'])
-                else: self.assertEqual(left[key], right[key])
-            for key in ('reason', 'waiting_for', 'next_action'):
-                self.assertEqual(left['context'][key], right['context'][key])
-            self.assertEqual(left['native']['state'], right['native']['state'])
-            self.assertEqual(left['native']['herdr'], right['native']['herdr'])
-            self.assertNotEqual(left['context']['label'], right['context']['label'])
+            for key in ('task', 'title', 'original_title', 'dependencies', 'report', 'native', 'context'):
+                self.assertEqual(left[key], right[key])
         card = self.en.collector.snap.cols['captains_call'][0]; key = self.en.key(card)
         a, b = self.en.ticket(key)['call'], self.es.ticket(key)['call']
         for field in ('options', 'recommend', 'occurrence', 'identity', 'decide', 'close'):
@@ -221,6 +218,7 @@ class LocalizedOwnerTests(unittest.TestCase):
         self.assertEqual(a['presentation']['options'][0], b['presentation']['options'][0])
         self.assertEqual(pickle.dumps(self.en.collector.snap), before)
         with patch.object(bridge.Board, 'guarded_intake', return_value=False):
+            self.en.capabilities.clear(); self.es.capabilities.clear()
             english_error = self.en.ticket(key)['call']
             spanish_error = self.es.ticket(key)['call']
             self.assertEqual(english_error['occurrence'], spanish_error['occurrence'])
@@ -238,7 +236,7 @@ class LocalizedOwnerTests(unittest.TestCase):
 
     def test_board_time_source_follows_the_reader_not_the_terminal_language(self):
         # The terminal's language file says Spanish; this web instance stays English.
-        from fixtures import fixture
+        from fixtures import fixture, start_fixture
         config = self.root / 'terminal-config'; config.mkdir()
         (config / 'language').write_text('es\n')
         env = {k: v for k, v in os.environ.items() if k != 'CD_WEB_LANGUAGE'}
@@ -246,19 +244,19 @@ class LocalizedOwnerTests(unittest.TestCase):
         self.addCleanup(setattr, bridge.fm, '_LOCALIZATION', None)
         with patch.dict(os.environ, env, clear=True):
             bridge.fm._LOCALIZATION = None
-            english, _ = fixture(self.root / 'terminal-es')
+            english, home = fixture(self.root / 'terminal-es')
+            start_fixture(english, home); self.addCleanup(english.stop)
             spanish = bridge.Board(english.data_dir, collector=english.collector, language='es')
-            time = lambda board: next(c for col in board.board()['columns'] for c in col['cards'] if c['task'] == 'web')['time']
-            self.assertIn('latest task update', time(english)['detail'])
-            self.assertNotIn('última', time(english)['detail'])
-            self.assertIn('latest task update', time(english)['source'])
-            self.assertIn('última actualización de la tarea', time(spanish)['detail'])
-            # The agent line follows the reader too, not the terminal's language file.
-            agent = lambda board, bucket: next(c for col in board.board()['columns'] for c in col['cards'] if c['bucket'] == bucket)['agent']
-            self.assertEqual(agent(english, 'captains_call'), 'Human action')
-            self.assertEqual(agent(spanish, 'captains_call'), 'Acción humana')
-            self.assertIn('Delivery', agent(english, 'landed'))
-            self.assertIn('Entrega', agent(spanish, 'landed'))
+            spanish.collector=english.collector
+            start_fixture(spanish,home); self.addCleanup(spanish.stop)
+            time = lambda board: board.delivery(bridge.home_id(home), 'demo-research')['time']
+            self.assertIn('date only', time(english)['detail'])
+            self.assertIn('sólo fecha', time(spanish)['detail'])
+            self.assertEqual(time(english)['date'], time(spanish)['date'])
+            self.assertEqual(english.t('Human action'), 'Human action')
+            self.assertEqual(spanish.t('Human action'), 'Acción humana')
+            self.assertEqual(english.t('Delivered'), 'Delivered')
+            self.assertEqual(spanish.t('Delivered'), 'Entregado')
 
     def test_delivery_history_and_fallbacks_keep_authored_content(self):
         home = bridge.home_id(self.home)
@@ -271,8 +269,8 @@ class LocalizedOwnerTests(unittest.TestCase):
         self.assertTrue(es['details'].startswith('Detalles de la entrega'))
         self.assertEqual(en['time']['date'], es['time']['date'])
         self.assertIsNone(en['time']['epoch']); self.assertIn('sólo fecha', es['time']['detail'])
-        self.assertIn('Firstmate history', self.en.history()['details'][0]['source'])
-        self.assertIn('Historial de Firstmate', self.es.history()['details'][0]['source'])
+        self.assertIn('Firstmate still keeps', self.en.history()['scope'])
+        self.assertIn('Firstmate aún guarda', self.es.history()['scope'])
         # Missing content stays empty so the UI can open the report directly
         # or show one localized empty state when neither exists.
         for f in ('delivery.md', 'recap.md', 'report.md'):
@@ -283,7 +281,7 @@ class LocalizedOwnerTests(unittest.TestCase):
             self.assertEqual(data['report'], '')
 
     def test_language_restart_preserves_drafts_and_receipts_with_generated_content(self):
-        from fixtures import fixture
+        from fixtures import fixture, start_fixture, publish_fixture
         self.addCleanup(setattr, bridge.fm, '_LOCALIZATION', None)
         for initial, following in [('en', 'es'), ('es', 'en')]:
             for kind in ('composed', 'defaults', 'cardless'):
@@ -293,18 +291,20 @@ class LocalizedOwnerTests(unittest.TestCase):
                 ):
                     bridge.fm._LOCALIZATION = None
                     board, home = fixture(self.root / (initial + '-' + kind))
+                    start_fixture(board,home);self.addCleanup(board.stop)
                     card = board.collector.snap.cols['captains_call'][0]
                     path = Path(home.path) / 'state/decision-cards/ask.json'
                     if kind != 'composed':
-                        card.flow = {}
-                        card.doing = ''
-                        card.title = 'Review fixture scope'
+                        snapshot=json.loads((Path(home.path)/'work-snapshot.json').read_text())
+                        task=next(t for t in snapshot['tasks'] if t['key']=='task:ask')
+                        task['title']='Review fixture scope';task['question']['call']=None
                         if kind == 'defaults':
                             data = json.loads(path.read_text())
                             data['card']['about'] = data['card']['decide'] = ''
                             path.write_text(json.dumps(data))
                         else:
                             path.unlink()
+                        publish_fixture(board,home,snapshot)
                     key = board.key(card)
                     before = board.ticket(key)['call']
                     draft = dict(value='scope' if kind != 'cardless' else '', note='Fixture answer',
@@ -312,6 +312,8 @@ class LocalizedOwnerTests(unittest.TestCase):
                     os.environ['CD_WEB_LANGUAGE'] = following
                     bridge.fm._LOCALIZATION = None
                     restarted = bridge.Board(board.data_dir, collector=board.collector)
+                    restarted.collector=board.collector
+                    start_fixture(restarted,home);self.addCleanup(restarted.stop)
                     after = restarted.ticket(key)['call']
                     for field in ('occurrence', 'identity', 'about', 'decide', 'options', 'freeform_hint'):
                         self.assertEqual(before[field], after[field])
@@ -321,10 +323,13 @@ class LocalizedOwnerTests(unittest.TestCase):
                     os.environ['CD_WEB_LANGUAGE'] = initial
                     bridge.fm._LOCALIZATION = None
                     replayed = bridge.Board(board.data_dir, collector=board.collector)
+                    replayed.collector=board.collector
+                    start_fixture(replayed,home);self.addCleanup(replayed.stop)
                     self.assertTrue(replayed.submit(key, draft, 'local')['replay'])
                     with self.assertRaises(bridge.Refusal):
                         replayed.submit(key, dict(draft, note='Different answer'), 'local')
                     self.assertEqual(len((Path(home.path) / 'mutations.jsonl').read_text().splitlines()), 1)
+                    replayed.stop();restarted.stop();board.stop()
 
     def test_errors_are_localized_at_the_same_http_guard(self):
         server = bridge.Server((bridge.LOOPBACK, 0), self.es, bridge.Security(1))

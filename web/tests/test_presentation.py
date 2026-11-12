@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from fixtures import fixture, bridge
+from fixtures import fixture, start_fixture, publish_fixture, bridge
 
 
 class PresentationTests(unittest.TestCase):
@@ -16,10 +16,12 @@ class PresentationTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
-        env = patch.dict(os.environ, HERDR_PLUGIN_STATE_DIR=str(self.root / 'state'))
+        env = patch.dict(os.environ, HERDR_PLUGIN_STATE_DIR=str(self.root / 'state'), CD_WEB_LANGUAGE='en')
         env.start()
         self.addCleanup(env.stop)
         self.board, self.home = fixture(self.root)
+        start_fixture(self.board, self.home)
+        self.addCleanup(self.board.stop)
 
     def test_history_retains_request_and_result_for_grouping_and_search(self):
         import json
@@ -29,6 +31,10 @@ class PresentationTests(unittest.TestCase):
         path.write_text(json.dumps({'schema': 'fm-task-presentation.v1', 'id': 'demo-research',
             'home': self.home.path, 'source': 'task.owner.declaration',
             'presentation': {'request': request, 'outcome': outcome}}))
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        task=next(t for t in snapshot['tasks'] if t['key']=='task:demo-research')
+        task.update(request=request,outcome=outcome)
+        publish_fixture(self.board,self.home,snapshot)
         records = self.board.history(query='fictional trip')['records']
         self.assertEqual([row['task'] for row in records], ['demo-research'])
         self.assertEqual(records[0]['request'], request)
@@ -66,7 +72,9 @@ class PresentationTests(unittest.TestCase):
         return next(c for c in self.board.collector.snap.cols['underway'] if c.task == name)
 
     def read(self, card):
-        return self.board.ticket(self.board.key(card))
+        # Detail routes use this serializer; exercise text rules directly with
+        # the recorded card rather than mutating the retired collector.
+        return self.board.card_json(card)
 
     def test_home_coordinator_and_registered_executor_are_separate(self):
         card = self.task()
@@ -132,16 +140,23 @@ class PresentationTests(unittest.TestCase):
         self.assertEqual(self.read(card)['presentation']['next_action'], 'Enviar el PR #12')
 
     def test_authored_summary_wait_and_action_survive_localization_without_mutation(self):
-        card = self.task('dependent')
-        card.flow['presentation'] = {'summary': 'The adapter is ready; physical acceptance remains open.',
-                                     'waiting_for': 'The scheduled device test completes.',
-                                     'next_action': 'Record its result and keep any limitations visible.'}
-        before = copy.deepcopy(card.flow)
-        english = self.read(card)
-        spanish = bridge.Board(self.board.data_dir, collector=self.board.collector, language='es-MX').ticket(self.board.key(card))
-        self.assertEqual(english['presentation'], spanish['presentation'])
-        self.assertEqual(english['presentation']['summary'], before['presentation']['summary'])
-        self.assertEqual(card.flow, before)
+        import json
+        human = {'summary': 'The adapter is ready; physical acceptance remains open.',
+                 'waiting_for': 'The scheduled device test completes.',
+                 'next_action': 'Record its result and keep any limitations visible.'}
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        task=next(t for t in snapshot['tasks'] if t['key']=='task:dependent')
+        task.update(presentation=copy.deepcopy(human),blocked_by=[{'ref':'task:phone-review','open':True}])
+        before=copy.deepcopy(snapshot)
+        publish_fixture(self.board,self.home,snapshot)
+        english=next(c for col in self.board.board()['columns'] for c in col['cards'] if c['task']=='dependent')
+        spanish=bridge.Board(self.board.data_dir,collector=self.board.collector,language='es-MX')
+        spanish.collector=self.board.collector
+        start_fixture(spanish,self.home);self.addCleanup(spanish.stop)
+        translated=next(c for col in spanish.board()['columns'] for c in col['cards'] if c['task']=='dependent')
+        self.assertEqual(english['presentation'],translated['presentation'])
+        for field,value in human.items():self.assertEqual(english['presentation'][field],value)
+        self.assertEqual(snapshot,before)
         self.assertTrue(english['dependencies'][0]['unresolved'])
 
     def test_long_reports_are_bounded_and_original_remains_available(self):
@@ -238,7 +253,7 @@ class PresentationTests(unittest.TestCase):
                 self.assertIn('presentation', card)
         queued = next(c for c in board['columns'] if c['id'] == 'charted')['cards'][0]
         self.assertEqual(queued['time']['date'], '2026-10-24')
-        self.assertIsNone(queued['time']['epoch'])
+        self.assertIsNone(queued['time'].get('epoch'))
         card = self.board.collector.snap.cols['captains_call'][0]
         card.answered_hidden = True
         self.assertTrue(self.read(card)['answered'])
@@ -302,11 +317,17 @@ class PresentationTests(unittest.TestCase):
         card = self.task('integration')
         card.title = 'Install web into captains-deck'
         board_es = bridge.Board(self.board.data_dir, collector=self.board.collector, language='es')
+        board_es.collector=self.board.collector
+        start_fixture(board_es,self.home);self.addCleanup(board_es.stop)
         self.assertEqual(self.board.card_json(card)['title'], 'Install “Un dashboard cómodo para consultar el progreso desde fuera de casa”')
         self.assertEqual(board_es.card_json(card)['title'], 'Instalar «Un dashboard cómodo para consultar el progreso desde fuera de casa»')
         # The work it installs reads by its own short card title.
         source = self.task()
         source.flow['presentation'] = {'card_title': 'Tablero desde fuera'}
+        import json
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        next(t for t in snapshot['tasks'] if t['key']=='task:web')['title']='Tablero desde fuera'
+        publish_fixture(board_es,self.home,snapshot)
         self.assertEqual(board_es.card_json(card)['title'], 'Instalar «Tablero desde fuera»')
         card.dependencies = [{'id': 'web', 'title': source.title + ' https://github.com/example/deck/pull/16', 'owner': '(main)'}]
         self.assertEqual(board_es.card_json(card)['dependencies'][0]['title'], 'Tablero desde fuera')
@@ -340,16 +361,18 @@ class PresentationTests(unittest.TestCase):
         self.assertEqual(board_es.card_json(card)['presentation']['waiting_for'], 'Que termine la instalación de textos.')
 
     def test_worker_coordination_is_not_a_captain_question(self):
-        card = self.task()
-        card.flow = {'phase': 'human', 'state': 'waiting', 'reason': '¿Publico la guía hoy?'}
-        card.snapshot_state = 'idle'
+        import json
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        task=next(t for t in snapshot['tasks'] if t['key']=='task:web')
+        task.update(phase='human',reason='¿Publico la guía hoy?')
+        publish_fixture(self.board,self.home,snapshot)
         columns = {c['id']: c['cards'] for c in self.board.board()['columns']}
         self.assertNotIn('web', [c['task'] for c in columns['captains_call']])
         self.assertIn('web', [c['task'] for c in columns['underway']])
         moved = next(c for c in columns['underway'] if c['task'] == 'web')
         self.assertEqual((moved['bucket'], moved['activity']['kind']), ('underway', 'technical'))
         self.assertEqual(moved['context']['phase'], 'technical')
-        self.assertIsNone(moved['question_summary'])
+        self.assertIsNone(moved.get('question_summary'))
         # It still opens as the task it is.
         ticket = self.board.ticket(moved['key'])
         self.assertEqual(ticket['task'], 'web')

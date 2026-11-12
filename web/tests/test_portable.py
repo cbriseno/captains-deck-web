@@ -170,8 +170,16 @@ class PortableTests(unittest.TestCase):
             root = Path(tmp)
             home = root / 'home'
             (home / 'bin').mkdir(parents=True)
-            endpoint = home / 'bin/fm-bearings-snapshot.sh'
-            endpoint.write_text('#!/bin/sh\nprintf \'%s\\n\' \'{"schema":"fm-bearings.v1","gates":[],"in_flight":[],"decisions_open":[],"landed":[]}\'\n')
+            (home / 'config').mkdir(); (home / 'state').mkdir()
+            (home / 'config/fleet-ledger').touch(); (home / 'state/fleet-ledger.jsonl').touch()
+            (home / 'bin/fm-bearings-snapshot.sh').write_text('#!/bin/sh\nexit 1\n')
+            (home / 'work-snapshot.json').write_text(json.dumps({'schema':'fm-work-snapshot.v1',
+                'projects':[], 'subprojects':[], 'tasks':[], 'sigue':[]}))
+            fixtures = Path(__file__).parent
+            shutil.copy(fixtures / 'fixture_work_owner.py', home / 'bin/work-owner.py')
+            shutil.copy(fixtures / 'fixture_projection.py', home / 'bin/fm_work_projection.py')
+            endpoint = home / 'bin/fm-tasks-axi.sh'
+            endpoint.write_text('#!/bin/sh\nexec python3 "$(dirname "$0")/work-owner.py" "$@"\n')
             endpoint.chmod(0o755)
             with patch.dict(os.environ, {
                 'FM_FLOW_HOMES': 'owner=' + str(home),
@@ -195,15 +203,15 @@ class PortableTests(unittest.TestCase):
                     self.assertTrue(all(not c['cards'] for c in board.board()['columns']))
                 finally:
                     board.stop()
-                    # Collector uses an Event named _stop; do not Thread.join it.
-                    time.sleep(0.1)
 
     @unittest.skipIf(os.name == 'nt', 'Firstmate producer endpoints require POSIX/WSL')
     def test_read_and_guarded_answer_with_separate_code_root(self):
-        from fixtures import fixture
+        from fixtures import fixture, start_fixture
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             board, home = fixture(root)
+            start_fixture(board, home)
+            self.addCleanup(board.stop)
             code = root / 'code'
             code.mkdir()
             (Path(home.path) / 'bin').rename(code / 'bin')
@@ -217,6 +225,7 @@ class PortableTests(unittest.TestCase):
                                        'request_id': 'b' * 32}, 'local')
                 self.assertTrue(receipt['saved'])
                 self.assertTrue((Path(home.path) / 'mutations.jsonl').exists())
+            board.stop()
 
 
 if __name__ == '__main__':

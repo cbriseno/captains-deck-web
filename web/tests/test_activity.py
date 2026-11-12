@@ -215,25 +215,30 @@ class ActivityTruthTests(unittest.TestCase):
         self.assertEqual(badges['queue-retry'], '? unknown')
 
     def test_a_retained_snapshot_after_a_failed_refresh_never_claims_work_now(self):
-        board, home = activity_fleet.fleet(Path(self.tmp.name) / 'retained')
-        collector = bridge.Collector()
-        with patch.object(f, 'bearings_snapshot', return_value=activity_fleet.payload()):
-            cols = collector._load_bearings(home, time.time(), {}, {}, [home])[1]
-        self.assertEqual(f.activity_counts(cols['underway'])['working'], 3)
-        raw, _, path = collector._raw[home.label]
-        received = time.time() - 7200
-        collector._raw[home.label] = (raw, received, path)
-        with patch.object(f, 'bearings_snapshot', return_value={}):
-            cols = collector._load_bearings(home, time.time(), {}, {}, [home])[1]
-        self.assertEqual(collector.source_errors[home.label], 'Could not refresh Firstmate.')
-        board.collector.snap.cols = cols
-        cards = self.cards(board)
-        for task in ('api-pagination', 'search-index', 'docs-refresh', 'release-notes'):
-            self.assertEqual(cards[task]['activity'], {'kind': 'last_seen_working', 'agent': 'open', 'until': '', 'gap': '', 'seen_at': received}, task)
-        self.assertEqual(cards['cache-migration']['activity']['kind'], 'paused')
-        self.assertEqual(f.activity_counts(cols['underway']).get('working', 0), 0)
-        self.assertNotIn('● shipping', {c.badge for c in cols['underway']})
-        self.assertIn('Underway (11 · ●0 working)', self.terminal(board.collector.snap))
+        from fixtures import fixture, start_fixture, publish_fixture
+        board, home = fixture(Path(self.tmp.name) / 'retained')
+        start_fixture(board, home)
+        self.addCleanup(board.stop)
+        root = Path(home.path)
+        snapshot = json.loads((root / 'work-snapshot.json').read_text())
+        task = next(row for row in snapshot['tasks'] if row['key'] == 'task:web')
+        task['worker_liveness'] = {'state': 'alive'}
+        publish_fixture(board, home, snapshot)
+        journal = root / 'state/fleet-ledger.jsonl'
+        with journal.open('a') as out:
+            out.write(json.dumps({'home': str(root.resolve()), 'event': 'agent.activity',
+                                  'task': 'web', 'value': {'gen': 'fixture', 'seq': 1, 'state': 'busy'}}) + '\n')
+        projection = board.projection
+        with projection.condition:
+            self.assertTrue(projection.condition.wait_for(
+                lambda: projection.readers[bridge.home_id(home)]['model'].activity.get('web'), timeout=5))
+        self.assertEqual(self.cards(board)['web']['activity']['kind'], 'working')
+        with journal.open('a') as out:
+            out.write('invalid event\n')
+        with projection.condition:
+            self.assertTrue(projection.condition.wait_for(lambda: bool(projection.error), timeout=5))
+        self.assertFalse(board.board()['deck']['sources'][0]['available'])
+        self.assertNotEqual(self.cards(board)['web']['activity']['kind'], 'working')
 
 
 if __name__ == '__main__':

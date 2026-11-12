@@ -2,11 +2,10 @@
 import json
 from pathlib import Path
 import unittest
-from unittest.mock import patch
 
 import test_bridge as existing
 from test_deck_control import owner
-from deck_control import ControlError
+from fixtures import publish_fixture
 
 
 class ActionCardTests(unittest.TestCase):
@@ -35,6 +34,7 @@ class ActionCardTests(unittest.TestCase):
 
     def test_action_has_no_answer_form_and_reading_or_old_answer_never_completes_it(self):
         responses, path = self.source()
+        publish_fixture(self.board, self.home, responses['snapshot'])
         for _ in range(2):
             data = self.init()
             cards = [c for col in data['columns'] for c in col['cards']]
@@ -42,37 +42,41 @@ class ActionCardTests(unittest.TestCase):
             self.assertEqual(action['attention_kind'], 'action')
             self.assertEqual(action['action']['where'], 'chat')
             self.assertFalse(action['answered'])
-            self.assertIsNone(action['question_summary'])
+            self.assertIsNone(action.get('question_summary'))
             status, detail = self.req('/api/ticket/' + action['key'])
             self.assertEqual(status, 200)
             self.assertNotIn('call', detail)
             self.assertEqual(detail['attention_kind'], 'action')
-        _, cached = self.board.deck_controls.cache[self.home.path]
-        self.board.deck_controls.cache[self.home.path] = (0, cached)
-        with patch.object(self.board.deck_controls, 'invoke', side_effect=ControlError('Owner read unavailable')):
-            retained = self.init()
-            self.assertFalse(retained['deck']['sources'][0]['available'])
-            pending, = [c for col in retained['columns'] if col['id'] == 'captains_call'
-                        for c in col['cards'] if c['task'] == 'ask']
-            self.assertEqual(pending['attention_kind'], 'action')
-        self.board.deck_controls.cache.clear(); self.init()
         status, _ = self.req('/api/ticket/' + action['key'] + '/answer',
                              {'value': 'allow', 'note': '', 'occurrence': 'a' * 64, 'request_id': 'b' * 32})
         self.assertEqual(status, 409)
         self.assertFalse((Path(self.home.path) / 'mutations.jsonl').exists())
         freeform, = [c for c in cards if c['task'] == 'next']
         self.assertEqual(freeform['attention_kind'], 'question')
-        self.assertEqual(freeform['question_summary']['options'], [])
+        self.assertEqual(freeform['inline_call']['options'], [])
         self.assertTrue(self.req('/api/ticket/' + freeform['key'])[1]['call']['freeform'])
         # The consumer observes the owner's explicit closure. It never calls
         # complete-action, reads an ack as completion, or releases origin work.
         responses['snapshot']['tasks'][0]['question']['open'] = False
         responses['snapshot']['tasks'][0]['state'] = 'done'
-        path.write_text(json.dumps(responses)); self.board.deck_controls.cache.clear()
+        publish_fixture(self.board, self.home, responses['snapshot'])
         final = self.init()
         self.assertFalse(any(c['task'] == 'ask' for col in final['columns'] if col['id'] == 'captains_call' for c in col['cards']))
         origin, = [n for n in final['deck']['sources'][0]['snapshot']['nodes'] if n['task'] == 'web']
         self.assertEqual(origin['state'], 'waiting')
+        responses['snapshot']['tasks'][0]['question']['open'] = True
+        responses['snapshot']['tasks'][0]['state'] = 'captain'
+        publish_fixture(self.board, self.home, responses['snapshot'])
+        with (Path(self.home.path) / 'state/fleet-ledger.jsonl').open('a') as journal:
+            journal.write('invalid event\n')
+        projection = self.board.projection
+        with projection.condition:
+            self.assertTrue(projection.condition.wait_for(lambda: bool(projection.error), timeout=10))
+        retained = self.init()
+        self.assertFalse(retained['deck']['sources'][0]['available'])
+        pending, = [c for col in retained['columns'] if col['id'] == 'captains_call'
+                    for c in col['cards'] if c['task'] == 'ask']
+        self.assertEqual(pending['attention_kind'], 'action')
 
     def test_creation_precision_is_owned_and_survives_update_state_and_call_kind_changes(self):
         responses, path = self.source()
@@ -87,7 +91,7 @@ class ActionCardTests(unittest.TestCase):
             if state == 'waiting_dep':
                 responses['snapshot']['tasks'][0]['question']['call'] = {'question': 'A real new question', 'options': []}
             responses['snapshot']['tasks'][0]['updated'] = {'value': '2026-11-01T15:00:00Z', 'precision': 'instant', 'source': 'update'}
-            path.write_text(json.dumps(responses)); self.board.deck_controls.cache.clear()
+            publish_fixture(self.board, self.home, responses['snapshot'])
             nodes = {n['task']: n for n in self.init()['deck']['sources'][0]['snapshot']['nodes']}
             self.assertEqual(nodes['ask']['created_at'], instant)
             self.assertEqual(nodes['next']['created_at'], legacy)

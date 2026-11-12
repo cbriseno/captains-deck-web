@@ -8,14 +8,20 @@ import unittest
 from unittest.mock import patch
 
 import test_bridge as existing
-from fixtures import fixture, bridge
+from fixtures import fixture, publish_fixture, bridge
+from event_projection import EventProjection
 from deck_control import ControlError, DeckControls, project_snapshot, retain_unconfirmed
 
 OWNER = '''import json,os,sys
 from pathlib import Path
 root=Path(os.environ['FM_HOME']);args=sys.argv[1:];text=sys.stdin.read() if args[1] in ('preview','apply') else ''
 with (root/'work-calls.jsonl').open('a') as out:out.write(json.dumps({'args':args,'body':json.loads(text) if text else None,'env':{k:v for k,v in os.environ.items() if k.startswith('FM_') or k=='CODEX_THREAD_ID'}})+'\\n')
-responses=json.loads((root/'work-responses.json').read_text());print(json.dumps(responses[args[1]]))
+responses=json.loads((root/'work-responses.json').read_text())
+if args[1]=='bootstrap':
+ stat=(root/'state/fleet-ledger.jsonl').stat()
+ print(json.dumps({'schema':'fm-work-bootstrap.v1','home':str(root),'position':[stat.st_dev,stat.st_ino,stat.st_size],
+                   'enabled':True,'snapshot':responses['snapshot']}))
+else:print(json.dumps(responses[args[1]]))
 '''
 
 
@@ -368,6 +374,14 @@ class AdapterHTTPTests(unittest.TestCase):
         p = Path(self.home.path) / 'work-calls.jsonl'
         return [json.loads(line) for line in p.read_text().splitlines()] if p.exists() else []
 
+    def restart_source(self):
+        homes=self.board.homes()
+        self.board.stop();self.board.deck_controls.cache.clear()
+        self.board.projection=EventProjection(self.board,homes)
+        self.board.start()
+        with self.board.projection.condition:
+            self.assertTrue(self.board.projection.condition.wait_for(lambda:not self.board.projection.loading,timeout=10))
+
     def test_inventory_gate_is_diagnostic_without_suppressing_real_blocked_tasks(self):
         f = bridge.fm
         gates, _ = f.make_cards(self.home, {'gates': [
@@ -415,10 +429,17 @@ class AdapterHTTPTests(unittest.TestCase):
         self.assertEqual(len(self.calls()), before)
 
     def test_missing_capabilities_keeps_cards_readable_and_controls_disabled(self):
+        responses=owner(self.home)
+        responses['snapshot']=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        responses['capabilities']['ops']=[]
+        (Path(self.home.path)/'work-responses.json').write_text(json.dumps(responses))
+        self.restart_source()
         data = self.init()
         self.assertTrue(any(c['cards'] for c in data['columns']))
-        self.assertFalse(data['deck']['sources'][0]['available'])
-        self.assertFalse(self.calls())
+        self.assertEqual(data['deck']['sources'][0]['capabilities']['actions'], [])
+        home=data['homes'][0]['id']
+        self.assertEqual(self.req(f'/api/control/{home}/apply', self.change())[0], 400)
+        self.assertFalse(any(c['args'][1]=='apply' for c in self.calls()))
 
     def test_authoritative_question_behind_dependency_uses_guarded_native_ticket(self):
         responses = owner(self.home)
@@ -430,20 +451,17 @@ class AdapterHTTPTests(unittest.TestCase):
         responses['snapshot']['tasks'].append({'key': 'task:web', 'title': 'Work stays separate',
             'state': 'waiting_dep', 'question': {'open': False},
             'blocked_by': [{'ref': 'task:next', 'open': True}], 'rev': 'w1'})
-        worker = next(c for c in self.board.collector.snap.cols['underway'] if c.task == 'web')
-        worker.snapshot_state = 'parked'
-        worker.flow = {'phase': 'human', 'state': 'waiting', 'reason': 'Primary: answer the diagnostic request.'}
         path = Path(self.home.path) / 'work-responses.json'
-        path.write_text(json.dumps(responses)); self.board.deck_controls.cache.clear()
+        path.write_text(json.dumps(responses))
+        publish_fixture(self.board,self.home,responses['snapshot'])
         data = self.init()
         cards = next(c['cards'] for c in data['columns'] if c['id']=='captains_call')
         projected = next(c for c in cards if c['task']=='next')
         self.assertEqual(projected['question'],call['question'])
-        self.assertEqual(projected['question_summary']['context'], call['context'])
-        self.assertEqual([o['value'] for o in projected['question_summary']['options']], ['yes', 'later'])
+        self.assertEqual([o['value'] for o in projected['inline_call']['options']], ['yes', 'later'])
         self.assertFalse(any(c['task'] == 'web' for c in cards))
-        work, = [c for col in data['columns'] if col['id'] == 'underway' for c in col['cards'] if c['task'] == 'web']
-        self.assertEqual(work['activity']['kind'], 'technical')
+        work, = [c for col in data['columns'] if col['id'] == 'charted' for c in col['cards'] if c['task'] == 'web']
+        self.assertNotEqual(work['activity']['kind'], 'decision')
         edge, = data['deck']['sources'][0]['snapshot']['edges']
         self.assertEqual((edge['from'], edge['to']), ('task:web', 'task:next'))
         self.assertEqual(projected['time']['source'],'captain_hold')
@@ -454,16 +472,17 @@ class AdapterHTTPTests(unittest.TestCase):
         self.assertEqual(len(self.calls()), before_calls, 'Opening a ticket must not trigger a global work scan')
         self.assertEqual(status,200)
         self.assertEqual(ticket['call']['recommend'],'yes')
+        self.assertEqual(ticket['call']['about'],call['context'])
         self.assertTrue(ticket['call']['occurrence'])
         responses['snapshot']['tasks'][0]['question']['open'] = False
-        path.write_text(json.dumps(responses)); self.board.deck_controls.cache.clear()
+        path.write_text(json.dumps(responses)); publish_fixture(self.board,self.home,responses['snapshot'])
         cards = next(c['cards'] for c in self.init()['columns'] if c['id']=='captains_call')
         self.assertFalse(any(c['task']=='next' for c in cards))
         self.assertEqual(self.req('/api/ticket/'+projected['key'])[0],404)
 
     def test_work_commands_sanitized_actor_and_exact_receipt_path(self):
         owner(self.home)
-        self.board.deck_controls.cache.clear()
+        self.restart_source()
         with patch.dict(os.environ, FM_TASK_ID='never-inherit', FM_SCOPE='worker', CODEX_THREAD_ID='secret'):
             data = self.init()
             source = data['deck']['sources'][0]
@@ -523,9 +542,10 @@ class AdapterHTTPTests(unittest.TestCase):
     def test_unknown_major_does_not_enable_controls(self):
         responses = owner(self.home); responses['capabilities']['contract_major'] = 2
         (Path(self.home.path) / 'work-responses.json').write_text(json.dumps(responses))
-        self.board.deck_controls.cache.clear()
-        self.assertFalse(self.init()['deck']['sources'][0]['available'])
-        self.assertEqual([c['args'][1] for c in self.calls()], ['capabilities'])
+        self.restart_source()
+        self.assertFalse(self.board.health()['ok'])
+        self.assertEqual([c['args'][1] for c in self.calls()], ['bootstrap','capabilities'])
+        self.init()
         home = self.board.board()['homes'][0]['id']
         status, result = self.req(f'/api/control/{home}/apply', self.change())
         self.assertEqual(status, 503)

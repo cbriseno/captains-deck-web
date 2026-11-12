@@ -160,6 +160,11 @@ class EventProjection:
                 if source['home'] not in self.readers:
                     continue
                 model = self.readers[source['home']]['model']
+                home = self.board.home(source['home'])
+                retained = {item['task']: model.rows[item['task']]
+                            for item in source['snapshot']['nodes'] if item['kind'] == 'task'
+                            and self.board.delivery_record(home, item['task']) is not None}
+                retained_rows = list(retained.values())
                 projects = {n['id']: dict(id=n['id'], label=n['title']) for n in source['snapshot']['nodes'] if n['kind']=='project'}
                 for item in source['snapshot']['nodes']:
                     if item['kind'] != 'task':
@@ -169,10 +174,11 @@ class EventProjection:
                     bucket = ('captains_call' if (item.get('question') or {}).get('open') else
                               'landed' if item['state'] == 'done' else 'underway' if item['state'] in ('active', 'stopping') else 'charted')
                     columns[bucket].append(self.board.projected_card(source, item, human, bucket, titles, projects))
-                    if self.board.delivery_record(self.board.home(source['home']), task) is not None:
+                    if task in retained:
                         card = columns[bucket][-1]
                         history.append(dict(task=task, home=source['home'], owner=card['owner'],
-                            title=card['title'], alias=item['alias'], project=card['project'],
+                            title=card['title'], alias=item['alias'],
+                            project=self.board.delivered_project(home, retained_rows, retained[task], human),
                             request=item['request'], outcome=item['outcome'], summary=human.get('summary') or '',
                             closed=model.rows[task].get('closed'), time=self.board.projected_time(item['completed_at'])))
             history.sort(key=lambda row: self.board.history_order(row['time'] or {}), reverse=True)

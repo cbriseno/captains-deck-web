@@ -19,6 +19,7 @@ import mimetypes
 import os
 from pathlib import Path
 from functools import lru_cache
+from types import SimpleNamespace
 import re
 import secrets
 import signal
@@ -455,7 +456,10 @@ class Board:
     def projected_time(value):
         if not value or not value.get('value'):
             return None
-        return dict(date=value['value']) if value.get('precision') == 'date' else dict(epoch=datetime.fromisoformat(value['value'].replace('Z', '+00:00')).timestamp())
+        result = dict(date=value['value']) if value.get('precision') == 'date' else dict(epoch=datetime.fromisoformat(value['value'].replace('Z', '+00:00')).timestamp())
+        if value.get('source'):
+            result['source'] = value['source']
+        return result
 
     def projected_card(self, source, item, human, bucket, titles, projects):
         task, identity = item['task'], source['home']
@@ -463,6 +467,7 @@ class Board:
         question = item.get('question') or {}
         call = question.get('call') or {}
         is_action = call.get('kind') == 'action'
+        coordination = not question.get('open') and item.get('phase') == 'human'
         row = self.projection.readers[identity]['model'].rows[task]
         model = self.projection.readers[identity]['model']
         turn = model.activity.get(task, {})
@@ -471,10 +476,11 @@ class Board:
         closure = item.get('closure') or human.get('closure') or {}
         cancelled = closure.get('kind') == 'cancelled'
         delivery_available = not cancelled and self.delivery_record(owner, task) is not None
-        active_working = (item['state'] == 'active' and turn.get('state') == 'busy'
+        active_working = (source.get('available', True) and item['state'] == 'active' and turn.get('state') == 'busy'
                           and worker.get('state') != 'dead')
         status_stops_working = active_working and status_state in ('done', 'failed', 'paused', 'parked')
         kind = ('cancelled' if cancelled else 'decision' if question.get('open') else 'delivered' if item['state'] == 'done' else
+                'technical' if coordination else
                 'paused' if item['state'] in ('paused', 'stopping') or status_stops_working and status_state in ('paused', 'parked') else
                 'idle' if status_stops_working and status_state in ('done', 'failed') else
                 'working' if active_working else
@@ -482,19 +488,34 @@ class Board:
                 'ready' if item['state'] == 'ready' else 'unknown')
         stamp = re.search(r'^Captain hold set: (\S+)', row.get('body') or '', re.M)
         identity_value = stamp[1] + '#' + str(len(re.findall(r'^Resolution recorded by fm-(?:captain|decision)-hold\.', row.get('body') or '', re.M))) if stamp else ''
+        presentation = project(SimpleNamespace(flow={'presentation': human}, agent=''), {})
+        dependencies = []
+        for dependency in item['raw'].get('blocked_by', []):
+            key = str(dependency.get('ref') or '').removeprefix('task:')
+            if key:
+                dependencies.append(dict(id=key, title=titles.get(key) or key,
+                                         unresolved=dependency.get('open') is not False))
+        answered = False
+        if bucket == 'captains_call' and question.get('open') and not is_action:
+            try:
+                card = self.card(digest(identity, task, bucket)[:40])
+                answered = self.answer_saved(card, owner, self.content(card, owner))
+            except Refusal:
+                pass
         return dict(key=digest(identity, task, bucket)[:40], task=task,
             title=card_field(human.get('card_title'), 'card_title') or readable_title(item['title'], titles, self.t), original_title=item['title'], bucket=bucket, home=identity,
             owner=owner.label, request=item['request'], outcome=None if cancelled else item['outcome'],
             summary='' if cancelled else human.get('summary') or '', project=projects.get(item['raw'].get('project')),
             delivery_available=delivery_available, closure=closure,
-            presentation=dict(status=None if cancelled else human.get('card_status'), summary=None if cancelled else human.get('summary')),
-            context=dict(phase='human' if question.get('open') else 'unknown'),
+            presentation=dict(status=None, summary=None) if cancelled else presentation,
+            context=dict(phase='human' if question.get('open') else 'technical' if coordination else
+                         'integration' if item.get('phase') == 'integration' else 'unknown'),
             activity=dict(kind=kind, agent='none' if cancelled or worker.get('state') == 'dead' else
                           'working' if kind == 'working' and worker.get('state') == 'alive' else
                           'present' if worker.get('state') == 'alive' else 'unknown', turn={} if cancelled else turn),
-            dependencies=[], native=dict(unconfirmed=turn.get('state') not in ('busy', 'idle'), source='agent.activity'),
-            time=self.projected_time(item['updated_at']), question=(question.get('call') or {}).get('question', ''),
-            answered=False, attention_kind=('action' if is_action else 'question') if question.get('open') else None,
+            dependencies=dependencies, native=dict(unconfirmed=turn.get('state') not in ('busy', 'idle'), source='agent.activity'),
+            time=self.projected_time((question.get('asked') if question.get('open') else None) or item['updated_at']), question=(question.get('call') or {}).get('question', ''),
+            answered=answered, attention_kind=('action' if is_action else 'question') if question.get('open') else None,
             action=dict(call, error='') if is_action else None,
             inline_call=dict(options=[dict(o, value=o['id']) for o in call.get('options', [])],
                 identity=identity_value, recommend=call.get('recommended'), attachments=self.file_answers_ready(owner),
@@ -566,7 +587,9 @@ class Board:
                     continue  # Unknown refresh cannot resolve/retype a known open action.
                 states[(source['home'], node['task'])] = question.get('open') is True
                 if question.get('open') is True:
-                    entry = {'id': node['task'], 'title': node.get('title') or '',
+                    reader = self.projection.readers.get(source['home'])
+                    row = reader['model'].rows.get(node['task'], {}) if reader else {}
+                    entry = {'id': node['task'], 'title': node.get('title') or '', 'owner': row.get('owner') or '(main)',
                              'reason': node.get('reason') or '', 'call': question.get('call') or {}}
                     asked = question.get('asked')
                     if isinstance(asked, dict) and asked.get('precision') in ('instant', 'date'):
@@ -635,6 +658,14 @@ class Board:
                            next_action=self.t('Firstmate reviews the declared condition and coordinates the next step.'))
         flow = getattr(card, 'flow', None) or {}
         human = flow.get('presentation') if isinstance(flow.get('presentation'), dict) else {}
+        card_project = project_tag(flow.get('project') or human.get('group'))
+        if owner and not fm.is_remote_home(owner):
+            nodes = self.deck_controls.peek(owner).get('snapshot', {}).get('nodes', [])
+            node = next((n for n in nodes if n.get('kind') == 'task' and n.get('task') == card.task), {})
+            project_key = (node.get('raw') or {}).get('project')
+            project_node = next((n for n in nodes if n.get('kind') == 'project' and n.get('id') == project_key), None)
+            if project_node:
+                card_project = {'id': project_node['id'], 'label': project_node['title']}
         report_state, report_text, report_time = fm.durable_report(card)
         pane = str(getattr(card, 'pane_key', '') or '')
         # The installed Herdr Web supports ?machine=local&pane=…&view=chat.
@@ -689,7 +720,7 @@ class Board:
                            'unconfirmed': getattr(card, 'activity_unconfirmed', True),
                            'retained_at': getattr(card, 'retained_at', 0.0)},
                 'dependencies': dependencies,
-                'project': project_tag(flow.get('project') or human.get('group')),
+                'project': card_project,
                 'supervisor': getattr(card, 'supervisor', {}) or {},
                 'time': self.event_json(getattr(card, 'event_time', None)),
                 # Delivered work leads with what the worker said changed.
@@ -1079,7 +1110,10 @@ class Board:
         kept = self.capabilities.get(home_id(home))
         if not fresh and mark and kept and kept[0] == mark:
             return kept[1]
-        return self.guarded_intake(home)
+        ready = self.guarded_intake(home)
+        if mark:
+            self.capabilities[home_id(home)] = (mark, ready)
+        return ready
 
     def guarded_intake(self, home):
         try:
@@ -1244,6 +1278,9 @@ class Board:
                 else:
                     receipt.update(message='Couldn’t confirm your answer was sent. Check the answer status; your draft is safe.', detail=str(exc))
             self.store_receipt(path, receipt)
+            if receipt.get('saved') is True:
+                with self.projection.condition:
+                    self.projection.publish()
             return self.present_receipt(receipt)
 
     def wake_primary(self, home, card):

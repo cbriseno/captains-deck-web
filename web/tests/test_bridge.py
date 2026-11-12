@@ -11,7 +11,7 @@ import time
 import unittest
 from unittest.mock import patch
 
-from fixtures import fixture, bridge
+from fixtures import fixture, prepare_fixture, start_fixture, publish_fixture, bridge
 
 
 def delegated_fixture(root):
@@ -43,9 +43,11 @@ class WebTests(unittest.TestCase):
     def setUp(self):
         self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
         self.root=Path(self.tmp.name)
-        self.env=patch.dict(os.environ,HERDR_PLUGIN_STATE_DIR=str(self.root/'state'))
+        self.env=patch.dict(os.environ,HERDR_PLUGIN_STATE_DIR=str(self.root/'state'),CD_WEB_LANGUAGE='en')
         self.env.start();self.addCleanup(self.env.stop)
         self.board,self.home=fixture(self.root)
+        start_fixture(self.board,self.home)
+        self.addCleanup(self.board.stop)
         self.server=bridge.Server((bridge.LOOPBACK,0),self.board,bridge.Security(8787))
         self.port=self.server.server_port
         self.server.security=bridge.Security(self.port,'https://deck.example.test',['captain'], 'X-Authenticated-User')
@@ -81,6 +83,34 @@ class WebTests(unittest.TestCase):
         board=self.init();key=next(c for c in board['columns'] if c['id']=='captains_call')['cards'][0]['key']
         status,ticket=self.req('/api/ticket/'+key);self.assertEqual(status,200)
         return key,dict(value='scope',note='Mi respuesta real de prueba',occurrence=ticket['call']['occurrence'],request_id='a'*32)
+
+    def publish_history(self, records):
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        snapshot['projects']=[]
+        snapshot['tasks']=[]
+        for record in records:
+            timestamp=record.get('card_time') or record.get('completion') or {}
+            value=timestamp.get('value') or timestamp.get('date')
+            completed=dict(value=value, precision='instant' if value and 'T' in value else 'date', source='fixture') if value else None
+            presentation=record.get('presentation') or bridge.task_presentation(self.home,record['id'])
+            if record.get('project'):
+                presentation=dict(presentation,group=record['project'])
+            snapshot['tasks'].append(dict(key='task:'+record['id'],title=record['title'],state='done',rev='r1',
+                completed=completed,closed=(record.get('completion') or {}).get('date'),
+                presentation=presentation,
+                repo=record.get('repo'),question={'open':False}))
+        publish_fixture(self.board,self.home,snapshot)
+
+    def add_home(self, other, home):
+        prepare_fixture(other, home)
+        old = self.board
+        old.stop()
+        old.collector.snap.homes.append(home)
+        self.board = bridge.Board(old.data_dir, collector=old.collector, language='en')
+        self.board.collector = old.collector
+        start_fixture(self.board, self.home)
+        self.addCleanup(self.board.stop)
+        self.server.board = self.board
 
     def test_timeline_reads_records_through_authenticated_route(self):
         self.init()
@@ -118,40 +148,34 @@ class WebTests(unittest.TestCase):
 
     def test_a_slow_rebuild_never_holds_the_last_board(self):
         first=self.init()
-        release=threading.Event();build=self.board.board
-        def slow(selected=''):
-            release.wait(10);return dict(build(selected),seq=first['seq']+1)
-        with patch.object(self.board,'board',side_effect=slow):
+        with patch.object(self.board.deck_controls,'invoke',side_effect=AssertionError('unexpected owner scan')):
             started=time.monotonic()
             status,last=self.req('/api/board',last=True)
             self.assertEqual(status,200);self.assertLess(time.monotonic()-started,2)
             self.assertEqual(last['seq'],first['seq']);self.assertEqual(last['csrf'],first['csrf'])
-            release.set()
-            for _ in range(50):
-                if self.req('/api/board',last=True)[1]['seq']==first['seq']+1:break
-                time.sleep(0.1)
-            else:self.fail('The rebuilt board was never served.')
+            snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+            next(t for t in snapshot['tasks'] if t['key']=='task:web')['title']='Rebuilt'
+            publish_fixture(self.board,self.home,snapshot)
+            self.assertTrue(any(c['title']=='Rebuilt' for col in self.init()['columns'] for c in col['cards']))
 
     def test_a_slow_history_rebuild_never_holds_the_last_history(self):
         self.init();_,first=self.req('/api/history')
-        release=threading.Event();records=self.board.records
-        def slow(home,**kw):
-            release.wait(10);rows,note=records(home,**kw);return [dict(r,title='Rebuilt') for r in rows],note
-        with patch.object(self.board,'records',side_effect=slow):
+        with patch.object(self.board,'records',side_effect=AssertionError('unexpected history scan')):
             started=time.monotonic();status,last=self.req('/api/history')
             self.assertEqual(status,200);self.assertLess(time.monotonic()-started,2)
             self.assertEqual(last['records'],first['records'])
-            release.set()
-            for _ in range(50):
-                if self.req('/api/history?q=Rebuilt')[1]['records']:break
-                time.sleep(0.1)
-            else:self.fail('The rebuilt history was never served.')
+            snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+            next(t for t in snapshot['tasks'] if t['key']=='task:demo-research')['title']='Rebuilt'
+            publish_fixture(self.board,self.home,snapshot)
+            self.assertTrue(self.req('/api/history?q=Rebuilt')[1]['records'])
 
     def test_call_report_link_opens_a_bounded_local_file_only(self):
         board=self.init();key=next(c for c in board['columns'] if c['id']=='captains_call')['cards'][0]['key']
-        card=self.board.collector.snap.cols['captains_call'][0]
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        question=next(t['question'] for t in snapshot['tasks'] if t['key']=='task:ask')
         def link(value):
-            card.call={'question':'¿Seguimos?','options':[{'id':'yes','label':'Sí','detail':''}],'recommended':'yes','context':'','link':value}
+            question['call']={'question':'¿Seguimos?','options':[{'id':'yes','label':'Sí','detail':''}],'recommended':'yes','context':'','link':value}
+            publish_fixture(self.board,self.home,snapshot)
             return self.req('/api/ticket/'+key+'/report')
         status,data=link('data/demo-research/report.md')
         self.assertEqual(status,200);self.assertEqual(data['path'],'data/demo-research/report.md')
@@ -277,9 +301,7 @@ class WebTests(unittest.TestCase):
     def test_current_owner_identity_two_same_named_tasks_and_no_aggregate_routing(self):
         second,home2=fixture(self.root/'second')
         home2.label='Otro'
-        self.board.collector.snap.homes.append(home2)
-        other=second.collector.snap.cols['captains_call'][0]
-        self.board.collector.snap.cols['captains_call'].append(other)
+        self.add_home(second,home2)
         board=self.init();cards=next(c for c in board['columns'] if c['id']=='captains_call')['cards']
         self.assertEqual(len(set(c['key'] for c in cards)),2)
         status,ticket=self.req('/api/ticket/'+cards[1]['key']);self.assertEqual(status,200)
@@ -288,20 +310,19 @@ class WebTests(unittest.TestCase):
     def test_fleet_merge_keeps_each_homes_same_named_call_and_opens_its_own_question(self):
         second,home2=fixture(self.root/'second')
         home2.label='Otro'
-        snap=self.board.collector.snap
-        parts=[(self.home,snap.cols,snap.totals),(home2,second.collector.snap.cols,second.collector.snap.totals)]
-        for home,cols,_ in parts:
+        self.add_home(second,home2)
+        for home in (self.home,home2):
             path=Path(home.path)/'state/decision-cards/ask.json'
             data=json.loads(path.read_text());path.unlink()
             data['generated']=home.label+'-stamp'
             data['card'].update(key='docs',title=home.label+' question',about=home.label+' context',
                                 options=[{'value':home.label,'label':home.label+' answer'}])
             (path.parent/'docs.json').write_text(json.dumps(data))
-            card=cols['captains_call'][0]
-            card.task=card.id='docs';card.title=home.label+' durable question'
-        snap.homes.append(home2)
-        snap.cols,snap.totals=bridge.fm.merge_fleet_columns(parts)
-        self.assertEqual(snap.totals['captains_call'],2)
+            snapshot=json.loads((Path(home.path)/'work-snapshot.json').read_text())
+            task=next(t for t in snapshot['tasks'] if t['key']=='task:ask')
+            task.update(key='task:docs',title=home.label+' durable question')
+            task['question']['call']=None
+            publish_fixture(self.board,home,snapshot)
         cards=next(c for c in self.init()['columns'] if c['id']=='captains_call')['cards']
         self.assertEqual([c['task'] for c in cards],['docs','docs'])
         owners=[]
@@ -329,13 +350,12 @@ class WebTests(unittest.TestCase):
 
     def test_ticket_without_own_content_does_not_borrow_another_homes_question(self):
         second,home2=fixture(self.root/'second');home2.label='Otro'
-        snap=self.board.collector.snap
-        other=second.collector.snap.cols['captains_call'][0]
-        other.title='Otro durable question'
+        self.add_home(second,home2)
         (Path(home2.path)/'state/decision-cards/ask.json').unlink()
-        snap.homes.append(home2)
-        snap.cols,snap.totals=bridge.fm.merge_fleet_columns(
-            [(self.home,snap.cols,snap.totals),(home2,second.collector.snap.cols,second.collector.snap.totals)])
+        snapshot=json.loads((Path(home2.path)/'work-snapshot.json').read_text())
+        task=next(t for t in snapshot['tasks'] if t['key']=='task:ask')
+        task['title']='Otro durable question';task['question']['call']=None
+        publish_fixture(self.board,home2,snapshot)
         cards=next(c for c in self.init()['columns'] if c['id']=='captains_call')['cards']
         status,ticket=self.req('/api/ticket/'+cards[1]['key']);self.assertEqual(status,200)
         self.assertEqual(ticket['owner'],'Otro')
@@ -448,7 +468,7 @@ class WebTests(unittest.TestCase):
     def test_history_demo_research_summary_report_and_safe_paths(self):
         self.init();status,data=self.req('/api/history?q=DEMO')
         self.assertEqual(status,200);self.assertEqual(len(data['records']),1)
-        row=data['records'][0];self.assertEqual(row['time']['date'],'2026-10-24');self.assertIsNone(row['time']['epoch'])
+        row=data['records'][0];self.assertEqual(row['time']['date'],'2026-10-24');self.assertIsNone(row['time'].get('epoch'))
         route='/api/delivery/'+row['home']+'/demo-research'
         status,delivery=self.req(route);self.assertEqual(status,200)
         self.assertIn('opciones para el viaje',delivery['summary'])
@@ -480,8 +500,7 @@ class WebTests(unittest.TestCase):
                  # The producer's delivered time is what the row shows, not the closing date.
                  {'id':'producer','title':'Con hora del productor','completion':{'date':'2026-10-09'},
                   'card_time':{'kind':'delivered','precision':'second','source':'completion.json','value':'2026-10-22T08:00:00Z'}}]
-        (Path(self.home.path)/'bin/history.py').write_text('import json,os\nprint(json.dumps({"schema":"fm-delivery-history.v1","home":os.environ["FM_HOME"],'
-            '"complete":True,"records":'+json.dumps(records)+'}))\n')
+        self.publish_history(records)
         self.init();_,data=self.req('/api/history')
         rows=data['records']
         # The raw closing text would put the date-only rows before timed ones.
@@ -504,8 +523,7 @@ class WebTests(unittest.TestCase):
                  {'id':'lab-cleanup','title':f'Quitar dos entradas de prueba en {Path.home() / ".codex/config.toml"}',
                   'presentation':{'card_title':'Quitar las confianzas de prueba de Codex'},'completion':{'date':'2026-10-26'}},
                  {'id':'lab-path','title':f'Quitar dos entradas que dejó otro laboratorio en {Path.home() / ".codex/config.toml"}','completion':{'date':'2026-10-25'}}]
-        (Path(self.home.path)/'bin/history.py').write_text('import json,os\nprint(json.dumps({"schema":"fm-delivery-history.v1","home":os.environ["FM_HOME"],'
-            '"complete":True,"records":'+json.dumps(records)+'}))\n')
+        self.publish_history(records)
         self.init();_,data=self.req('/api/history')
         titles={r['task']:r['title'] for r in data['records']}
         self.assertEqual(titles['deck-ux-copy-install'],'Install “Deck: textos que dé gusto leer”')
@@ -528,20 +546,24 @@ class WebTests(unittest.TestCase):
         self.assertEqual(bridge.project_tag({'label':'Deck'}),{'id':'deck','label':'Deck'})
         for value in (None,'',' ',{},{'id':7},['relay'],'x'*81,{'id':'relay','label':'y'*81}):
             self.assertIsNone(bridge.project_tag(value),value)
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        snapshot['projects']=[]
+        for task in snapshot['tasks']:task.pop('project',None)
+        publish_fixture(self.board,self.home,snapshot)
         board=self.init()
-        # The fixture's tasks record no project, and none is guessed from their ids.
+        # Tasks without an owner project do not acquire one from their ids.
         self.assertTrue(all(c['project'] is None for col in board['columns'] for c in col['cards']))
-        card=self.board.collector.snapshot().cols['captains_call'][0]
-        card.flow=dict(card.flow,project={'id':'relay','label':'Relevo'})
+        snapshot['projects']=[{'key':'project:relay','label':'Relevo','rev':'r1'}]
+        next(t for t in snapshot['tasks'] if t['key']=='task:ask')['project']='project:relay'
+        publish_fixture(self.board,self.home,snapshot)
         _,board=self.req('/api/board')
         call=next(c for c in board['columns'] if c['id']=='captains_call')['cards'][0]
-        self.assertEqual(call['project'],{'id':'relay','label':'Relevo'})
+        self.assertEqual(call['project'],{'id':'project:relay','label':'Relevo'})
         _,ticket=self.req('/api/ticket/'+call['key'])
-        self.assertEqual(ticket['project'],{'id':'relay','label':'Relevo'})
+        self.assertEqual(ticket['project'],{'id':'project:relay','label':'Relevo'})
         records=[{'id':'tagged','title':'Con proyecto','project':'Day Attendant','completion':{'date':'2026-10-20'}},
                  {'id':'plain','title':'Sin proyecto','completion':{'date':'2026-10-19'}}]
-        (Path(self.home.path)/'bin/history.py').write_text('import json,os\nprint(json.dumps({"schema":"fm-delivery-history.v1","home":os.environ["FM_HOME"],'
-            '"complete":True,"records":'+json.dumps(records)+'}))\n')
+        self.publish_history(records)
         _,data=self.req('/api/history')
         self.assertEqual([(r['task'],r['project']) for r in data['records']],
                          [('tagged',{'id':'day attendant','label':'Day Attendant'}),('plain',None)])
@@ -575,8 +597,7 @@ class WebTests(unittest.TestCase):
         outside=self.root/'outside.json';declare('linked','Ajeno')
         (root/'data/linked/presentation.json').rename(outside)
         (root/'data/linked/presentation.json').symlink_to(outside)
-        (root/'bin/history.py').write_text('import json,os\nprint(json.dumps({"schema":"fm-delivery-history.v1","home":os.environ["FM_HOME"],'
-            '"complete":True,"records":'+json.dumps(records)+'}))\n')
+        self.publish_history(records)
         self.init();_,data=self.req('/api/history')
         rows={r['task']:r for r in data['records']}
         self.assertEqual(rows['current']['project'],{'id':'deck','label':'Deck'})
@@ -606,10 +627,9 @@ class WebTests(unittest.TestCase):
         records=[row('deck-a','deck-repo'),row('deck-b','deck-repo'),row('deck-other','deck-repo'),
                  row('even-a','even-repo'),row('even-b','even-repo'),row('even-c','even-repo'),
                  row('deck-later','deck-repo'),row('deck-fork','deck-public'),row('tool-work','small-tool'),row('deck-no-repo')]
-        (root/'bin/history.py').write_text('import json,os\nprint(json.dumps({"schema":"fm-delivery-history.v1","home":os.environ["FM_HOME"],'
-            '"complete":True,"records":'+json.dumps(records)+'}))\n')
         (root/'data/projects.md').write_text('# Projects\n\n- deck-repo [local-only +yolo] - Privado.\n'
             '- deck-public [no-mistakes-prod-only +yolo install=deck-repo] - Fork. install=mentioned-only\n- plain install=other [local-only] - Nada.\n')
+        self.publish_history(records)
         self.init();_,data=self.req('/api/history')
         tags={r['task']:r['project'] for r in data['records']}
         deck={'id':'deck','label':'Deck'}
@@ -661,13 +681,14 @@ class WebTests(unittest.TestCase):
         board=self.init();identity=bridge.home_id(self.home)
         route=f'/api/resolve?home={identity}&task=ask&view=call'
         status,data=self.req(route);self.assertEqual(status,200);self.assertEqual(data['view'],'call')
-        mirror=copy.copy(self.board.collector.snap.cols['captains_call'][0]);mirror.bucket='underway'
-        self.board.collector.snap.cols['underway'].append(mirror)
         self.assertEqual(self.req('/api/ticket/'+data['key'])[0],200)
-        self.board.collector.snap.cols['underway'].pop()
         restarted=bridge.Board(self.board.data_dir,collector=self.board.collector)
+        restarted.collector=self.board.collector
+        start_fixture(restarted,self.home);self.addCleanup(restarted.stop)
         self.assertEqual(restarted.resolve(identity,'ask','call','local')['key'],data['key'])
-        self.board.collector.snap.cols['captains_call']=[]
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        next(t for t in snapshot['tasks'] if t['key']=='task:ask')['question']['open']=False
+        publish_fixture(self.board,self.home,snapshot)
         status,data=self.req(route);self.assertEqual(status,200);self.assertEqual(data['view'],'unavailable')
         self.assertIn('isn’t waiting anymore',data['message'])
         self.assertFalse((Path(self.home.path)/'mutations.jsonl').exists())
@@ -676,7 +697,6 @@ class WebTests(unittest.TestCase):
 
     def test_original_hold_link_never_opens_a_reheld_question_as_the_old_one(self):
         key,body=self.call();identity=bridge.home_id(self.home)
-        card=self.board.collector.snap.cols['captains_call'][0]
         route=f'/api/resolve?home={identity}&task=ask&view=call&item=hold:1'
         self.assertEqual(self.req(route)[1]['view'],'call')
         self.assertTrue(self.req('/api/ticket/'+key+'/answer',body)[1]['saved'])
@@ -684,7 +704,6 @@ class WebTests(unittest.TestCase):
         self.assertEqual(data['view'],'unavailable');self.assertIn('already closed',data['message'])
         (Path(self.home.path)/'identity').write_text('2026-10-25T17:00:00Z#1')
         (Path(self.home.path)/'open').touch()
-        self.board.collector.snap.cols['captains_call']=[card]
         status,data=self.req(route);self.assertEqual(data['view'],'unavailable')
         self.assertIn('earlier version of the question',data['message']);self.assertTrue(data['current_key'])
         self.assertEqual(self.req(route.replace('hold:1','hold:2'))[1]['view'],'call')
@@ -724,6 +743,8 @@ class WebTests(unittest.TestCase):
             'python3 -c \'import json,sys;open(sys.argv[1],"a").write(json.dumps(sys.argv[2:])+"\\n")\' "'+str(log)+'" "$@"\n'))
         script.chmod(0o755)
         herdr=patch.object(bridge.fm,'HERDR_BIN',str(script));herdr.start();self.addCleanup(herdr.stop)
+        agents=patch.object(bridge.fm,'_herdr_list',side_effect=lambda *_:self.board.collector.snap.agents)
+        agents.start();self.addCleanup(agents.stop)
         return log
 
     def sends(self,log):
@@ -808,7 +829,9 @@ class WebTests(unittest.TestCase):
     def test_worker_owned_decision_never_messages_the_primary(self):
         log=self.herdr();self.primary()
         self.home.mate_id='mate-a'
-        self.board.collector.snap.cols['captains_call'][0].owner='mate-a'
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        next(t for t in snapshot['tasks'] if t['key']=='task:ask')['owner']='mate-a'
+        publish_fixture(self.board,self.home,snapshot)
         key,body=self.call()
         status,receipt=self.req('/api/ticket/'+key+'/answer',body)
         self.assertEqual(status,200);self.assertIs(receipt['saved'],True);self.assertNotIn('primary',receipt)
@@ -818,10 +841,14 @@ class WebTests(unittest.TestCase):
         # A row with a structured call and no composed card: the options come
         # from the row, never from the prose reason beside it.
         (Path(self.home.path)/'state/decision-cards/ask.json').unlink()
-        card=self.board.collector.snap.cols['captains_call'][0]
-        card.call=bridge.fm.structured_call({'question':'¿Entregamos ahora?','context':'El tablero está listo.',
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        task=next(t for t in snapshot['tasks'] if t['key']=='task:ask')
+        task['reason']='Respuesta humana pendiente'
+        question=task['question']
+        question['call']={'question':'¿Entregamos ahora?','context':'El tablero está listo.',
             'options':[{'id':'ship','label':'Entregar ahora','detail':'La validación queda pendiente'},{'id':'wait','label':'Esperar'}],
-            'recommended':'ship','link':'https://example.com/informe'})
+            'recommended':'ship','link':'https://example.com/informe'}
+        publish_fixture(self.board,self.home,snapshot)
         board=self.init()
         listed=next(c for c in board['columns'] if c['id']=='captains_call')['cards'][0]
         self.assertEqual(listed['question'],'¿Entregamos ahora?')
@@ -958,29 +985,28 @@ class WebTests(unittest.TestCase):
                 self.assertEqual(self.calls('open ask --identity'),before+2)
 
     def test_opening_a_delivery_reads_history_again_only_when_its_sources_change(self):
-        root=self.markdown();identity=bridge.home_id(self.home)
+        self.markdown();identity=bridge.home_id(self.home)
         route=f'/api/delivery/{identity}/demo-research'
-        for _ in range(3):self.assertEqual(self.req(route)[0],200)
-        self.assertEqual(self.calls('history'),1)
-        self.edit_row(root,'other','Otra nota.');self.assertEqual(self.req(route)[0],200)
-        self.assertEqual(self.calls('history'),2)
-        (root/'data/demo-research/completion.json').write_text('{}');self.assertEqual(self.req(route)[0],200)
-        self.assertEqual(self.calls('history'),3)
-        (root/'.tasks.toml').unlink();self.assertEqual(self.req(route)[0],200)
-        self.assertEqual(self.calls('history'),4)
-        (root/'.tasks.toml').write_text('backend = "github"\n')
-        for _ in range(2):self.assertEqual(self.req(route)[0],200)
-        self.assertEqual(self.calls('history'),6)
+        with patch.object(self.board.deck_controls,'invoke',side_effect=AssertionError('unexpected owner scan')):
+            for _ in range(3):self.assertEqual(self.req(route)[0],200)
+            self.assertEqual(self.calls('history'),0)
+            snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+            next(t for t in snapshot['tasks'] if t['key']=='task:demo-research')['title']='Nueva entrega'
+            publish_fixture(self.board,self.home,snapshot)
+            status,delivery=self.req(route)
+            self.assertEqual(status,200);self.assertEqual(delivery['title'],'Nueva entrega')
+            self.assertEqual(self.calls('history'),0)
 
     def test_read_ahead_confirms_a_row_reading_with_firstmate_once(self):
         root=self.markdown();key=next(c for c in self.init()['columns'] if c['id']=='captains_call')['cards'][0]['key']
         opened=self.board.ticket(key)['call'];self.assertEqual(self.calls('open ask --identity'),0)
-        self.board.prefetch();self.board.prefetch();self.assertEqual(self.calls('open ask --identity'),1)
+        self.board.call_identity(self.home,'ask',confirm=True);self.board.call_identity(self.home,'ask',confirm=True)
+        self.assertEqual(self.calls('open ask --identity'),1)
         self.assertEqual(self.board.ticket(key)['call']['occurrence'],opened['occurrence'])
         # Firstmate disagreeing changes what the open shows, so its answer is refused.
         self.board.identities.clear();(root/'identity').write_text('2026-10-25T15:00:00Z#1')
         self.assertEqual(self.board.ticket(key)['call']['occurrence'],opened['occurrence'])
-        self.board.prefetch();self.assertEqual(self.calls('open ask --identity'),2)
+        self.board.call_identity(self.home,'ask',confirm=True);self.assertEqual(self.calls('open ask --identity'),2)
         self.assertNotEqual(self.board.ticket(key)['call']['occurrence'],opened['occurrence'])
         with self.assertRaises(bridge.Refusal):
             self.board.submit(key,dict(value='scope',note='',occurrence=opened['occurrence'],request_id='p'*32),'local')
@@ -992,7 +1018,7 @@ class WebTests(unittest.TestCase):
         def slow(home,task):
             asked.set();release.wait(10);return '2026-10-25T15:00:00Z#0'
         with patch.object(self.board,'open_identity',side_effect=slow):
-            warm=threading.Thread(target=self.board.prefetch);warm.start();self.addCleanup(release.set)
+            warm=threading.Thread(target=lambda:self.board.call_identity(self.home,'ask',confirm=True));warm.start();self.addCleanup(release.set)
             self.assertTrue(asked.wait(5))
             started=time.monotonic();call=self.board.ticket(key)['call']
             self.assertLess(time.monotonic()-started,2);self.assertEqual(call['identity'],'2026-10-25T15:00:00Z#0')
@@ -1002,9 +1028,9 @@ class WebTests(unittest.TestCase):
     def test_read_ahead_keeps_the_intake_check_until_its_script_changes_and_answers_ask_again(self):
         key=next(c for c in self.init()['columns'] if c['id']=='captains_call')['cards'][0]['key']
         script=Path(self.home.path)/'bin/fm-captain-hold.sh'
-        self.board.prefetch();self.assertEqual(self.calls('capabilities'),1)
+        self.board.intake_ready(self.home);before=self.calls('capabilities')
         for _ in range(2):self.assertEqual(self.board.ticket(key)['call']['error'],'')
-        self.assertEqual(self.calls('capabilities'),1)
+        self.assertEqual(self.calls('capabilities'),before)
         # An answer always asks the live intake, and a reinstalled script is asked again.
         with patch.object(self.board,'guarded_intake',return_value=False) as live:
             with self.assertRaises(bridge.Refusal):
@@ -1013,29 +1039,16 @@ class WebTests(unittest.TestCase):
             script.write_text(script.read_text()+'# reinstalled\n')
             self.assertTrue(self.board.ticket(key)['call']['error']);self.assertEqual(live.call_count,2)
 
-    def test_read_ahead_warms_open_calls_and_history_once_per_change(self):
+    def test_failed_confirmation_requires_live_open_until_the_row_changes(self):
         root=self.markdown();key=next(c for c in self.init()['columns'] if c['id']=='captains_call')['cards'][0]['key']
-        self.board.prefetch();self.board.prefetch()
-        self.assertEqual((self.calls('open ask --identity'),self.calls('history')),(1,1))
-        self.assertEqual(self.req('/api/ticket/'+key)[0],200)
-        self.assertEqual(self.req(f'/api/delivery/{bridge.home_id(self.home)}/demo-research')[0],200)
-        self.assertEqual((self.calls('open ask --identity'),self.calls('history')),(1,1))
         self.board.identities.clear()
         with patch.object(self.board,'open_identity',side_effect=bridge.Refusal('no')) as live:
-            self.board.prefetch();self.board.prefetch();self.assertEqual(live.call_count,1)
+            with self.assertRaises(bridge.Refusal):
+                self.board.call_identity(self.home,'ask',confirm=True)
             # Opening a call Firstmate couldn't confirm still asks Firstmate.
             self.assertTrue(self.board.ticket(key)['call']['error']);self.assertEqual(live.call_count,2)
-            self.edit_row(root,'ask','Otra nota.');self.board.prefetch();self.assertEqual(live.call_count,3)
-        (root/'open').unlink();self.board.prefetch()
-        self.assertEqual((self.board.identities,self.board.warm_failed),({},{}))
-
-    def test_started_board_reads_ahead_in_the_background_and_stops(self):
-        self.markdown();self.board.start();self.addCleanup(self.board.stop)
-        self.init()
-        for _ in range(100):
-            if self.calls('open ask --identity') and self.calls('history'):break
-            threading.Event().wait(0.05)
-        self.assertEqual((self.calls('open ask --identity'),self.calls('history')),(1,1))
-        self.board.stop();self.assertTrue(self.board.stopping.is_set())
+            self.rehold(root,'ask','2026-10-25T16:00:00Z',0)
+            self.assertFalse(self.board.ticket(key)['call']['error'])
+            self.assertEqual(live.call_count,2)
 
 if __name__=='__main__':unittest.main()

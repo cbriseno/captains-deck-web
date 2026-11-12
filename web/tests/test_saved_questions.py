@@ -9,7 +9,11 @@ import test_bridge as existing
 
 
 class SavedQuestionTests(unittest.TestCase):
-    setUp = existing.WebTests.setUp
+    def setUp(self):
+        language = patch.dict('os.environ', CD_WEB_LANGUAGE='en')
+        language.start()
+        self.addCleanup(language.stop)
+        existing.WebTests.setUp(self)
     stop = existing.WebTests.stop
     req = existing.WebTests.req
     init = existing.WebTests.init

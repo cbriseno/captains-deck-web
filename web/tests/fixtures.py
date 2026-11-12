@@ -131,8 +131,8 @@ def fixture(root, timeline=False):
     return board,h
 
 
-def start_fixture(board, home):
-    """Install the disposable owner, bootstrap it and refuse an empty preview."""
+def prepare_fixture(board, home):
+    """Install the disposable owner and its initial work snapshot."""
     base = Path(home.path)
     for part in ('bin', 'config', 'state'):
         (base / part).mkdir(parents=True, exist_ok=True)
@@ -144,11 +144,24 @@ def start_fixture(board, home):
                   'charted': 'ready', 'landed': 'done'}
         for column, cards in snap.cols.items():
             for card in cards:
+                question = {'open': column == 'captains_call'}
+                if question['open']:
+                    decision = json.loads((base / 'state/decision-cards' / (card.task + '.json')).read_text())['card']
+                    question['call'] = dict(question=decision['decide'], context=decision['about'],
+                        options=[dict(id=o['value'], label=o['label'], detail=o.get('hint', '')) for o in decision['options']],
+                        recommended=decision.get('recommend_value'))
+                completed = (dict(value=card.event_time.day.isoformat(), precision='date', source='fixture')
+                             if column == 'landed' and card.event_time.day else None)
+                updated = (dict(value=card.event_time.day.isoformat(), precision='date', source='fixture')
+                           if card.event_time.day else None)
                 tasks.append(dict(key='task:' + card.task, title=card.title,
                     project='project:fixture', state=states[column], rev='r1',
-                    question={'open': column == 'captains_call'}))
+                    phase=(card.flow or {}).get('phase'),
+                    completed=completed, updated=updated, closed=completed['value'] if completed else None,
+                    body='Captain hold set: 2026-10-25T15:00:00Z' if question['open'] else '',
+                    question=question))
         snapshot.write_text(json.dumps(dict(schema='fm-work-snapshot.v1',
-            projects=[dict(key='project:fixture', label='Deck · fixture', rev='r1')],
+            projects=[dict(key='project:fixture', label='Deck', rev='r1')],
             subprojects=[], tasks=tasks, sigue=[])))
     (base / 'bin/work-owner.py').write_text(Path(__file__).with_name('fixture_work_owner.py').read_text())
     (base / 'bin/fm_work_projection.py').write_text(Path(__file__).with_name('fixture_projection.py').read_text())
@@ -157,6 +170,11 @@ def start_fixture(board, home):
     endpoint.chmod(0o755)
     (base / 'config/fleet-ledger').touch()
     (base / 'state/fleet-ledger.jsonl').touch()
+
+
+def start_fixture(board, home):
+    """Install the disposable owner, bootstrap it and refuse an empty preview."""
+    prepare_fixture(board, home)
     board.start()
     with board.projection.condition:
         ready = board.projection.condition.wait_for(lambda: not board.projection.loading, timeout=10)
@@ -164,3 +182,19 @@ def start_fixture(board, home):
     if not ready or data['error'] or not any(c['cards'] for c in data['columns']):
         board.stop()
         raise RuntimeError('Fixture did not load tasks: ' + (data['error'] or 'empty board'))
+
+
+def publish_fixture(board, home, snapshot):
+    """Publish a changed disposable owner snapshot through the event journal."""
+    base = Path(home.path)
+    (base / 'work-snapshot.json').write_text(json.dumps(snapshot))
+    with (base / 'state/fleet-ledger.jsonl').open('a') as journal:
+        journal.write(json.dumps({'home': str(base.resolve()), 'event': 'fixture.snapshot',
+                                  'value': snapshot}) + '\n')
+    projection = board.projection
+    with projection.condition:
+        ready = projection.condition.wait_for(
+            lambda: projection.readers[bridge.home_id(home)]['model'].value == snapshot
+            or projection.error, timeout=10)
+    if not ready or projection.error:
+        raise RuntimeError('Fixture event did not arrive: ' + projection.error)
