@@ -15,28 +15,28 @@ from fixtures import fixture, prepare_fixture, start_fixture, publish_fixture, b
 
 
 def delegated_fixture(root):
-    f=bridge.fm
     board,parent=fixture(root/'parent')
     second,mate=fixture(root/'mate')
     mate.label='2ndmate-lane';mate.mate_id='lane';mate.kind='secondmate'
+    prepare_fixture(board,parent);prepare_fixture(second,mate)
+    parent_card=Path(parent.path)/'state/decision-cards/ask.json'
+    data=json.loads(parent_card.read_text());parent_card.unlink();data['card']['key']='docs'
+    (parent_card.parent/'docs.json').write_text(json.dumps(data))
     (Path(mate.path)/'state/decision-cards/ask.json').unlink()
-    path=Path(parent.path)/'state/decision-cards/ask.json'
-    data=json.loads(path.read_text());path.unlink();data['card']['key']='docs'
-    (path.parent/'docs.json').write_text(json.dumps(data))
-    parent_raw=board.collector._raw[parent.label][0]
-    parent_raw['decisions_open'][0].update(id='docs',owner='lane')
-    mate_raw=second.collector._raw['Firstmate'][0]
-    mate_raw['decisions_open'][0]['id']='docs'
-    snap=board.collector.snap;snap.homes.append(mate)
-    received=f.time.time()
-    snap.bearings={f.delivery_home_identity(parent):(parent_raw,received),
-                   f.delivery_home_identity(mate):(mate_raw,received)}
-    parts=[]
-    for home,raw in [(parent,parent_raw),(mate,mate_raw)]:
-        cols,totals=f.make_cards(home,raw,{}, {}, {},snap.homes,bearings=snap.bearings)
-        parts.append((home,cols,totals))
-    snap.cols,snap.totals=f.merge_fleet_columns(parts)
-    return board,parent,mate,board.key(snap.cols['captains_call'][0]),received
+    for home in (parent,mate):
+        path=Path(home.path)/'work-snapshot.json'
+        snapshot=json.loads(path.read_text())
+        task=next(t for t in snapshot['tasks'] if t['key']=='task:ask')
+        task.update(key='task:docs',owner='lane' if home is parent else '(main)')
+        task['question']['call']=None
+        path.write_text(json.dumps(snapshot))
+    board.collector.snap.homes.append(mate)
+    collector=board.collector
+    board=bridge.Board(board.data_dir,collector=collector,language='en')
+    board.collector=collector
+    start_fixture(board,parent)
+    key=next(c['key'] for col in board.board()['columns'] if col['id']=='captains_call' for c in col['cards'])
+    return board,parent,mate,key
 
 
 class WebTests(unittest.TestCase):
@@ -195,29 +195,31 @@ class WebTests(unittest.TestCase):
         self.assertFalse((Path(self.home.path)/'mutations.jsonl').exists())
 
     def test_durable_reports_survive_unknown_native_on_board_and_ticket(self):
-        f = bridge.fm
-        rows = []
-        for state in ('paused', 'done'):
-            rows.append({'id': state, 'name': 'Integrado; aceptación pendiente', 'state': 'unknown',
-                         'doing': 'harness state unavailable (unknown codex-unverified)',
-                         'flow': {'phase': 'unknown', 'state': 'unknown', 'declared_state': state,
-                                  'reason': 'Root debe completar la aceptación; el código ya está integrado.',
-                                  'source': 'status.declaration (historical)'},
-                         'card_time': {'kind': 'updated', 'value': '2026-10-25T09:52:18Z',
-                                       'precision': 'second', 'source': 'status.declaration.at'}})
-        self.board.collector.snap.cols, _ = f.make_cards(self.home, {'in_flight': rows}, {}, {}, {}, [self.home])
-        cards = self.init()['columns'][1]['cards']
-        self.assertEqual([c['context']['phase'] for c in cards], ['waiting', 'reported'])
+        snapshot=json.loads((Path(self.home.path)/'work-snapshot.json').read_text())
+        snapshot['tasks']=[{'key':'task:'+state,'title':'Integrado; aceptación pendiente',
+            'state':'running','rev':'r1','worker_liveness':{'state':'unknown','verdict':'unverified'},
+            'question':{'open':False}} for state in ('paused','done')]
+        publish_fixture(self.board,self.home,snapshot)
+        journal=Path(self.home.path)/'state/fleet-ledger.jsonl'
+        with journal.open('a') as out:
+            for state in ('paused','done'):
+                out.write(json.dumps({'home':str(Path(self.home.path).resolve()),'event':'task.status',
+                    'task':state,'state':state,'ts':1792922000,
+                    'text':' Root debe completar la aceptación; el código ya está integrado.'})+'\n')
+        projection=self.board.projection
+        with projection.condition:
+            self.assertTrue(projection.condition.wait_for(
+                lambda:len(projection.readers[bridge.home_id(self.home)]['model'].status)==2,timeout=5))
+        cards=self.init()['columns'][1]['cards']
+        self.assertEqual([c['context']['phase'] for c in cards],['waiting','reported'])
         for card in cards:
-            self.assertEqual(card['report']['time']['epoch'], 1792921938)
-            self.assertEqual(card['native']['state'], 'unknown')
-            self.assertIn('codex-unverified', card['native']['detail'])
-            self.assertEqual(card['context']['native_status'], 'Unknown native state')
-            status, ticket = self.req('/api/ticket/' + card['key'])
-            self.assertEqual(status, 200)
-            self.assertEqual(ticket['report'], card['report'])
-            self.assertEqual(ticket['context'], card['context'])
-        self.assertFalse((Path(self.home.path) / 'mutations.jsonl').exists())
+            self.assertIsNone(card['report']['time']['epoch'])
+            self.assertTrue(card['native']['unconfirmed'])
+            status,ticket=self.req('/api/ticket/'+card['key'])
+            self.assertEqual(status,200)
+            self.assertEqual(ticket['report']['state'],card['report']['state'])
+            self.assertEqual(ticket['report']['text'],card['report']['text'])
+        self.assertFalse((Path(self.home.path)/'mutations.jsonl').exists())
 
     def test_fail_closed_host_identity_origin_csrf_and_content_type(self):
         key,body=self.call();path='/api/ticket/'+key+'/answer'
@@ -365,105 +367,94 @@ class WebTests(unittest.TestCase):
         self.assertFalse(ticket['call']['error'])
 
     def test_parent_ticket_reuses_published_ownership_without_snapshot_walks(self):
-        f=bridge.fm
         second,mate=fixture(self.root/'second')
         mate.label='2ndmate-lane';mate.mate_id='lane';mate.kind='secondmate'
+        self.add_home(second,mate)
+        parent_path=Path(self.home.path)/'state/decision-cards/ask.json'
+        data=json.loads(parent_path.read_text());parent_path.unlink();data['card']['key']='docs'
+        (parent_path.parent/'docs.json').write_text(json.dumps(data))
         (Path(mate.path)/'state/decision-cards/ask.json').unlink()
-        snap=self.board.collector.snap
-        snap.homes.append(mate)
-        parent_raw=self.board.collector._raw[self.home.label][0]
-        parent_raw['decisions_open'][0]['owner']='lane'
-        mate_raw=second.collector._raw['Firstmate'][0]
-        snap.bearings={f.delivery_home_identity(self.home):(parent_raw,f.time.time()),
-                       f.delivery_home_identity(mate):(mate_raw,f.time.time())}
-        with patch.object(f,'bearings_snapshot',side_effect=AssertionError('unexpected snapshot walk')):
-            parts=[]
-            for home,raw in [(self.home,parent_raw),(mate,mate_raw)]:
-                cols,totals=f.make_cards(home,raw,{}, {}, {},snap.homes,bearings=snap.bearings)
-                parts.append((home,cols,totals))
-            snap.cols,snap.totals=f.merge_fleet_columns(parts)
-            cards=next(c for c in self.init()['columns'] if c['id']=='captains_call')['cards']
+        for home in (self.home,mate):
+            snapshot=json.loads((Path(home.path)/'work-snapshot.json').read_text())
+            task=next(t for t in snapshot['tasks'] if t['key']=='task:ask')
+            task.update(key='task:docs',owner='lane' if home is self.home else '(main)')
+            task['question']['call']=None
+            publish_fixture(self.board,home,snapshot)
+        with patch.object(bridge.fm,'bearings_snapshot',side_effect=AssertionError('unexpected snapshot walk')):
+            cards=next(c['cards'] for c in self.init()['columns'] if c['id']=='captains_call')
             self.assertEqual(len(cards),1)
-            for _ in range(2):
-                status,ticket=self.req('/api/ticket/'+cards[0]['key'])
-                self.assertEqual(status,200);self.assertFalse(ticket['call']['error'])
-                self.assertEqual(ticket['owner'],mate.label)
-                self.assertEqual(ticket['call']['options'][0]['value'],'scope')
-                self.assertEqual(ticket['call']['presentation']['options'][0]['value'],'scope')
-                self.assertEqual(self.board.content(snap.cols['captains_call'][0],mate)['stamp'],
-                                 '2026-10-25T15:00:00Z')
-            received=snap.bearings[f.delivery_home_identity(self.home)][1]
-            with patch.object(f,'_bearings_ttl',return_value=60.0), \
-                    patch.object(f.time,'time',return_value=received+61.0):
-                status,ticket=self.req('/api/ticket/'+cards[0]['key'])
-                self.assertEqual(status,200);self.assertFalse(ticket['call']['error'])
-                self.assertEqual([o['value'] for o in ticket['call']['options']],['reconcile'])
-                self.assertEqual([o['value'] for o in ticket['call']['presentation']['options']],['reconcile'])
+            status,ticket=self.req('/api/ticket/'+cards[0]['key'])
+            self.assertEqual(status,200);self.assertEqual(ticket['owner'],mate.label)
+            self.assertEqual(ticket['call']['options'][0]['value'],'scope')
+            source=self.board.projection.sources[bridge.home_id(self.home)]
+            with self.board.projection.condition:
+                source['available']=False;self.board.projection.publish()
+            status,ticket=self.req('/api/ticket/'+cards[0]['key'])
+            self.assertEqual(status,200)
+            self.assertEqual([o['value'] for o in ticket['call']['options']],['reconcile'])
 
     def test_submit_rejects_changed_content_during_question_checks(self):
-        f=bridge.fm
-        for change in ('expire','reorder'):
+        for change in ('source-failed','reorder'):
             for value in ('scope','wait'):
                 with self.subTest(change=change,value=value):
-                    board,parent,mate,key,received=delegated_fixture(self.root/change/value)
-                    with patch.object(f,'_bearings_ttl',return_value=60.0), \
-                            patch.object(f.time,'time',return_value=received+59.0) as clock, \
-                            patch.object(f,'bearings_snapshot',side_effect=AssertionError('unexpected snapshot walk')):
-                        ticket=board.ticket(key)
-                        body=dict(value=value,note='',occurrence=ticket['call']['occurrence'],request_id='s'*32)
-                        guard=board.guarded_intake
+                    board,parent,mate,key=delegated_fixture(self.root/change/value)
+                    self.addCleanup(board.stop)
+                    ticket=board.ticket(key)
+                    body=dict(value=value,note='',occurrence=ticket['call']['occurrence'],request_id='s'*32)
+                    guard=board.guarded_intake
+                    source=board.projection.sources[bridge.home_id(parent)]
+                    path=Path(parent.path)/'state/decision-cards/docs.json'
+                    original=path.read_text()
 
-                        def change_during_guard(home):
-                            result=guard(home)
-                            if change=='expire':
-                                clock.return_value=received+61.0
-                            else:
-                                path=Path(parent.path)/'state/decision-cards/docs.json'
-                                data=json.loads(path.read_text());data['card']['options'].reverse()
-                                path.write_text(json.dumps(data))
-                            return result
+                    def change_during_guard(home):
+                        result=guard(home)
+                        if change=='source-failed':
+                            with board.projection.condition:
+                                source['available']=False;board.projection.publish()
+                        else:
+                            data=json.loads(original);data['card']['options'].reverse()
+                            path.write_text(json.dumps(data))
+                        return result
 
-                        with patch.object(board,'guarded_intake',side_effect=change_during_guard):
-                            with self.assertRaisesRegex(bridge.Refusal,'The question changed') as refusal:
-                                board.submit(key,body,'local')
-                        self.assertEqual(refusal.exception.status,409)
-                        self.assertFalse((Path(mate.path)/'mutations.jsonl').exists())
-                        self.assertFalse((board.data_dir/'answers').exists())
-                        snap=board.collector.snap
-                        snap.bearings={identity:(raw,clock.return_value) for identity,(raw,_) in snap.bearings.items()}
-                        body['occurrence']=board.ticket(key)['call']['occurrence']
-                        self.assertTrue(board.submit(key,body,'local')['saved'])
-                        mutations=(Path(mate.path)/'mutations.jsonl').read_text().splitlines()
-                        self.assertEqual(len(mutations),1)
-                        mutation=json.loads(mutations[0])
-                        self.assertEqual(mutation['args'][0],'answers')
-                        self.assertEqual(mutation['input'].split('\t')[:2],['docs',value])
-                        self.assertFalse((Path(parent.path)/'mutations.jsonl').exists())
+                    with patch.object(board,'guarded_intake',side_effect=change_during_guard):
+                        with self.assertRaisesRegex(bridge.Refusal,'The question changed') as refusal:
+                            board.submit(key,body,'local')
+                    self.assertEqual(refusal.exception.status,409)
+                    self.assertFalse((Path(mate.path)/'mutations.jsonl').exists())
+                    self.assertFalse((board.data_dir/'answers').exists())
+                    if change=='source-failed':
+                        with board.projection.condition:
+                            source['available']=True;board.projection.publish()
+                    else:path.write_text(original)
+                    body['occurrence']=board.ticket(key)['call']['occurrence']
+                    self.assertTrue(board.submit(key,body,'local')['saved'])
+                    mutations=(Path(mate.path)/'mutations.jsonl').read_text().splitlines()
+                    self.assertEqual(len(mutations),1)
+                    self.assertEqual(json.loads(mutations[0])['input'].split('\t')[:2],['docs',value])
+                    self.assertFalse((Path(parent.path)/'mutations.jsonl').exists())
+                    board.stop()
 
     def test_ticket_presentation_uses_the_same_question_when_evidence_expires(self):
-        f=bridge.fm
-        board,parent,mate,key,received=delegated_fixture(self.root/'presentation-expiry')
+        board,parent,mate,key=delegated_fixture(self.root/'presentation-expiry')
+        self.addCleanup(board.stop)
         board.i18n=bridge.Localization('es');board.t=board.i18n.t
-        with patch.object(f,'_bearings_ttl',return_value=60.0), \
-                patch.object(f.time,'time',return_value=received+59.0) as clock, \
-                patch.object(f,'bearings_snapshot',side_effect=AssertionError('unexpected snapshot walk')):
-            guard=board.guarded_intake
-
-            def expire_during_guard(home):
-                result=guard(home)
-                clock.return_value=received+61.0
-                return result
-
-            with patch.object(board,'guarded_intake',side_effect=expire_during_guard):
-                call=board.ticket(key)['call']
-            self.assertEqual([o['value'] for o in call['options']],['scope','wait','reconcile'])
-            self.assertEqual([o['value'] for o in call['presentation']['options']],['scope','wait','reconcile'])
-            self.assertEqual(call['presentation']['options'][:-1],call['options'][:-1])
-            self.assertEqual(call['presentation']['options'][-1]['label'],'Revisar otra vez primero')
-            expired=board.ticket(key)['call']
-            self.assertEqual([o['value'] for o in expired['options']],['reconcile'])
-            self.assertEqual([o['value'] for o in expired['presentation']['options']],['reconcile'])
-            self.assertFalse((Path(mate.path)/'mutations.jsonl').exists())
+        guard=board.guarded_intake
+        source=board.projection.sources[bridge.home_id(parent)]
+        def fail_during_guard(home):
+            result=guard(home)
+            with board.projection.condition:
+                source['available']=False;board.projection.publish()
+            return result
+        with patch.object(board,'guarded_intake',side_effect=fail_during_guard):
+            call=board.ticket(key)['call']
+        self.assertEqual([o['value'] for o in call['options']],['scope','wait','reconcile'])
+        self.assertEqual([o['value'] for o in call['presentation']['options']],['scope','wait','reconcile'])
+        self.assertEqual(call['presentation']['options'][:-1],call['options'][:-1])
+        self.assertEqual(call['presentation']['options'][-1]['label'],'Revisar otra vez primero')
+        expired=board.ticket(key)['call']
+        self.assertEqual([o['value'] for o in expired['options']],['reconcile'])
+        self.assertEqual([o['value'] for o in expired['presentation']['options']],['reconcile'])
+        self.assertFalse((Path(mate.path)/'mutations.jsonl').exists())
 
     def test_history_demo_research_summary_report_and_safe_paths(self):
         self.init();status,data=self.req('/api/history?q=DEMO')
@@ -1025,19 +1016,19 @@ class WebTests(unittest.TestCase):
             release.set();warm.join(5)
         self.assertEqual(self.board.ticket(key)['call']['occurrence'],call['occurrence'])
 
-    def test_read_ahead_keeps_the_intake_check_until_its_script_changes_and_answers_ask_again(self):
+    def test_intake_capability_is_rechecked_on_open_and_on_answer(self):
         key=next(c for c in self.init()['columns'] if c['id']=='captains_call')['cards'][0]['key']
         script=Path(self.home.path)/'bin/fm-captain-hold.sh'
         self.board.intake_ready(self.home);before=self.calls('capabilities')
         for _ in range(2):self.assertEqual(self.board.ticket(key)['call']['error'],'')
-        self.assertEqual(self.calls('capabilities'),before)
+        self.assertEqual(self.calls('capabilities'),before+2)
         # An answer always asks the live intake, and a reinstalled script is asked again.
         with patch.object(self.board,'guarded_intake',return_value=False) as live:
             with self.assertRaises(bridge.Refusal):
                 self.board.submit(key,dict(value='scope',note='',occurrence=self.board.ticket(key)['call']['occurrence'],request_id='g'*32),'local')
-            self.assertEqual(live.call_count,1);self.assertFalse((Path(self.home.path)/'mutations.jsonl').exists())
+            self.assertEqual(live.call_count,2);self.assertFalse((Path(self.home.path)/'mutations.jsonl').exists())
             script.write_text(script.read_text()+'# reinstalled\n')
-            self.assertTrue(self.board.ticket(key)['call']['error']);self.assertEqual(live.call_count,2)
+            self.assertTrue(self.board.ticket(key)['call']['error']);self.assertEqual(live.call_count,3)
 
     def test_failed_confirmation_requires_live_open_until_the_row_changes(self):
         root=self.markdown();key=next(c for c in self.init()['columns'] if c['id']=='captains_call')['cards'][0]['key']

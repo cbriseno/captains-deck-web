@@ -118,7 +118,10 @@ class EventProjection:
                         break
                     event = json.loads(line)
                     if event.get('home') == reader['root']:
-                        changed |= reader['model'].apply(event)
+                        applied = reader['model'].apply(event)
+                        if applied and event.get('event') == 'task.status':
+                            reader.setdefault('event_status', set()).add(event.get('task'))
+                        changed |= applied
                     reader['offset'] += len(line)
                 return changed
         except FileNotFoundError:
@@ -170,6 +173,14 @@ class EventProjection:
                     if item['kind'] != 'task':
                         continue
                     task = item['task']
+                    owner = model.rows[task].get('owner') or '(main)'
+                    if (item.get('question') or {}).get('open') and owner != '(main)':
+                        target = next((h for h in self.homes if h.mate_id == owner or h.label == owner), None)
+                        target_source = self.sources.get(self.board.home_identity(target)) if target else None
+                        if target is not home and target_source and target_source.get('available') and any(
+                            n.get('task') == task and (n.get('question') or {}).get('open')
+                            for n in target_source['snapshot'].get('nodes', [])):
+                            continue
                     human = model.presentations[task]['presentation']
                     bucket = ('captains_call' if (item.get('question') or {}).get('open') else
                               'landed' if item['state'] == 'done' else 'underway' if item['state'] in ('active', 'stopping') else 'charted')

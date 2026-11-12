@@ -1404,7 +1404,12 @@ def task_report_text(text: str) -> str:
 
 def read_task_report(path: str, spawn_epoch: float = 0, *, durable: bool = False) -> tuple[str, str, int]:
     """Select a task declaration, preserving its age and resolution boundary."""
-    for line in reversed(_status_lines(path)):
+    return parse_task_report(_status_lines(path), spawn_epoch, durable=durable)
+
+
+def parse_task_report(lines, spawn_epoch: float = 0, *, durable: bool = False) -> tuple[str, str, int]:
+    """Apply the same declaration rules to an event-sourced status tail."""
+    for line in reversed(lines):
         match = re.match(
             r"^([a-zA-Z_-]+)((?:\s+\[(?:at|key|resolve-key)=[^\]]*\])*)\s*:\s*(.*)$",
             line,

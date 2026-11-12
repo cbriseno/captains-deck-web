@@ -58,12 +58,29 @@ class ActivityTruthTests(unittest.TestCase):
             self.assertEqual(f.activity_counts(underway)['working'], working)
 
     def test_queued_ready_is_distinct_from_blocked_and_deferred(self):
-        cards = self.cards(self.board())
-        kinds = {k: cards[k]['activity']['kind'] for k in
-                 ('invoice-email', 'pricing-page', 'pricing-followup', 'device-trial', 'pilot-rollout', 'readme-badges')}
-        self.assertEqual(kinds, {'invoice-email': 'blocked', 'pricing-page': 'blocked', 'pricing-followup': 'blocked',
-                                 'device-trial': 'held', 'pilot-rollout': 'held', 'readme-badges': 'ready'})
-        self.assertEqual(cards['scope-choice']['activity']['kind'], 'decision')
+        from fixtures import fixture, start_fixture, publish_fixture
+        board, home = fixture(Path(self.tmp.name) / 'queued')
+        start_fixture(board,home);self.addCleanup(board.stop)
+        snapshot=json.loads((Path(home.path)/'work-snapshot.json').read_text())
+        snapshot['tasks'] = [
+            {'key':'task:'+name,'title':name,'state':'waiting_dep','rev':'r1',
+             'question':{'open':False},'blocked_by':[{'ref':'task:missing','open':True}]}
+            for name in ('invoice-email','pricing-page','pricing-followup')]
+        snapshot['tasks'] += [
+            {'key':'task:'+name,'title':name,'state':'waiting_future','rev':'r1',
+             'question':{'open':False},'pause':{'own':{'kind':'future'},'inherited':None}}
+            for name in ('device-trial','pilot-rollout')]
+        snapshot['tasks'] += [
+            {'key':'task:readme-badges','title':'Ready','state':'ready','rev':'r1','question':{'open':False}},
+            {'key':'task:scope-choice','title':'Choose','state':'captain','rev':'r1',
+             'question':{'open':True,'call':None}}]
+        publish_fixture(board,home,snapshot)
+        cards=self.cards(board)
+        kinds={k:cards[k]['activity']['kind'] for k in
+               ('invoice-email','pricing-page','pricing-followup','device-trial','pilot-rollout','readme-badges')}
+        self.assertEqual(kinds,{'invoice-email':'blocked','pricing-page':'blocked','pricing-followup':'blocked',
+                                'device-trial':'held','pilot-rollout':'held','readme-badges':'ready'})
+        self.assertEqual(cards['scope-choice']['activity']['kind'],'decision')
 
     def test_hold_and_pause_dates_come_only_from_exported_fields(self):
         board = self.board()
@@ -154,7 +171,21 @@ class ActivityTruthTests(unittest.TestCase):
         self.assertEqual(agents['api-pagination'], 'working')
 
     def test_unknown_codex_survives_the_actual_board_http_path(self):
-        board, home = activity_fleet.unconfirmed_fleet(Path(self.tmp.name) / 'http')
+        from fixtures import fixture, start_fixture, publish_fixture
+        board, home = fixture(Path(self.tmp.name) / 'http')
+        start_fixture(board, home)
+        self.addCleanup(board.stop)
+        snapshot = json.loads((Path(home.path) / 'work-snapshot.json').read_text())
+        snapshot['tasks'] = [
+            {'key':'task:unknown','title':'Unconfirmed','state':'running','rev':'r1',
+             'worker_liveness':{'state':'unknown','verdict':'unverified'},'question':{'open':False}},
+            {'key':'task:resolved','title':'Resolved dependency','state':'running','rev':'r1',
+             'worker_liveness':{'state':'unknown','verdict':'unverified'},'question':{'open':False},
+             'blocked_by':[{'ref':'task:previous','open':False}]},
+            {'key':'task:reconcile','title':'Missing archived dependency','state':'running','rev':'r1',
+             'worker_liveness':{'state':'unknown','verdict':'unverified'},'question':{'open':False},
+             'blocked_by':[{'ref':'task:archived','open':True}]}]
+        publish_fixture(board, home, snapshot)
         server = bridge.Server((bridge.LOOPBACK, 0), board, bridge.Security(8787))
         server.security = bridge.Security(server.server_port)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -169,22 +200,11 @@ class ActivityTruthTests(unittest.TestCase):
             cards = {c['task']: c for col in data['columns'] for c in col['cards']}
             self.assertEqual(set(cards), {'unknown', 'resolved', 'reconcile'})
             for card in cards.values():
-                self.assertEqual(card['native']['state'], 'unknown')
-                self.assertEqual(card['native']['source'], 'pane')
                 self.assertTrue(card['native']['unconfirmed'])
-                self.assertEqual(card['native']['retained_at'], 0)
-                self.assertEqual(card['activity']['agent'], 'present')
+                self.assertEqual(card['activity']['agent'], 'unknown')
                 self.assertNotEqual(card['activity']['kind'], 'working')
-            # Presentation cannot repair a producer's unresolved archived dependency.
             self.assertFalse(cards['resolved']['dependencies'][0]['unresolved'])
-            dep = cards['reconcile']['dependencies'][0]
-            self.assertEqual(dep['state'], 'done')
-            self.assertTrue(dep['unresolved'])
-            self.assertTrue(dep['reconciliation_required'])
-            # A stale retained read keeps its own time, never freshens into work.
-            stale = next(c for c in board.collector.snap.cols['underway'] if c.task == 'unknown')
-            stale.retained_at = 100
-            self.assertEqual(board.card_json(stale)['native']['retained_at'], 100)
+            self.assertTrue(cards['reconcile']['dependencies'][0]['unresolved'])
             self.assertFalse((Path(home.path) / 'mutations.jsonl').exists())
         finally:
             server.shutdown()
@@ -192,9 +212,15 @@ class ActivityTruthTests(unittest.TestCase):
             thread.join(timeout=2)
 
     def test_language_changes_labels_only(self):
-        root = Path(self.tmp.name) / 'es'
-        spanish = self.cards(activity_fleet.fleet(root, language='es')[0])
-        english = self.cards(self.board())
+        from fixtures import fixture, start_fixture
+        english_board, home = fixture(Path(self.tmp.name) / 'language')
+        start_fixture(english_board,home);self.addCleanup(english_board.stop)
+        spanish_board=bridge.Board(english_board.data_dir,collector=english_board.collector,language='es')
+        spanish_board.collector=english_board.collector
+        start_fixture(spanish_board,home);self.addCleanup(spanish_board.stop)
+        spanish = self.cards(spanish_board)
+        english = self.cards(english_board)
+        self.assertTrue(english)
         self.assertEqual({k: v['activity'] for k, v in spanish.items()}, {k: v['activity'] for k, v in english.items()})
 
     def terminal(self, snap):

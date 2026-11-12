@@ -7,7 +7,7 @@ browser's view. Mutations go only through the owning home's public intakes; the
 one message the bridge sends is the Deck's fixed pointer to a recorded answer.
 """
 from __future__ import annotations
-from datetime import datetime
+from datetime import date, datetime
 
 import argparse
 import copy
@@ -468,11 +468,24 @@ class Board:
         call = question.get('call') or {}
         is_action = call.get('kind') == 'action'
         coordination = not question.get('open') and item.get('phase') == 'human'
-        row = self.projection.readers[identity]['model'].rows[task]
-        model = self.projection.readers[identity]['model']
+        reader = self.projection.readers[identity]
+        row = reader['model'].rows[task]
+        model = reader['model']
         turn = model.activity.get(task, {})
-        status_state = latest_status_state(getattr(model, 'status', {}).get(task, ''))
+        status = getattr(model, 'status', {}).get(task, '')
+        status_state = latest_status_state(status)
+        report_state, report_text, report_at = fm.parse_task_report(status.splitlines(), durable=True)
+        if task in reader.get('event_status', set()):
+            report_at = 0  # task.status carries capture time, not the declaration time.
         worker = (item.get('raw') or {}).get('worker_liveness') or {}
+        raw_pause = item['raw'].get('pause') or {}
+        hold = raw_pause.get('condition') or raw_pause.get('own') or {}
+        try:
+            until = date.fromisoformat(hold.get('until') or '') if hold.get('kind') == 'future' else None
+        except (TypeError, ValueError):
+            until = None
+        deferred = bool(until and until > date.today())
+        blocked = any(d.get('open') is not False for d in item['raw'].get('blocked_by', []))
         closure = item.get('closure') or human.get('closure') or {}
         cancelled = closure.get('kind') == 'cancelled'
         delivery_available = not cancelled and self.delivery_record(owner, task) is not None
@@ -481,6 +494,9 @@ class Board:
         status_stops_working = active_working and status_state in ('done', 'failed', 'paused', 'parked')
         kind = ('cancelled' if cancelled else 'decision' if question.get('open') else 'delivered' if item['state'] == 'done' else
                 'technical' if coordination else
+                'blocked' if blocked and not active_working else
+                'deferred' if deferred else
+                'held' if hold.get('kind') == 'future' else
                 'paused' if item['state'] in ('paused', 'stopping') or status_stops_working and status_state in ('paused', 'parked') else
                 'idle' if status_stops_working and status_state in ('done', 'failed') else
                 'working' if active_working else
@@ -509,10 +525,13 @@ class Board:
             delivery_available=delivery_available, closure=closure,
             presentation=dict(status=None, summary=None) if cancelled else presentation,
             context=dict(phase='human' if question.get('open') else 'technical' if coordination else
-                         'integration' if item.get('phase') == 'integration' else 'unknown'),
+                         'integration' if item.get('phase') == 'integration' else
+                         'reported' if report_state == 'done' and not active_working else
+                         'waiting' if report_state in ('paused', 'parked', 'blocked') and not active_working else 'unknown'),
             activity=dict(kind=kind, agent='none' if cancelled or worker.get('state') == 'dead' else
                           'working' if kind == 'working' and worker.get('state') == 'alive' else
-                          'present' if worker.get('state') == 'alive' else 'unknown', turn={} if cancelled else turn),
+                          'present' if worker.get('state') == 'alive' else 'unknown', turn={} if cancelled else turn,
+                          **({'until': until.isoformat()} if kind == 'deferred' else {})),
             dependencies=dependencies, native=dict(unconfirmed=turn.get('state') not in ('busy', 'idle'), source='agent.activity'),
             time=self.projected_time((question.get('asked') if question.get('open') else None) or item['updated_at']), question=(question.get('call') or {}).get('question', ''),
             answered=answered, attention_kind=('action' if is_action else 'question') if question.get('open') else None,
@@ -520,7 +539,8 @@ class Board:
             inline_call=dict(options=[dict(o, value=o['id']) for o in call.get('options', [])],
                 identity=identity_value, recommend=call.get('recommended'), attachments=self.file_answers_ready(owner),
                 error='' if source.get('answerable') else self.t('This Firstmate can’t take answers from the web yet. Update Firstmate or answer there.')) if question.get('open') and not is_action else None,
-            report={}, supervisor={})
+            report=dict(state=report_state, text=report_text,
+                        time=self.event_json(fm.CardTime('Updated', report_at or None, 'task status declaration [at]'))) if report_state else {}, supervisor={})
 
     def event_view(self, identity):
         self.home(identity)
@@ -609,7 +629,7 @@ class Board:
                 if state is True or (state is False and column == 'captains_call'):
                     continue
                 cols[column].append(card)
-        cols['captains_call'].extend(calls)
+        cols['captains_call'].extend(fm._dedupe_captains_call(calls))
         return cols
 
     def card(self, key):
@@ -625,7 +645,11 @@ class Board:
                         if digest(home_id(home), row['id'], bucket)[:40] == key:
                             entry = dict(row, name=row['title'], flow=dict(presentation=reader['model'].presentations[row['id']]['presentation']))
                             built, _ = fm.make_cards(home, {collection:[entry]}, {}, {}, {}, homes=self.homes())
-                            matches.extend(built[bucket])
+                            for candidate in built[bucket]:
+                                status = getattr(reader['model'], 'status', {}).get(row['id'], '')
+                                state, text, at = fm.parse_task_report(status.splitlines(), durable=True)
+                                candidate.declaration = (state, text, 0 if row['id'] in reader.get('event_status', set()) else at)
+                                matches.append(candidate)
         if len(matches) != 1:
             raise Refusal('This task changed or is no longer in view. Refresh the board.', 404)
         return matches[0]
@@ -1039,6 +1063,18 @@ class Board:
         # The confirmed owning home is the active context, never aggregate All.
         snap = fm.Snapshot()
         snap.homes = self.homes()
+        with self.projection.condition:
+            for identity, source in self.projection.sources.items():
+                if not source.get('available') or self.projection.error:
+                    continue
+                reader = self.projection.readers.get(identity)
+                if not reader:
+                    continue
+                rows = reader['model'].rows
+                calls = [{'id': node['task'], 'owner': rows.get(node['task'], {}).get('owner') or '(main)'}
+                         for node in source['snapshot'].get('nodes', [])
+                         if node.get('kind') == 'task' and (node.get('question') or {}).get('open')]
+                snap.bearings[fm.delivery_home_identity(self.home(identity))] = ({'decisions_open': calls}, time.time())
         content = fm.decision_card_content(card, snap.homes, home, translate=self.t, bearings=snap.bearings)
         if os.path.realpath(content['home_path']) != fm.delivery_home_identity(home):
             raise Refusal('This question belongs to a different crew than expected. Refresh the board.')
@@ -1110,10 +1146,7 @@ class Board:
         kept = self.capabilities.get(home_id(home))
         if not fresh and mark and kept and kept[0] == mark:
             return kept[1]
-        ready = self.guarded_intake(home)
-        if mark:
-            self.capabilities[home_id(home)] = (mark, ready)
-        return ready
+        return self.guarded_intake(home)
 
     def guarded_intake(self, home):
         try:

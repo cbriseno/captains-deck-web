@@ -8,11 +8,16 @@ class Projection:
                      body=row.get('body', ''), closed=row.get('closed')) for row in self.value['tasks']}
         self.presentations = {task: {'presentation': row.get('presentation', {})} for task, row in self.rows.items()}
         self.history = {task for task, row in self.rows.items() if row['state'] == 'done'}
-        self.activity, self.calls, self.messages = {}, {}, []
+        self.activity, self.status, self.calls, self.messages = {}, {}, {}, []
 
     def apply(self, event):
         if event.get('event') == 'agent.activity':
             self.activity[event['task']] = event['value']
+            return True
+        if event.get('event') == 'task.status':
+            task = event['task']
+            self.status[task] = (self.status.get(task, '') + '\n' + (event.get('state') or '') +
+                                 ' [at=' + str(event['ts']) + '] [key=' + str(event.get('key') or '') + ']: ' + event.get('text', ''))
             return True
         if event.get('event') != 'fixture.snapshot':
             return False

@@ -19,7 +19,7 @@ class EventProjectionTests(unittest.TestCase):
         self.home = SimpleNamespace(path=str(self.root), label='Test')
         self.board = bridge.Board.__new__(bridge.Board)
         self.board.home = lambda identity: self.home
-        self.board.t = lambda text: text
+        self.board.t = lambda text, **values: text.format(**values)
         self.board.file_answers_ready = lambda home: False
         self.model = SimpleNamespace(rows={'task': {}}, activity={})
         self.board.projection = EventProjection(self.board, [self.home])
@@ -86,6 +86,15 @@ class EventProjectionTests(unittest.TestCase):
         self.item['raw']['worker_liveness']['state'] = 'dead'
         self.assertEqual(self.card()['activity']['agent'], 'none')
         self.assertNotEqual(self.card()['activity']['kind'], 'working')
+
+    def test_dated_hold_uses_only_the_structured_owner_date(self):
+        self.item['state'] = 'waiting'
+        self.item['raw']['pause'] = {'own': {'kind': 'future', 'until': '2999-01-01'}, 'inherited': None}
+        activity = self.card()['activity']
+        self.assertEqual((activity['kind'], activity['until']), ('deferred', '2999-01-01'))
+        for value in ('2020-01-01', 'not-a-date', None):
+            self.item['raw']['pause']['own']['until'] = value
+            self.assertNotEqual(self.card()['activity'].get('kind'), 'deferred')
 
     def test_terminal_or_paused_status_tail_suppresses_active_work_cue_only(self):
         self.model.activity['task'] = dict(state='busy')
