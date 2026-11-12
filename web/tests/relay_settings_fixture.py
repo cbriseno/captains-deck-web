@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
-from fixtures import fixture, bridge
+from fixtures import fixture, start_fixture, bridge
 from relay_fixture import extension_fixture
 from relay_settings import RelaySettings
 from test_deck_control import owner
@@ -18,7 +18,8 @@ base=Path(home.path);project=base/'projects/demo';project.mkdir(parents=True)
 responses=owner(home)
 responses['snapshot'].update(projects=[{'key':'project:demo','label':'Demo project','repository_project':'project:demo','rev':'r1'}],
     tasks=[{'key':'task:pending','title':'Pending task','state':'ready','project':'project:demo','repository_project':'project:demo','rev':'r1'}],sigue=['task:pending'])
-(base/'work-responses.json').write_text(json.dumps(responses))
+(base/'work-snapshot.json').write_text(json.dumps(responses['snapshot']))
+start_fixture(board,home)
 if os.environ.get('CD_TEST_REAL_EXTENSION')=='1':
     extension=Path(os.environ['CD_TEST_EXTENSIONS_ROOT'])
     (base/'config').mkdir(exist_ok=True)
@@ -31,4 +32,4 @@ board.relay_settings=RelaySettings(board.child_env,str(extension),
 server=bridge.Server(('127.0.0.1',0),board,bridge.Security(8787));server.security=bridge.Security(server.server_port)
 print('Fixture at http://127.0.0.1:'+str(server.server_port),flush=True)
 try:server.serve_forever()
-finally:server.server_close()
+finally:server.server_close();board.stop()

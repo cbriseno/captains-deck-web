@@ -144,6 +144,6 @@ window.createRelaySettings = function ({t, node:n, button:b, api, state}) {
   });
   homes.addEventListener('change',()=>{planningScope='home';load();});
   $('relay-settings-close').addEventListener('click',()=>dialog.close());
-  dialog.addEventListener('close',()=>{generation++;$('relay-settings-open').focus();});
+  dialog.addEventListener('close',()=>{generation++;$('settings-open').focus();});
   return {render};
 };

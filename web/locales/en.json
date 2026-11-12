@@ -344,6 +344,7 @@
   " · needs a check": " · needs a check",
   "You’re offline. Your draft is safe. Check the question again once you’re back.": "You’re offline. Your draft is safe. Check the question again once you’re back.",
   "Couldn’t refresh one source. Some cards may be out of date.": "Couldn’t refresh one source. Some cards may be out of date.",
+  "Missing backlog data/backlog.md; create it with In flight, Queued and Done sections before opening the board.": "Missing backlog data/backlog.md; create it with In flight, Queued and Done sections before opening the board.",
   "Nothing needs you right now.": "Nothing needs you right now.",
   "Nothing finished recently. Try History for older work.": "Nothing finished recently. Try History for older work.",
   "Nothing here.": "Nothing here.",
