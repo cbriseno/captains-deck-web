@@ -1,5 +1,6 @@
 """Static synthetic API for detail navigation; no owner or personal data."""
 import json
+import os
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import sys
@@ -14,6 +15,8 @@ tasks = [dict(key='task:origin', title='Origin task', state='running',
               blocked_by=[dict(ref='task:destination', open=False)]),
          dict(key='task:destination', title='Destination task', state='done',
               question=dict(open=False, call=dict(question='Closed question')))]
+if os.environ.get('CD_LARGE_FOCUS_FIXTURE'):
+    tasks[0]['blocked_by'] = [dict(ref=f'task:finished-{i}', open=False) for i in range(100)]
 tasks[1].pop('question')
 tasks[1]['outcome'] = dict(role='final', review='reviewed')
 tasks.extend(dict(key=f'task:finished-{i}', title=f'Finished task {i}', state='done',
