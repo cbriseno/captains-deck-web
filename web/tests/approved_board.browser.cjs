@@ -124,3 +124,4 @@ test('approved Deck: hierarchy, controls, receipts, inline questions, history, t
     finally {await new Promise(resolve=>child.exitCode!==null?resolve():child.once('exit',resolve));fs.rmSync(proof,{recursive:true,force:true});}
   }
 });
+require('./mac_regressions.browser.cjs');
