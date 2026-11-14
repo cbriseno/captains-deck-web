@@ -665,7 +665,7 @@ window.createDeckUI = function (host) {
   // Approved demo situation(): «En curso» only while a task has a live agent.
   // Queued (ready), held or unconfirmed work is waiting, never in progress.
   function requestState(r){if(ownPause(r)||['pending','paused','queued','unconfirmed','failed'].includes(r.pause?.state))return 'paused';return r.tasks.some(x=>window.DeckState.displayState(x)==='active')?'now':r.tasks.some(x=>['stopping','paused'].includes(window.DeckState.displayState(x)))?'paused':r.calls.some(x=>!x.answered)||r.tasks.some(x=>x.state!=='done')?'waiting':'done';}
-  function orderedRequests(rows){return [...rows].sort(ui.order==='mine'?(a,b)=>a.home.localeCompare(b.home)||(a.manual??Infinity)-(b.manual??Infinity): (a,b)=>activityEpoch(b.updated_at)-activityEpoch(a.updated_at));}
+  function orderedRequests(rows){return [...rows].sort(ui.order==='mine'?(a,b)=>a.home.localeCompare(b.home)||(a.manual??Infinity)-(b.manual??Infinity): (a,b)=>activityEpoch(b.updated_at)-activityEpoch(a.updated_at)||(a.id<b.id?-1:a.id>b.id?1:0));}
   function jumpAttention(x){
     if(ui.view!=='board')host.setView('board');
     if(ui.needsClosed){ui.needsClosed=false;save('deck-needs-closed',false);render(true,'filter');}
@@ -816,6 +816,14 @@ window.createDeckUI = function (host) {
     const nav=$('columns-nav');nav.className='request-tools';nav.removeAttribute('role');
     for(const [value,text]of [['recent','Recent first'],['mine','My order']]){const btn=b(t(text),()=>{ui.order=value;save('deck-request-sort',value);render(true,'filter');});btn.setAttribute('aria-pressed',String(ui.order===value));nav.append(btn);}
     const rows=orderedRequests(requestRows(model.nodes.filter(x=>x.kind==='task')).filter(r=>r.tasks.some(x=>tasks.some(y=>y.id===x.id))||r.calls.some(c=>asks.some(q=>q.key===c.key)||act.some(q=>q.key===c.key)))),allOpen=rows.length&&rows.every(r=>ui.expanded.has(r.id));nav.append(b(t(allOpen?'Collapse requests':'Expand requests'),()=>{for(const r of rows)allOpen?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');}));
+    const previous=ui.renderedOrder||new Map(), current=new Map();
+    for(const [state] of [['now'],['waiting'],['paused'],['done']]){
+      const peers=rows.filter(r=>requestState(r)===state), shown=ui.groups.has(state)?peers.filter(requestHasDetail):peers;
+      shown.forEach((r,index)=>{const key=activityEpoch(r.updated_at), source=[...r.tasks].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0).find(x=>activityEpoch(x.updated_at)===key)?.updated_at?.source||'unknown';
+        const entry={key,index:index+1,group:state};current.set(r.id,entry);
+        window.DeckTrace?.order(r.id,app.board.cursor,previous.get(r.id),entry,source);});
+    }
+    ui.renderedOrder=current;
     peersAll=rows;ui.turns=new Map();document.querySelectorAll('.order-note').forEach(x=>x.remove());if(ui.order==='mine'){let k=0;for(const source of model.sources||[])for(const key of source.snapshot?.sigue||[]){const row=rows.find(r=>r.home===source.home&&r.tasks.some(x=>x.owner_id===key));if(row&&!ui.turns.has(row.id))ui.turns.set(row.id,++k);}
       nav.after(n('p','order-note',t('Firstmate starts at the top: it dispatches first whatever is ready highest in your order. If room runs out, it pauses only the lowest running request, at its safe point, and only to make way for one you put above it.')));}
     const side=board.querySelector(':scope > .attention-list')||n('section','attention-list'),reviews=tasks.filter(reviewNeeded);side.setAttribute('aria-label',t('Needs you'));const needsToggle=b('',()=>{ui.needsClosed=!ui.needsClosed;save('deck-needs-closed',ui.needsClosed);render(true,'filter');});add(needsToggle,n('span','fold'),n('span','dot'),n('span','',t('Needs you')));needsToggle.dataset.control='needs-fold';needsToggle.setAttribute('aria-expanded',String(!ui.needsClosed));

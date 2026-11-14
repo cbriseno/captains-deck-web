@@ -56,3 +56,19 @@ class TraceTests(unittest.TestCase):
             self.assertEqual(len(records), 1)
             self.assertEqual({k: records[0][k] for k in event}, event)
             self.assertEqual(set(records[0]), {'t', 'c', 'v', 'r'} | set(event))
+
+    def test_order_trace_survives_export_with_anonymous_identity_and_cursor(self):
+        bridge.TRACE_TIMES.clear()
+        self.init()
+        event = {'e': 'request.order', 'task': '1', 'cursor': '2', 'old_key': 100, 'new_key': 200,
+                 'old_position': 3, 'new_position': 1, 'old_group': 'waiting', 'new_group': 'waiting',
+                 'order_source': 'fleet.entity:task.changed', 'age': 0}
+        with patch.dict(os.environ, FM_DIAGNOSTICS_HOME=str(self.root / 'diagnostics')):
+            self.assertEqual(self.req('/api/diagnostics/trace', {'events': [event], 'exporting': False})[0], 200)
+            path = bridge.diagnostics.export(['deck'], self.root / 'downloads')
+            import zipfile
+            with zipfile.ZipFile(path) as archive:
+                row = json.loads(archive.read('events.jsonl').splitlines()[0])
+            self.assertTrue(row['task'].startswith('t-') and row['cursor'].startswith('t-'))
+            for key in ('old_key', 'new_key', 'old_position', 'new_position', 'order_source'):
+                self.assertEqual(row[key], event[key])

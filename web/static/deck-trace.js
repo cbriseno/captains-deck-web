@@ -38,6 +38,10 @@ window.DeckTrace = (() => {
     async use(action, target) { try { if (send) await send([{e:'ui.use', action, target, age:0}], false); } catch { /* Usage must not interrupt the UI. */ } },
     get response() {return response;}, setResponse(value) {response=value; if(value==='receipt')setTimeout(()=>{if(focusSince||document.querySelector('.deck-motion-layer .qcard'))anomaly();},3000);}, setSender(fn) {send=fn;}, counts() {const c={};for(const x of events)c[x.e]=(c[x.e]||0)+1;return c;},
     focus(active) {if(active&&!focusSince){focusSince=now();add('overlay.show',{overlay:'focus',visible_s:0,response});}else if(!active&&focusSince){add('overlay.hide',{overlay:'focus',visible_s:Math.round((now()-focusSince)/1000),response});focusSince=0;}},
+    order(key, cursor, before, after, source) {
+      const sources=['presentation','status','work.control','fleet.entity:task.changed', 'fleet.entity:task.presentation', 'fleet.entity:task.review', 'fleet.entity:task.completion', 'fleet.entity:call.application', 'fleet.entity:work.structure', 'fleet.entity:work.control', 'fleet.entity:work.aliases','fleet.entity:task.dispatched','fleet.entity:task.cleaned_up','fleet.entity:call.opened','fleet.entity:call.resolved'];
+      add('request.order',{task:id(key),cursor:id(String(cursor||'')),old_key:Math.round((before?.key||0)*1000),new_key:Math.round(after.key*1000),old_position:before?.index||0,new_position:after.index,old_group:before?.group||'none',new_group:after.group,order_source:sources.includes(source)?source:'unknown'});
+    },
     mismatch(key, from, to) {add('reconcile.mismatch',{task:id(key),from_column:from,to_column:to});anomaly();},
     move(key, from, to, cause) {
       const task=id(key); add('card.move',{task,from_column:from,to_column:to,move_cause:cause});

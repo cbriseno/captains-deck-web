@@ -1573,7 +1573,7 @@ class Handler(BaseHTTPRequestHandler):
                 data = {'preview': diagnostics.export(['deck'], preview=True)}
             elif unsafe and path == '/api/diagnostics/trace':
                 events = body.get('events')
-                allowed = {'ui.use', 'card.move', 'card.render', 'anim.start', 'anim.end', 'anim.cancel', 'overlay.show', 'overlay.hide', 'layout', 'reconcile.mismatch'}
+                allowed = {'request.order', 'ui.use', 'card.move', 'card.render', 'anim.start', 'anim.end', 'anim.cancel', 'overlay.show', 'overlay.hide', 'layout', 'reconcile.mismatch'}
                 if set(body) != {'events', 'exporting'} or type(body['exporting']) is not bool or not isinstance(events, list) or len(events) > 100:
                     raise Refusal('Invalid trace.', 400)
                 clean = []
@@ -1584,7 +1584,7 @@ class Handler(BaseHTTPRequestHandler):
                     if set(event) != {'e'} | set(schema):
                         raise Refusal('Invalid trace.', 400)
                     fields = {k: diagnostics._clean(k, kind, event[k], b'validation') for k, kind in schema.items()}
-                    if any(v is None for v in fields.values()) or event.get('age', 0) > 600 or ('task' in event and (not isinstance(event['task'], str) or not event['task'].isdigit() or len(event['task']) > 10)):
+                    if any(v is None for v in fields.values()) or event.get('age', 0) > 600 or any(not isinstance(event[k], str) or not event[k].isdigit() or len(event[k]) > 10 for k in ('task', 'cursor') if k in event):
                         raise Refusal('Invalid trace.', 400)
                     clean.append((event['e'], {k: event[k] for k in schema}))
                 with DIAG_LOCK:

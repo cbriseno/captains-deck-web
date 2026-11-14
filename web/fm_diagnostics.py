@@ -21,6 +21,7 @@ PRODUCT_VERSION = "0.7.0"
 EVENTS = {
     "ui.use": {"action": "enum", "target": "enum", "age": "count"},
     "card.move": {"task":"id", "from_column":"enum", "to_column":"enum", "move_cause":"enum", "age":"count"},
+    "request.order": {"task":"id", "cursor":"id", "old_key":"count", "new_key":"count", "old_position":"count", "new_position":"count", "old_group":"enum", "new_group":"enum", "order_source":"enum", "age":"count"},
     "card.render": {"duration_ms":"measure", "age":"count"},
     "anim.start": {"animation":"enum", "duration_ms":"measure", "age":"count"},
     "anim.end": {"animation":"enum", "duration_ms":"measure", "age":"count"},
@@ -54,6 +55,9 @@ TOKEN = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,39}\Z')
 ENUMS = {
     "action": {"open", "view", "search", "refresh", "select", "change", "export"},
     "target": {"page", "board", "projects", "history", "task", "delivery", "settings", "space", "appearance", "diagnostics"},
+    "old_group": {"none", "now", "waiting", "paused", "done"},
+    "new_group": {"now", "waiting", "paused", "done"},
+    "order_source": {"unknown", "presentation", "status", "work.control", "fleet.entity:task.changed", "fleet.entity:task.presentation", "fleet.entity:task.review", "fleet.entity:task.completion", "fleet.entity:call.application", "fleet.entity:work.structure", "fleet.entity:work.control", "fleet.entity:work.aliases", "fleet.entity:task.dispatched", "fleet.entity:task.cleaned_up", "fleet.entity:call.opened", "fleet.entity:call.resolved"},
     "from_column": {"needs", "now", "waiting", "paused", "done"},
     "to_column": {"needs", "now", "waiting", "paused", "done"},
     "move_cause": {"snapshot", "response", "optimistic"},
