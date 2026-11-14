@@ -508,7 +508,7 @@ html[data-deck-hidden=true] .request-signal::before,html[data-deck-hidden=true] 
 .request-head:has(.request-handle){grid-template-columns:auto minmax(0,1fr) auto;grid-template-areas:"h t a" ". m m"}
 .request-tasks{display:flex;flex-direction:column;gap:12px;padding:8px 16px 16px 56px;min-width:0}.request-tasks>.more{align-self:flex-start}
 /* Task row as the approved v11b demo .row: dot, title + ID + pills, summary, progress and Pause, «…». */
-.request-tasks>.task-row{display:grid;grid-template-columns:16px minmax(0,1fr) auto 28px;column-gap:8px;align-items:start;padding:8px 8px 8px 12px;border:1px solid var(--line2);border-radius:8px;background:transparent;box-shadow:none}
+.request-tasks>.task-row{display:grid;grid-template-columns:16px minmax(0,1fr) 348px 28px;column-gap:8px;align-items:start;padding:8px 8px 8px 12px;border:1px solid var(--line2);border-radius:8px;background:transparent;box-shadow:none}
 .request-tasks>.task-row:hover{background:var(--hover)}.request-tasks>.task-row[data-open=true]{background:var(--sel)}
 .task-row>.dot{margin-top:7px;justify-self:center;width:7px;height:7px;background:var(--ok)}
 .task-row:not([data-state=active])>.dot{background:transparent;box-shadow:inset 0 0 0 1.5px var(--wait)}
@@ -522,8 +522,9 @@ html[data-deck-hidden=true] .request-signal::before,html[data-deck-hidden=true] 
 .task-row .rtag{display:inline-flex;align-items:center;height:18px;padding:0 6px;border-radius:4px;font-size:11px;font-weight:600;background:color-mix(in srgb,var(--p-medium) 18%,var(--surface));color:var(--p-medium)}
 .task-row .rtag.prio{background:color-mix(in srgb,var(--warn) 18%,var(--surface));color:var(--warn)}
 .task-row .rs{display:block;margin-top:2px;font-size:12px;line-height:1.4;color:var(--muted);overflow-wrap:anywhere}.task-row .rs>span{margin-left:8px}
-.request-tasks .task-row>.rctl{display:inline-flex;flex-wrap:nowrap;align-items:center;gap:12px;align-self:center;justify-self:end;position:static;padding:0;border:0;max-width:none}
-.request-tasks>.task-row{container-type:inline-size}@container (max-width:520px){.request-tasks .task-row>.rctl{grid-column:2;justify-self:start;margin-top:6px}}
+.request-tasks .task-row>.rctl{display:inline-flex;flex-wrap:nowrap;align-items:center;gap:12px;align-self:center;justify-self:stretch;position:static;padding:0;border:0;max-width:none}
+.request-tasks .task-row>.rctl .pause-control{margin-left:auto}
+.request-tasks{container-type:inline-size}@container (max-width:560px){.request-tasks>.task-row{grid-template-columns:16px minmax(0,1fr) 0 28px}.request-tasks .task-row>.rctl{grid-column:2;justify-self:start;margin-top:6px}}
 .task-row .rctl .prog{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:12px;color:var(--muted);white-space:nowrap}.task-row .rctl .prog-phase{display:none}.task-row .rctl>*,.task-row .rctl .prog>*{flex:none}.task-row .rctl .prog-bar{width:64px;height:4px;background:var(--line)}.task-row .rctl .prog-bar i{background:var(--ok)}.task-row .rctl .prog-txt{font-size:12px}
 .task-row .rctl .prog{width:240px;white-space:normal}.task-row .rctl .prog .prog-txt{flex:1;min-width:0}
 .task-row .rctl .pause-control{display:flex;align-items:center;gap:8px}.task-row .rctl .pause-explanation{display:none}
