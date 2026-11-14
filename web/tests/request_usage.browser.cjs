@@ -32,6 +32,10 @@ test('request spend preserves unknowns, captain decisions and narrow layouts',{s
     assert.match(row('run').detail,/Codex.*GPT-6.1 Sol.*esfuerzo alto.*1 sesión/);assert.match(row('run').detail,/No incluye.*coordinación/);
     assert.match(row('isolated').detail,/precio desconocido.*0 tokens/);
     assert.equal(row('decision').line,'Decisión tuya: sin gasto de agente');
-    for(const width of [1970,1440,390]){run('resize',[String(width),'1250']);assert.equal(evaluate('() => document.documentElement.scrollWidth-innerWidth'),0);}
+    for(const width of [1970,1440,390]){
+      run('resize',[String(width),'1250']);
+      const layout=evaluate(`() => {const d=document.querySelector('[data-node$=\":req:run\"] .usage-detail'),s=d.querySelector('summary');d.open=false;const closed=d.getBoundingClientRect().height, target=s.getBoundingClientRect().height;s.click();return {closed,target,open:d.open,content:d.querySelector('.usage-row')?.getBoundingClientRect().height,overflow:document.documentElement.scrollWidth-innerWidth};}`);
+      assert.equal(layout.overflow,0);assert.ok(layout.closed<=44,JSON.stringify(layout));assert.ok(layout.target>=44,JSON.stringify(layout));assert.ok(layout.open&&layout.content>0,JSON.stringify(layout));
+    }
   }finally{run('stop');child.kill('SIGTERM');await new Promise(resolve=>{if(child.exitCode!==null)resolve();else child.once('exit',resolve);});fs.rmSync(proof,{recursive:true,force:true});}
 });
