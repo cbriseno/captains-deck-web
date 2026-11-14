@@ -714,7 +714,8 @@ window.createDeckUI = function (host) {
   function usageUnknown(r){
     const captain=x=>x.reason==='captain'||model.nodes.some(task=>task.home===r.home&&([task.task,task.owner_id].includes(x.task)||task.owner_id==='task:'+x.task)&&(task.raw?.state==='captain'||task.pause?.condition?.kind==='captain'||task.raw?.pause?.own?.kind==='captain'));
     const decisions=(r.usage.unknown||[]).filter(captain);
-    return {decisions,unknown:(r.usage.unknown||[]).filter(x=>!decisions.includes(x)),missing:Math.max(0,(r.usage.tasks?.unknown||0)-decisions.length)};
+    const unknown=(r.usage.unknown||[]).filter(x=>!decisions.includes(x));
+    return {decisions,unknown,missing:Math.max(0,(r.usage.tasks?.unknown||0)-decisions.length,new Set(unknown.map(x=>x.task)).size)};
   }
   function usageChip(r){
     const u=r.usage;if(!u)return n('span','usage-line unknown',t('Cost unavailable'));
