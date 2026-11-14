@@ -702,3 +702,6 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 
 .hold-menu{position:relative}.hold-menu>.card-menu-btn{position:static}.hold-menu>.card-menu{top:100%;right:0;max-width:min(280px,85vw);min-width:min(220px,85vw)}
 .hold-menu .card-menu .pause-explanation{display:block;text-align:left}
+
+.task-row>.task-actions{display:flex;gap:12px;flex-wrap:wrap;grid-column:2/-1;min-width:0}
+.card .task-actions button{flex:0 1 auto;min-height:44px;text-align:left}

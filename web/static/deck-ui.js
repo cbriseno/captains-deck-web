@@ -583,9 +583,13 @@ window.createDeckUI = function (host) {
       x.state!=='done'&&can(x,'priority')&&menuItem('sort',t('Change priority…'),inDetail(c=>c.querySelector('select[name=priority]')?.focus())),
       related&&menuItem('link',t('View relationships'),()=>showRelations(x)),
       can(x,'scope-removal')&&n('hr'),can(x,'scope-removal')&&menuItem('trash',t('Ask to remove it…'),inDetail(c=>c.querySelector('textarea[name=removal-reason]')?.focus()),'danger')];
+    const shortcuts=n('div','task-actions');
+    if(x.state!=='done'&&can(x,'priority'))shortcuts.append(b(t('Change priority…'),inDetail(c=>c.querySelector('select[name=priority]')?.focus()),'link'));
+    if(can(x,'scope-removal'))shortcuts.append(b(t('Ask to remove it…'),inDetail(c=>c.querySelector('textarea[name=removal-reason]')?.focus()),'link'));
     const hold=ctl.querySelector('.hold-menu');
     if(hold){items.unshift(...hold.querySelectorAll('.card-menu > button,.card-menu > .pause-explanation'));hold.remove();}
     add(row,n('span','dot'),add(n('div','card-face rmain'),line,sub.childNodes.length?sub:null),ctl,...moreMenu(x,badge,items),add(n('div','card-more'),n('div','card-more-inner')));
+    if(shortcuts.childNodes.length)row.append(shortcuts);
     const saved=host.answerTools?.summary(x,()=>openNode(x,face));if(saved)row.append(saved);
     wireEvents(row,x.id);return row;
   }
