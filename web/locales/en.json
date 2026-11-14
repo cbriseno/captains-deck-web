@@ -854,6 +854,8 @@
   "ID copied: {id}": "ID copied: {id}",
   "Select and copy this ID: {id}": "Select and copy this ID: {id}",
   "Removal consultation": "Removal consultation",
+  "Discuss removing the task": "Discuss removing the task",
+  "This consultation is about the task, not the report. Firstmate will review the impact before any removal.": "This consultation is about the task, not the report. Firstmate will review the impact before any removal.",
   "Discuss removal": "Discuss removal",
   "What would happen if I removed this scope?": "What would happen if I removed this scope?",
   "Ask Firstmate to check the impact and advise you. This is not permission to delete work.": "Ask Firstmate to check the impact and advise you. This is not permission to delete work.",

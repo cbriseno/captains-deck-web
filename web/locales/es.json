@@ -854,6 +854,8 @@
   "ID copied: {id}": "ID copiado: {id}",
   "Select and copy this ID: {id}": "Selecciona y copia este ID: {id}",
   "Removal consultation": "Consulta de eliminación",
+  "Discuss removing the task": "Consultar retiro de la tarea",
+  "This consultation is about the task, not the report. Firstmate will review the impact before any removal.": "Esta consulta es sobre la tarea, no sobre el informe. Firstmate revisará el impacto antes de retirar nada.",
   "Discuss removal": "Consultar eliminación",
   "What would happen if I removed this scope?": "¿Qué pasaría si elimino este alcance?",
   "Ask Firstmate to check the impact and advise you. This is not permission to delete work.": "Consulta a Firstmate para que revise el impacto y te asesore. No es una orden de eliminación.",

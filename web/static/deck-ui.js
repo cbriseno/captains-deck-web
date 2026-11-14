@@ -991,7 +991,13 @@ window.createDeckUI = function (host) {
     const send=b(t('Discuss removal'),async()=>{if(area.dataset.uploading)return;await preview(current(),{action:'scope-removal',reason:reason.value.trim(),...(files.length?{attachments:files.map(f=>f.id)}:{})});refresh();},'deck-removal-send');
     box.refreshRemoval=refresh;reason.addEventListener('input',refresh);refresh();
     host.answerTools?.composer(area,'api/control/'+encodeURIComponent(x.home)+'/upload',files,refresh,()=>area.isConnected&&!ui.busy,true);
-    panel.append(send,area);box.append(panel);if(app.modal?.type==='call')content.append(box);else content.prepend(box);
+    panel.append(send,area);
+    if(app.modal?.type==='delivery'){
+      const taskActions=n('details','deck-task-removal');
+      taskActions.append(n('summary','',t('Discuss removing the task')),n('p','fact',t('This consultation is about the task, not the report. Firstmate will review the impact before any removal.')),panel);
+      box.append(taskActions);
+    }else box.append(panel);
+    if(app.modal?.type==='call')content.append(box);else content.prepend(box);
   }
   async function reveal(x) {
     // Navigation positions the final layout; folding the old detail must not move it afterward.
