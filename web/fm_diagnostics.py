@@ -30,6 +30,7 @@ EVENTS = {
     "layout": {"width":"measure", "height":"measure", "dpr":"ratio", "reduced":"enum", "browser":"enum", "age":"count"},
     "reconcile.mismatch": {"task":"id", "from_column":"enum", "to_column":"enum", "age":"count"},
     "state.change": {"from": "enum", "to": "enum", "actor": "enum", "fields_missing": "names", "task": "id"},
+    "state.mismatch": {"worker_missing": "count", "awaiting_closure": "count"},
     "snapshot.read": {"tasks": "count", "parent_unresolved": "count", "visibility_missing": "count", "duration_ms": "measure", "underway": "count", "awaiting_closure": "count", "needs_you": "count", "done": "count", "projects_received": "count", "projects_shown": "count"},
     "snapshot.error": {"cause": "enum", "duration_ms": "measure", "streak": "count"},
     "snapshot.concurrent_difference": {"tasks_before": "count", "tasks_after": "count"},
@@ -41,6 +42,15 @@ EVENTS = {
     "relay.preflight": {"check": "enum", "result": "enum", "reason": "enum", "version": "version", "revision": "revision"},
     "relay.attempt": {"result": "enum", "reason": "enum", "count": "count", "version": "version", "revision": "revision"},
 }
+FIRSTMATE_EVENTS = {
+    'hook.run': 'hook harness role session ms rc',
+    'session.stage': 'stage ms',
+    'session.start': 'ms rc last_stage budget_s source harness session',
+    'wake.ack': 'kind age_s',
+    'work.snapshot': 'caller ms lock_ms result tasks',
+    'worker.procs': 'task harness procs zombies rss_mb',
+}
+TOKEN = re.compile(r'[A-Za-z0-9][A-Za-z0-9._-]{0,39}\Z')
 ENUMS = {
     "action": {"open", "view", "search", "refresh", "select", "change", "export"},
     "target": {"page", "board", "projects", "history", "task", "delivery", "settings", "space", "appearance", "diagnostics"},
@@ -128,20 +138,20 @@ def _clean(key, kind, value, salt):
     if kind == "revision": return _revision(value)
     return None
 
-def export(components, downloads=None, preview=False):
+def export(components, downloads=None, preview=False, include_revision=False):
     """Collect only known component event files; remap live ids with fresh salt."""
     salt, records, sources = secrets.token_bytes(32), [], []
     for component in components:
         directory = root(component).resolve()
-        for name in ("events.jsonl", "events.1.jsonl"):
+        for name in ("events.1.jsonl", "events.jsonl"):
             path = directory / name
             if not path.is_file(): continue
             sources.append(path)
             for line in path.read_text(encoding="utf-8").splitlines():
                 try: item = json.loads(line)
                 except ValueError: continue
-                if item.get("c") != component or item.get("e") not in EVENTS: continue
-                cleaned = _export_record(item, salt)
+                if item.get("c") != component: continue
+                cleaned = _export_record(item, salt, include_revision)
                 if cleaned is not None: records.append(cleaned)
     size = sum(p.stat().st_size for p in sources)
     stamps = [r.get("t", "") for r in records]
@@ -159,6 +169,7 @@ def export(components, downloads=None, preview=False):
     try:
         with zipfile.ZipFile(temp, "w", zipfile.ZIP_DEFLATED) as z:
             z.writestr("events.jsonl", "".join(json.dumps(r, separators=(",", ":"), ensure_ascii=False) + "\n" for r in records))
+            z.writestr("manifest.json", json.dumps({"component": components[0] if len(components) == 1 else components, "installed_version": PRODUCT_VERSION if components == ["deck"] else "desconocido"}) + "\n")
         if not _verify_zip(temp): raise ValueError("canary verifier failed; export withheld")
         os.link(temp, path)
         os.unlink(temp)
@@ -166,8 +177,19 @@ def export(components, downloads=None, preview=False):
         if os.path.exists(temp): os.unlink(temp)
     return path
 
-def _export_record(item, salt):
+def _export_record(item, salt, include_revision=False):
     event = item.get("e")
+    if item.get("c") == "firstmate" and event in FIRSTMATE_EVENTS:
+        try: datetime.datetime.fromisoformat(item["t"].replace("Z", "+00:00"))
+        except (ValueError, KeyError, AttributeError): return None
+        result = {"t": item["t"], "c": "firstmate", "e": event, "v": "unknown", "r": "unknown"}
+        for key in FIRSTMATE_EVENTS[event].split():
+            value = item.get(key)
+            if key == "task" and isinstance(value, str) and re.fullmatch(r"live-[0-9a-f]{16}", value):
+                result[key] = "t-" + hmac.new(salt, value.encode(), hashlib.sha256).hexdigest()[:16]
+            elif key != "task" and (type(value) is int or isinstance(value, str) and TOKEN.fullmatch(value)):
+                result[key] = value
+        return result
     if event not in EVENTS or item.get("c") not in ("extensiones", "firstmate", "deck", "day-attendant"):
         return None
     stamp = item.get("t")
@@ -175,7 +197,7 @@ def _export_record(item, salt):
     except (ValueError, AttributeError): return None
     version, revision = _version(item.get("v")), _revision(item.get("r"))
     if version != item.get("v") or revision != item.get("r"): return None
-    result = {"t": stamp, "c": item["c"], "e": event, "v": version, "r": revision}
+    result = {"t": stamp, "c": item["c"], "e": event, "v": version, "r": revision if include_revision else "unknown"}
     for key, kind in EVENTS[event].items():
         if key not in item: continue
         value = item[key]
@@ -183,13 +205,25 @@ def _export_record(item, salt):
             if not isinstance(value, str) or not re.fullmatch(r"live-[0-9a-f]{16}", value): return None
             result[key] = "t-" + hmac.new(salt, value.encode(), hashlib.sha256).hexdigest()[:4]
         else:
-            clean = _clean(key, kind, value, salt)
+            clean = "unknown" if kind == "revision" and not include_revision else _clean(key, kind, value, salt)
             if clean is None: return None
             result[key] = clean
     return result
 
 def _verify(records):
     for r in records:
+        if r.get("c") == "firstmate" and r.get("e") in FIRSTMATE_EVENTS:
+            allowed = set(FIRSTMATE_EVENTS[r['e']].split())
+            if set(r) - ({"t", "c", "e", "v", "r"} | allowed): return False
+            if r.get('v') != 'unknown' or r.get('r') != 'unknown': return False
+            try: datetime.datetime.fromisoformat(r['t'].replace('Z', '+00:00'))
+            except (ValueError, KeyError, AttributeError): return False
+            for key in allowed & r.keys():
+                value = r[key]
+                if key == 'task':
+                    if not isinstance(value, str) or not re.fullmatch(r't-[0-9a-f]{16}', value): return False
+                elif not (type(value) is int or isinstance(value, str) and TOKEN.fullmatch(value)): return False
+            continue
         if r.get("e") not in EVENTS or r.get("c") not in ("extensiones", "firstmate", "deck", "day-attendant"):
             return False
         if set(r) - ({"t", "c", "e", "v", "r"} | set(EVENTS[r["e"]])): return False
@@ -206,7 +240,9 @@ def _verify(records):
 def _verify_zip(path):
     try:
         with zipfile.ZipFile(path) as z:
-            if z.namelist() != ["events.jsonl"]: return False
+            if z.namelist() != ["events.jsonl", "manifest.json"]: return False
+            manifest = json.loads(z.read("manifest.json"))
+            if set(manifest) != {"component", "installed_version"}: return False
             return _verify([json.loads(x) for x in z.read("events.jsonl").decode().splitlines() if x])
     except (OSError, ValueError, KeyError, zipfile.BadZipFile):
         return False
@@ -217,10 +253,11 @@ def main(argv=None):
     p.add_argument("action", choices=("export", "preview", "path"))
     p.add_argument("components", nargs="*", default=["extensiones", "firstmate", "deck", "day-attendant"])
     p.add_argument("--downloads")
+    p.add_argument("--include-revision", action="store_true")
     a = p.parse_args(argv)
     if a.action == "path": print(root("extensiones")); return 0
     try:
-        result = export(a.components, a.downloads, a.action == "preview")
+        result = export(a.components, a.downloads, a.action == "preview", a.include_revision)
     except (OSError, ValueError) as exc:
         print("fm-diagnostics: export withheld: " + str(exc), file=__import__("sys").stderr)
         return 1

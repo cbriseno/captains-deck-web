@@ -420,6 +420,7 @@ class Board:
         homes = fm.real_homes(collector.snapshot().homes) if collector else fm.real_homes(fm.discover_homes())
         identities = {id(home): home_id(home) for home in homes}
         self.columns, self.home_identity, self.history_order = COLUMNS, lambda home: identities[id(home)], newest_first
+        self.diagnostic = diagnostic
         self._homes_by_id = {identities[id(home)]: home for home in homes}
         self.endpoint = lambda home: endpoint_path(home.path, 'fm_work_projection.py')
         self.projection = EventProjection(self, homes)
@@ -814,6 +815,11 @@ class Board:
                 'agent': fm.UI.card_agent_line(card, self.t), 'herdr_url': link}
 
     def board(self, selected=''):
+        if selected and selected not in self._homes_by_id:
+            matches = [h for h in self.homes() if h.label == selected]
+            if len(matches) != 1:
+                raise Refusal('Crew label is unknown or ambiguous; use the id from the board response.', 404)
+            selected = self.home_identity(matches[0])
         return self.projection.read(selected)
 
     def receipts(self, actor, limit=10):

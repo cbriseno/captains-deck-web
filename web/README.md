@@ -423,3 +423,7 @@ and the server accepts at most 200 browser events per minute; these limits can
 omit context during heavy activity. The preview lists event counts. Browser
 memory is lost when the page closes, and an incomplete upload is not proof that
 no anomaly occurred.
+
+Diagnostic exports include `events.jsonl` and `manifest.json`. Revisions are
+omitted by default; a local command-line export can explicitly include them
+with `python3 web/fm_diagnostics.py export deck --include-revision`.

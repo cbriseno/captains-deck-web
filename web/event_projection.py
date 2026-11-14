@@ -53,6 +53,7 @@ class EventProjection:
             for home in self.homes:
                 base = self.board.deck_controls.invoke(home, 'bootstrap')
                 if base.get('state') == 'rejected':
+                    getattr(self.board, 'diagnostic', lambda *a, **k: None)('snapshot.error', cause='error')
                     identity = self.board.home_identity(home)
                     self.sources[identity] = dict(
                         home=identity, available=False, snapshot={}, answerable=False,
@@ -70,6 +71,7 @@ class EventProjection:
                             self.sources[identity] = self.present(reader)
                             self.publish()
         except Exception as exc:
+            getattr(self.board, 'diagnostic', lambda *a, **k: None)('snapshot.error', cause='error')
             with self.condition:
                 self.error, self.loading = str(exc), False
                 for source in self.sources.values():
@@ -152,6 +154,18 @@ class EventProjection:
             self.board.deck_controls.cache[reader['home'].path] = (0, source)
         self.cursor += 1
         self.body = self.base()
+        counts = {c['id']: len(c['cards']) for c in self.body['columns']}
+        getattr(self.board, 'diagnostic', lambda *a, **k: None)(
+            'snapshot.read', tasks=sum(counts.values()), underway=counts.get('underway', 0),
+            needs_you=counts.get('captains_call', 0), done=counts.get('landed', 0))
+        cards = [card for column in self.body['columns'] for card in column['cards']]
+        missing = sum(1 for card in cards if card.get('activity', {}).get('worker_missing')
+                      or card.get('activity', {}).get('kind') == 'missing')
+        awaiting = sum(1 for card in cards if card.get('activity', {}).get('kind') == 'finished'
+                       and card.get('bucket') != 'landed')
+        if missing or awaiting:
+            getattr(self.board, 'diagnostic', lambda *a, **k: None)(
+                'state.mismatch', worker_missing=missing, awaiting_closure=awaiting)
         self.condition.notify_all()
 
     def base(self, selected=''):
