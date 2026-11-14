@@ -550,6 +550,7 @@ window.createDeckUI = function (host) {
   // «…» menu: Copy ID first, then the given items.
   const menuItem=(icon,text,fn,cls='')=>add(b('',fn,'more '+cls),cardIcon(icon),n('span','',text));
   function moreMenu(x,badge,items){
+    if(!items.length)return [];
     const menu=n('div','card-menu');menu.hidden=true;menu.setAttribute('role','menu');menu.append(n('div','card-menu-h',label(x)),...[badge.tagName==='BUTTON'&&menuItem('copy',t('Copy {id}',{id:objectId(x)}),()=>badge.click()),...items].filter(Boolean));
     for(const item of menu.querySelectorAll('button')){item.setAttribute('role','menuitem');item.addEventListener('click',()=>{menu.hidden=true;open.setAttribute('aria-expanded','false');});}
     const open=b('',e=>{e.stopPropagation();const show=menu.hidden;document.querySelectorAll('.card-menu:not([hidden])').forEach(m=>m.hidden=true);menu.hidden=!show;open.setAttribute('aria-expanded',String(show));},'card-menu-btn');
