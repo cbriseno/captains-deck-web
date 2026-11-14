@@ -151,7 +151,7 @@ class EventProjectionTests(unittest.TestCase):
         self.assertEqual(self.card()['activity']['kind'], 'working')
         self.model.activity['task'] = dict(state='idle')
         self.model.status['task'] = 'paused [at=99]: old wait'
-        self.assertEqual(self.card()['activity']['kind'], 'idle')
+        self.assertEqual(self.card()['activity']['kind'], 'paused')
         self.model.activity['task'] = dict(state='busy')
         for state, expected in [('done', 'finished'), ('failed', 'idle'),
                                 ('paused', 'paused'), ('parked', 'paused')]:

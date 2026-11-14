@@ -85,7 +85,7 @@ function activityText(card, short = false) {
   const a = card.activity || {}, until = a.until && !short ? untilText(a.until) : '';
   if (a.kind === 'idle') return t('No active turn');
   if (a.kind === 'finished' && a.worker_missing) return t('Done, not closed yet') + ' · ' + t('Worker gone, row still open');
-  if (a.kind === 'paused') return until ? t('Paused until {date}', {date: until}) : t('Paused');
+  if (a.kind === 'paused') return a.paused_by === 'firstmate' ? t('Paused by Firstmate') : until ? t('Paused until {date}', {date: until}) : t('Paused');
   if (a.kind === 'deferred') return until ? t('Deferred until {date}', {date: until}) : t('Deferred');
   if (a.kind === 'decision') return card.bucket === 'underway' ? t('Waiting for your answer') : '';
   if (a.kind === 'last_seen_working') return t('Working when last seen') + (a.seen_at ? ' · ' + relative(a.seen_at) : '');

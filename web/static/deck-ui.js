@@ -540,7 +540,7 @@ window.createDeckUI = function (host) {
     const saved=host.answerTools?.summary(x,()=>openNode(x,face));if(saved)card.append(saved);
     wireEvents(card,x.id);return card;
   }
-  const actionWhere=c=>c.action?.where==='chat'?t('Act in the chat with {name}.',{name:c.owner}):t('Action instructions need confirmation.');
+  const actionWhere=c=>c.action?.where==='review'?t('Respond on the review board.'):c.action?.where==='chat'?t('Act in the chat with {name}.',{name:c.owner}):t('Action instructions need confirmation.');
   // «Te necesita» cards follow the approved v11b demo: kind line (icon, type, ID, encargo, «…» menu), title, context, actions.
   const CARD_ICONS={ask:['M7.9 20A9 9 0 1 0 4 16.1L2 22Z','M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3','M12 17h.01'],ext:['M15 3h6v6','M10 14 21 3','M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6'],file:['M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z','M14 2v4a2 2 0 0 0 2 2h4','M16 13H8','M16 17H8'],check:['M20 6 9 17l-5-5'],chevronDown:['m6 9 6 6 6-6'],copy:['M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z','M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2'],link:['M9 17H7A5 5 0 0 1 7 7h2','M15 7h2a5 5 0 1 1 0 10h-2','M8 12h8'],sort:['m21 16-4 4-4-4','M17 20V4','m3 8 4-4 4 4','M7 4v16'],trash:['M3 6h18','M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6','M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'],help:['M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z','M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3','M12 17h.01'],chat:['M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z'],redo:['M21 12a9 9 0 1 1-3-6.7L21 8','M21 3v5h-5'],more:['M5 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0','M10.8 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0','M16.6 12a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0']};
   function cardIcon(name){const ns='http://www.w3.org/2000/svg',s=document.createElementNS(ns,'svg');s.setAttribute('viewBox','0 0 24 24');s.setAttribute('class','ci');s.setAttribute('aria-hidden','true');for(const d of CARD_ICONS[name]){const p=document.createElementNS(ns,'path');p.setAttribute('d',d);s.append(p);}return s;}
@@ -859,7 +859,7 @@ window.createDeckUI = function (host) {
       for(const field of ['pin','selected','hover'])if(ui[field].startsWith('question:')&&!open.has(ui[field]))ui[field]='';
     }
     const actionOwner=app.modal?.type==='action'?byId.get(taskNodeId(app.modal.home,app.modal.task)):null;
-    if(actionOwner?.source?.available&&actionOwner.question?.open===false){closeDetail(false);ui.selected='';ui.pin='';}
+    if(actionOwner?.source?.available&&actionOwner.question?.open===false&&!actions().some(c=>c.key===app.modal.key)){closeDetail(false);ui.selected='';ui.pin='';}
     if(!ui.initialized&&!app.board.loading){ui.initialized=true;model.nodes.filter(x=>x.kind==='project').forEach(p=>{if(!ui.hasClosedPreference&&!tasksOf(p).some(t=>['active','stopping'].includes(t.state)||questions().some(q=>taskNodeId(q.home,q.task)===t.id)))ui.closed.add(p.id);});}
     const lanes=kanbanRows();groupActivities=readGroupActivity(lanes);
     const attentionVisible=c=>{const x=byId.get(taskNodeId(c.home,c.task));return x?visible(x):!ui.scope;};

@@ -187,9 +187,9 @@ class EventProjection:
                     bucket = ('captains_call' if (item.get('question') or {}).get('open') else
                               'landed' if item['state'] == 'done' else
                               'underway' if item['state'] in ('active', 'stopping') or item['raw'].get('backlog_state') == 'in_flight' else 'charted')
-                    columns[bucket].append(self.board.projected_card(source, item, human, bucket, titles, projects))
+                    card = self.board.projected_card(source, item, human, bucket, titles, projects)
+                    columns[card['bucket']].append(card)
                     if task in retained:
-                        card = columns[bucket][-1]
                         history.append(dict(task=task, home=source['home'], owner=card['owner'],
                             title=card['title'], alias=item['alias'],
                             project=self.board.delivered_project(home, retained_rows, retained[task], human),

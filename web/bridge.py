@@ -370,6 +370,17 @@ def latest_status_state(text):
     return ''
 
 
+def declared_pause(status):
+    """Only the latest declaration can describe a current intentional wait."""
+    if latest_status_state(status) not in ('paused', 'parked'):
+        return '', False
+    match = re.search(r'^(?:paused|parked)(?:\s+\[[^\]]*\])*\s*:\s*(.*)$',
+                      next(line for line in reversed(str(status).splitlines()) if line.strip()), re.I)
+    reason = match[1] if match else ''
+    supervisor = bool(re.search(r'\b(safe[- ]point|punto seguro)\b|\b(supervisor|firstmate)\b.{0,35}\b(requested|asked|pidió|solicitó)\b', reason, re.I))
+    return reason, supervisor
+
+
 def conversation_page(t, task, chat, locale="en"):
     """Read-only text of one agent conversation; tool calls are left out."""
     def when(epoch):
@@ -476,6 +487,18 @@ class Board:
         observed_turn = turn if turn.get('event') not in ('launch-brief', 'arm') else {}
         status = getattr(model, 'status', {}).get(task, '')
         status_state = latest_status_state(status)
+        pause_reason, supervisor_pause = declared_pause(status)
+        attention = None
+        if item['state'] != 'done' and not question.get('open'):
+            if row.get('kind') == 'captain':
+                attention = dict(instruction=self.t('Ask Firstmate to file this decision with its question and options.'),
+                                 where='chat', context=self.t('This decision was not filed correctly.'), source='backlog.kind')
+            elif pause_reason and not supervisor_pause and re.search(
+                    r'\b(captain|user|capitán|usuario|usuaria|lavish|visual review board|review board|tablero de revisión)\b', pause_reason, re.I):
+                review = bool(re.search(r'\b(lavish|board|tablero)\b', pause_reason, re.I))
+                attention = dict(instruction=pause_reason, where='review' if review else 'chat', context='', source='task.status')
+        if attention:
+            bucket = 'captains_call'
         report_state, report_text, report_at = fm.parse_task_report(status.splitlines(), durable=True)
         if task in reader.get('event_status', {}):
             report_at = reader['event_status'][task]
@@ -519,7 +542,7 @@ class Board:
                 'blocked' if blocked and not active_working else
                 'deferred' if deferred else
                 'held' if hold.get('kind') == 'future' else
-                'paused' if item['state'] in ('paused', 'stopping') or status_stops_working and status_state in ('paused', 'parked') else
+                'paused' if item['state'] in ('paused', 'stopping') or pause_reason and item['state'] != 'done' else
                 'idle' if status_stops_working and status_state == 'failed' else
                 'missing' if missing else
                 'working' if active_working else
@@ -559,12 +582,13 @@ class Board:
                           **({'worker_missing': True} if finished and missing and not cancelled and item['state'] != 'done' else {}),
                           **({'until': until.isoformat()} if kind == 'deferred' else
                              {'until': wait_at.isoformat() if wait_at and wait_at > datetime.now(timezone.utc) else '',
-                              'gap': '' if wait_at else 'wait_until'} if kind == 'paused' else
+                              'gap': '' if wait_at else 'wait_until',
+                              'paused_by': 'firstmate' if supervisor_pause else ''} if kind == 'paused' else
                              {'until': '', 'gap': 'hold_until' if 'until' not in hold else ''} if kind == 'held' else {})),
             dependencies=dependencies, native=dict(unconfirmed=observed_turn.get('state') not in ('busy', 'idle'), source='agent.activity'),
             time=self.projected_time((question.get('asked') if question.get('open') else None) or item['updated_at']), question=(question.get('call') or {}).get('question', ''),
-            answered=answered, attention_kind=('action' if is_action else 'question') if question.get('open') else None,
-            action=dict(call, error='') if is_action else None,
+            answered=answered, attention_kind='action' if attention else ('action' if is_action else 'question') if question.get('open') else None,
+            action=dict(attention or call, error='') if attention or is_action else None,
             inline_call=dict(options=[dict(o, value=o['id']) for o in call.get('options', [])],
                 identity=identity_value, recommend=call.get('recommended'), attachments=self.file_answers_ready(owner),
                 error='' if source.get('answerable') else self.t('This Firstmate can’t take answers from the web yet. Update Firstmate or answer there.')) if question.get('open') and not is_action else None,
@@ -1114,6 +1138,11 @@ class Board:
         return content
 
     def ticket(self, key):
+        with self.projection.condition:
+            for column in (self.projection.body or {}).get('columns', []):
+                for current in column['cards']:
+                    if current['key'] == key and (current.get('action') or {}).get('source') in ('task.status', 'backlog.kind'):
+                        return dict(current)
         card = self.card(key)
         result = self.card_json(card)
         if card.bucket != 'captains_call' or (getattr(card, 'call', None) or {}).get('kind') == 'action':
