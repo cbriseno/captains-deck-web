@@ -2,7 +2,9 @@
 
 Open [the standalone proposal](r1-06-progress.html) locally or in Lavish.
 This document proposes a shared activity signal; it changes no production behavior.
-Neither variant has been selected. Implementation requires the review response.
+The review selected variant B and requested shorter labels: `40%` and `Trabajando`.
+Both samples use the shorter labels to keep their comparison equivalent.
+This revision records that response; implementation remains outside P16.
 
 ## Manual review
 

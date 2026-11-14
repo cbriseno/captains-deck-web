@@ -18,10 +18,10 @@ html[data-motion=off] .signal::before{animation:none!important}
 </style>
 </head>
 <body><main>
-<header><div class="eyebrow">Captain’s Deck · R1-06 · propuesta 1 · 14 nov 2026</div>
+<header><div class="eyebrow">Captain’s Deck · R1-06 · propuesta 2 · 14 nov 2026</div>
 <h1>Una señal para la actividad.<br>Una barra para lo medido.</h1>
 <p class="lead">El mismo punto discreto acompaña al trabajo activo, tenga o no pasos medidos. La barra solo aparece cuando hay una medida vigente.</p>
-<span class="tag">Pendiente de revisión · sin cambios en el Deck</span></header>
+<span class="tag">B elegida · textos ajustados · sin cambios en el Deck</span></header>
 <section class="panel"><h2>Qué cambia</h2>
 <p>Hoy hay una señal móvil condicionada a avance no vigente; el trabajo con pasos medidos usa una barra. Proponemos la misma señal de actividad para ambos. El texto siempre explica el estado.</p>
 <p class="note">«Trabajando» requiere actividad confirmada. Un dato reciente de avance, por sí solo, no demuestra que el agente siga trabajando.</p>
@@ -31,15 +31,15 @@ html[data-motion=off] .signal::before{animation:none!important}
 <p>Mismos datos y espacio reservado. Solo cambia si el punto respira suavemente. Ejemplos ilustrativos; los valores permanecen fijos.</p>
 <div class="comparison">
 <article class="option" id="option-a"><header><h3>A · Señal fija</h3><p>Lectura tranquila. El texto comunica la actividad.</p></header>
-<div class="sample"><strong>Avance medido y vigente</strong><div class="reading"><span class="signal active" aria-hidden="true"></span><span>Trabajando · 2 de 5 pasos</span></div><small><span class="bar" role="progressbar" aria-label="Pasos completados" aria-valuemin="0" aria-valuemax="5" aria-valuenow="2"><i style="--value:40%"></i></span> 40% de los pasos declarados</small></div>
-<div class="sample"><strong>Aún no medido</strong><div class="reading"><span class="signal active" aria-hidden="true"></span><span>Trabajando · aún sin pasos medidos</span></div><small>Investigación · actividad confirmada</small></div>
+<div class="sample"><strong>Avance medido y vigente</strong><div class="reading"><span class="signal active" aria-hidden="true"></span><span>Trabajando · 2 de 5 pasos</span></div><small><span class="bar" role="progressbar" aria-label="Pasos completados" aria-valuemin="0" aria-valuemax="5" aria-valuenow="2"><i style="--value:40%"></i></span> 40%</small></div>
+<div class="sample"><strong>Aún no medido</strong><div class="reading"><span class="signal active" aria-hidden="true"></span><span>Trabajando</span></div><small>Investigación · actividad confirmada</small></div>
 <div class="sample"><strong>Espera</strong><div class="reading"><span class="signal inactive" aria-hidden="true">◷</span><span>Espera una dependencia</span></div><small>Podrá seguir cuando termine la conexión</small></div>
 <div class="sample"><strong>Estacionado</strong><div class="reading"><span class="signal inactive" aria-hidden="true">Ⅱ</span><span>Estacionado · espera tu revisión</span></div><small>El agente está cerrado; se retoma después</small></div>
 <div class="sample"><strong>Dato viejo</strong><div class="reading"><span class="signal inactive" aria-hidden="true">?</span><span>Actividad sin confirmar</span></div><small>Avance sin actualizar · ver última declaración</small></div>
 </article>
-<article class="option animated" id="option-b"><header><h3>B · Señal con movimiento</h3><p>Hace más visible la actividad; puede distraer.</p></header>
-<div class="sample"><strong>Avance medido y vigente</strong><div class="reading"><span class="signal active" aria-hidden="true"></span><span>Trabajando · 2 de 5 pasos</span></div><small><span class="bar" role="progressbar" aria-label="Pasos completados" aria-valuemin="0" aria-valuemax="5" aria-valuenow="2"><i style="--value:40%"></i></span> 40% de los pasos declarados</small></div>
-<div class="sample"><strong>Aún no medido</strong><div class="reading"><span class="signal active" aria-hidden="true"></span><span>Trabajando · aún sin pasos medidos</span></div><small>Investigación · actividad confirmada</small></div>
+<article class="option animated" id="option-b"><header><h3>B · Señal con movimiento · elegida</h3><p>Hace más visible la actividad; puede distraer.</p></header>
+<div class="sample"><strong>Avance medido y vigente</strong><div class="reading"><span class="signal active" aria-hidden="true"></span><span>Trabajando · 2 de 5 pasos</span></div><small><span class="bar" role="progressbar" aria-label="Pasos completados" aria-valuemin="0" aria-valuemax="5" aria-valuenow="2"><i style="--value:40%"></i></span> 40%</small></div>
+<div class="sample"><strong>Aún no medido</strong><div class="reading"><span class="signal active" aria-hidden="true"></span><span>Trabajando</span></div><small>Investigación · actividad confirmada</small></div>
 <div class="sample"><strong>Espera</strong><div class="reading"><span class="signal inactive" aria-hidden="true">◷</span><span>Espera una dependencia</span></div><small>Podrá seguir cuando termine la conexión</small></div>
 <div class="sample"><strong>Estacionado</strong><div class="reading"><span class="signal inactive" aria-hidden="true">Ⅱ</span><span>Estacionado · espera tu revisión</span></div><small>El agente está cerrado; se retoma después</small></div>
 <div class="sample"><strong>Dato viejo</strong><div class="reading"><span class="signal inactive" aria-hidden="true">?</span><span>Actividad sin confirmar</span></div><small>Avance sin actualizar · ver última declaración</small></div>
@@ -54,10 +54,10 @@ html[data-motion=off] .signal::before{animation:none!important}
 <p>Medido → sin medir: se retira la barra, se conserva la señal si la actividad sigue confirmada. Activo → espera o estacionado: el punto deja paso al símbolo y motivo. Dato viejo: se oculta la barra actual y la última declaración queda en el detalle, con fecha y rótulo histórico.</p>
 <p>Si solo envejece el avance pero la actividad sigue confirmada: «Trabajando · avance sin actualizar», con punto y sin barra. Si solo falta confirmar la actividad pero los pasos siguen vigentes: se muestran esos pasos sin punto, junto a «Actividad sin confirmar».</p>
 <p>La señal ocupa 16 px y las pistas 64 px; cambiar su estado no mueve elementos vecinos. El texto puede ocupar más líneas en móvil. Las señales decorativas se ocultan al lector de pantalla; el estado se lee en texto. No se anuncian pulsos ni refrescos repetidos.</p></section>
-<section class="panel" id="review"><h2>Devolución sobre R1-06</h2><p>Aún no hay variante elegida. Esta devolución orienta el siguiente cambio; no activa el indicador.</p>
+<section class="panel" id="review"><h2>Devolución sobre R1-06</h2><p>B fue elegida en la revisión. Se simplificaron los textos a «40%» y «Trabajando» en ambas variantes. Puedes pedir más ajustes; esta propuesta no activa el indicador.</p>
 <form id="feedback" data-lavish-question="r1-06-variant"><fieldset><legend>Variante a desarrollar</legend><div class="choices">
 <label><input type="radio" name="variant" value="A · señal fija" required> A · Fija</label>
-<label><input type="radio" name="variant" value="B · señal con movimiento"> B · Con movimiento</label>
+<label><input type="radio" name="variant" value="B · señal con movimiento" checked> B · Con movimiento</label>
 <label><input type="radio" name="variant" value="Revisar la propuesta"> Pedir ajustes</label></div></fieldset>
 <label for="comments">Ajustes o comentarios</label><textarea id="comments" name="comments" rows="3" maxlength="3000"></textarea>
 <button class="primary" type="submit">Preparar devolución</button><p id="feedback-status" role="status">Elegir una opción solo cambia esta página.</p>
@@ -70,7 +70,7 @@ html[data-motion=off] .signal::before{animation:none!important}
 <p>Tema: tokens Grafito claro/oscuro del Deck, tipografía de sistema y estructura ligera del tema de informes de Firstmate. No hay CDN, fuentes remotas ni llamadas de red al abrir el archivo.</p>
 <p>Integración futura: P10 aporta vigencia; P12, los estados y motivos; P14, las ranuras. Después de la devolución se implementa únicamente la variante acordada y se verifica el mismo recorrido, teclado, móvil y movimiento reducido. P16 no modifica productores, estilos ni comportamiento del Deck.</p>
 </details>
-<footer class="muted">R1-06 · propuesta para revisión · v1 · sin estimaciones de tiempo ni porcentajes inventados</footer>
+<footer class="muted">R1-06 · propuesta ajustada · v2 · sin estimaciones de tiempo ni porcentajes inventados</footer>
 </main><script>
 const root=document.documentElement, motion=document.querySelector('#motion'), media=matchMedia('(prefers-reduced-motion: reduce)');
 function updateMotion(){root.dataset.motion=motion.checked?'on':'off';document.querySelector('#motion-note').textContent=media.matches?'Tu sistema reduce el movimiento: B se muestra fija.':motion.checked?'B respira cada 2,4 s; A permanece fija.':'Ambas variantes están fijas.';}
