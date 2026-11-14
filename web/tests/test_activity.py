@@ -93,6 +93,24 @@ class ActivityTruthTests(unittest.TestCase):
         publish_fixture(board,home,snapshot)
         self.assertNotEqual(self.cards(board)['theme-tokens']['activity']['kind'],'working')
 
+    def test_launch_brief_does_not_confirm_work_before_a_native_activity_event(self):
+        task = dict(key='task:launch', title='Launch', state='running', rev='r1',
+                    worker_liveness={'state':'alive'}, question={'open':False})
+        board, home, _ = self.event_board('launch-only', [task])
+        journal = Path(home.path) / 'state/fleet-ledger.jsonl'
+        for seq, source, event in ((1, 'fm-spawn', 'launch-brief'), (2, 'codex', 'turn-start')):
+            with journal.open('a') as out:
+                out.write(json.dumps(dict(home=str(Path(home.path).resolve()), event='agent.activity',
+                    task='launch', value=dict(gen='fixture', seq=seq, state='busy', source=source, event=event)))+'\n')
+            with board.projection.condition:
+                self.assertTrue(board.projection.condition.wait_for(lambda:
+                    board.projection.readers[bridge.home_id(home)]['model'].activity.get('launch', {}).get('seq') == seq,
+                    timeout=5))
+            card = self.cards(board)['launch']
+            self.assertEqual(card['activity']['kind'], 'unknown' if seq == 1 else 'working')
+            self.assertEqual(card['native']['unconfirmed'], seq == 1)
+            self.assertEqual(card['activity']['turn']['event'], event)
+
     def test_queued_ready_is_distinct_from_blocked_and_deferred(self):
         from fixtures import fixture, start_fixture, publish_fixture
         board, home = fixture(Path(self.tmp.name) / 'queued')

@@ -118,7 +118,7 @@ window.createDeckUI = function (host) {
       }
       for (const e of snap.edges || []) edges.push({...e,from:keyOf(source.home,e.from),to:keyOf(source.home,e.to)});
     }
-    window.DeckState.reconcileProjects(nodes,keyOf);
+    window.DeckState.reconcileProjects(nodes,keyOf,t);
     const existing = new Set(nodes.filter(x => x.kind === 'task').map(x => keyOf(x.home,x.task || x.owner_id)));
     for (const c of cards) {
       if (existing.has(keyOf(c.home,c.task))) continue;

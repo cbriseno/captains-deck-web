@@ -1,7 +1,7 @@
 'use strict';
 // Small, deterministic reconciliation rules shared with the Node regression suite.
 window.DeckState = Object.freeze({
-  reconcileProjects(nodes, keyOf) {
+  reconcileProjects(nodes, keyOf, t = (text, values) => text.replace('{project}', values.project)) {
     for (const task of nodes) {
       if (task.kind !== 'task' || task.parent && nodes.some(row => row.id === task.parent)) continue;
       const declared = task.card?.project || task.card?.flow?.project || task.flow?.project || task.project || task.raw?.project || task.raw?.repository_project;
@@ -10,7 +10,7 @@ window.DeckState = Object.freeze({
       const ownerId = project.id.startsWith('project:') ? project.id : 'project:' + project.id;
       let parent = nodes.find(row => row.home === task.home && row.owner_id === ownerId && row.kind === 'project');
       if (!parent && project.label) {
-        parent = {id:keyOf(task.home,ownerId),owner_id:ownerId,home:task.home,title:project.label,
+        parent = {id:keyOf(task.home,ownerId),owner_id:ownerId,home:task.home,title:t('Unresolved project: {project}', {project:project.label}),
           color_key:project.id,kind:'project',state:'unknown',priority:null,parent:''};
         nodes.push(parent);
       }

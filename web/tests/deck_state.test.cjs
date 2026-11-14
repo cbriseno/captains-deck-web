@@ -12,14 +12,14 @@ test('task card project identity repairs a missing snapshot parent', () => {
   const rows = [{kind:'task',home:'fixture',parent:'',card:{project:{id:'captains-deck',label:'Captain Deck'}}}];
   state.reconcileProjects(rows,keyOf);
   assert.equal(rows[0].parent,'fixture:project:captains-deck');
-  assert.equal(rows.find(row => row.kind === 'project').title,'Captain Deck');
+  assert.equal(rows.find(row => row.kind === 'project').title,'Unresolved project: Captain Deck');
 });
 
 test('flow project identity repairs a missing snapshot parent', () => {
   const rows = [{kind:'task',home:'fixture',parent:'',card:{flow:{project:{id:'project:firstmate',label:'Firstmate'}}}}];
   state.reconcileProjects(rows,keyOf);
   assert.equal(rows[0].parent,'fixture:project:firstmate');
-  assert.equal(rows.find(row => row.kind === 'project').title,'Firstmate');
+  assert.equal(rows.find(row => row.kind === 'project').title,'Unresolved project: Firstmate');
 });
 
 test('canonical project identity links to an existing project node', () => {
@@ -47,7 +47,7 @@ test('retained tasks recover a project container from the recorded canonical ide
   assert.equal(rows[0].parent,'real:project:retired');
   assert.equal(rows[1].parent,'real:project:retired');
   assert.equal(rows[2].parent,''); // No project is inferred from a title or task slug.
-  assert.equal(rows.find(row=>row.kind==='project').title,'retired');
+  assert.equal(rows.find(row=>row.kind==='project').title,'Unresolved project: retired');
   assert.equal(rows.filter(row=>row.kind==='project').length,1);
 });
 
@@ -63,4 +63,13 @@ test('finished and missing workers wait for reconciliation rather than appearing
     assert.equal(state.displayState({state:ownerState,card:{activity:{kind}}}),'waiting');
     assert.equal(state.displayState({state:'done',card:{activity:{kind}}}),'done');
   }
+});
+
+test('a project absent from inventory is visibly unresolved without classifying missing metadata as host work', () => {
+  const rows = [{kind:'task',home:'fixture',parent:'',raw:{project:'project:missing'}},
+    {kind:'task',home:'fixture',parent:'',raw:{project:null}}];
+  const translate = (text, values) => text === 'Unresolved project: {project}' ? 'Proyecto sin resolver: '+values.project : text;
+  state.reconcileProjects(rows,keyOf,translate);
+  assert.equal(rows.find(row=>row.kind==='project').title,'Proyecto sin resolver: missing');
+  assert.equal(rows[1].parent,'');
 });

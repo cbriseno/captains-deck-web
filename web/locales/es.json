@@ -719,6 +719,7 @@
   "Progress not reported": "Avance sin informar",
   "Project": "Proyecto",
   "Project not reported": "Proyecto sin registrar",
+  "Unresolved project: {project}": "Proyecto sin resolver: {project}",
   "Workspace": "Espacio de trabajo",
   "Projects": "Proyectos",
   "Projects and priorities": "Proyectos y prioridades",

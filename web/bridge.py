@@ -472,6 +472,8 @@ class Board:
         row = reader['model'].rows[task]
         model = reader['model']
         turn = model.activity.get(task, {})
+        # Launch submission is not a native observation of ongoing activity.
+        observed_turn = turn if turn.get('event') not in ('launch-brief', 'arm') else {}
         status = getattr(model, 'status', {}).get(task, '')
         status_state = latest_status_state(status)
         report_state, report_text, report_at = fm.parse_task_report(status.splitlines(), durable=True)
@@ -506,7 +508,7 @@ class Board:
             (item.get('outcome') or {}).get('role') == 'final'
             and status_state not in ('working', 'paused', 'parked', 'blocked', 'needs-decision', 'failed'))
         missing = item['raw'].get('backlog_state') == 'in_flight' and worker.get('state') == 'dead'
-        active_working = (source.get('available', True) and item['state'] == 'active' and turn.get('state') == 'busy'
+        active_working = (source.get('available', True) and item['state'] == 'active' and observed_turn.get('state') == 'busy'
                           and worker.get('state') != 'dead' and not finished)
         status_stops_working = active_working and status_state in ('done', 'failed', 'paused', 'parked')
         kind = ('cancelled' if cancelled else 'decision' if question.get('open') else 'delivered' if item['state'] == 'done' else
@@ -521,7 +523,7 @@ class Board:
                 'idle' if status_stops_working and status_state == 'failed' else
                 'missing' if missing else
                 'working' if active_working else
-                'idle' if item['state'] == 'active' and turn.get('state') == 'idle' and worker.get('state') != 'dead' else
+                'idle' if item['state'] == 'active' and observed_turn.get('state') == 'idle' and worker.get('state') != 'dead' else
                 'unknown' if item['state'] == 'ready' and item['raw'].get('backlog_state') == 'in_flight' else
                 'ready' if item['state'] == 'ready' else 'unknown')
         stamp = re.search(r'^Captain hold set: (\S+)', row.get('body') or '', re.M)
@@ -559,7 +561,7 @@ class Board:
                              {'until': wait_at.isoformat() if wait_at and wait_at > datetime.now(timezone.utc) else '',
                               'gap': '' if wait_at else 'wait_until'} if kind == 'paused' else
                              {'until': '', 'gap': 'hold_until' if 'until' not in hold else ''} if kind == 'held' else {})),
-            dependencies=dependencies, native=dict(unconfirmed=turn.get('state') not in ('busy', 'idle'), source='agent.activity'),
+            dependencies=dependencies, native=dict(unconfirmed=observed_turn.get('state') not in ('busy', 'idle'), source='agent.activity'),
             time=self.projected_time((question.get('asked') if question.get('open') else None) or item['updated_at']), question=(question.get('call') or {}).get('question', ''),
             answered=answered, attention_kind=('action' if is_action else 'question') if question.get('open') else None,
             action=dict(call, error='') if is_action else None,

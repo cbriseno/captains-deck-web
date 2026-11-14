@@ -719,6 +719,7 @@
   "Progress not reported": "Progress not reported",
   "Project": "Project",
   "Project not reported": "Project not reported",
+  "Unresolved project: {project}": "Unresolved project: {project}",
   "Workspace": "Workspace",
   "Projects": "Projects",
   "Projects and priorities": "Projects and priorities",
