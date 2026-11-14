@@ -587,7 +587,7 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .attention-list .cmeta .kind{display:inline-flex;flex:none;white-space:nowrap;gap:4px;align-items:center;font-weight:600;color:var(--kind)}.attention-list .cmeta .kind .ci{width:14px;height:14px}
 .attention-list .cmeta .node-id{display:inline;flex:none;margin:0 -4px;padding:0 4px;border:0;border-radius:4px;min-height:0;background:transparent;font:500 12px/18px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:-.02em;color:var(--muted);white-space:nowrap}
 .attention-list .cmeta .node-id:hover{background:var(--soft);color:var(--ink)}
-.attention-list .cmeta .req{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attention-list .cmeta .req{min-width:0;overflow-wrap:anywhere}
 :is(.attention-list,.task-row,.hold-menu) .card-menu-btn{position:absolute;top:8px;right:8px;display:inline-grid;place-items:center;width:28px;height:28px;min-height:0;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted)}
 :is(.attention-list,.task-row,.hold-menu) .card-menu-btn .ci{stroke-width:1;fill:currentColor}:is(.attention-list,.task-row,.hold-menu) .card-menu-btn:hover:enabled{background:var(--soft);color:var(--ink)}
 :is(.attention-list,.task-row,.hold-menu) .card-menu{position:absolute;z-index:40;top:38px;right:8px;display:flex;flex-direction:column;min-width:220px;max-width:280px;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--surface);box-shadow:0 6px 24px rgb(0 0 0/.24)}
@@ -619,7 +619,6 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .attention-list>.card>.card-more .detail{padding:8px 0 0}
 /* An open question card shows no asked time; it is in its folded provenance. */
 .attention-list .qcard #detail-meta{display:none}
-@media(max-width:640px){.attention-list .cmeta .req{display:none}}
 /* v11b header, search, order and full width (deck-redesign-v11b-estable.html .bar/.seg/.tools/.search). */
 .shell,.top,.foot{max-width:none}
 .topbar{width:auto;gap:8px 12px;min-height:56px;padding:8px 0;margin:0 24px;border-bottom:1px solid var(--line)}
