@@ -87,6 +87,54 @@ class EventProjectionTests(unittest.TestCase):
         self.assertEqual(self.card()['activity']['agent'], 'none')
         self.assertNotEqual(self.card()['activity']['kind'], 'working')
 
+    def test_final_result_survives_a_stale_busy_turn_until_row_closure(self):
+        self.model.activity['task'] = dict(state='busy')
+        self.model.status = {'task': 'done [at=101]: Final result'}
+        self.assertEqual(self.card()['activity']['kind'], 'finished')
+        self.item['raw'].update(backlog_state='in_flight', worker_liveness={'state': 'dead'})
+        self.assertTrue(self.card()['activity']['worker_missing'])
+        self.item['raw']['worker_liveness']['state'] = 'alive'
+        self.item['outcome'] = dict(role='final', review='needed')
+        self.model.status.clear()
+        self.assertEqual(self.card()['activity']['kind'], 'finished')
+        self.model.status['task'] = 'working [at=102]: Follow-up started'
+        self.assertEqual(self.card()['activity']['kind'], 'working')
+        self.item['state'] = 'done'
+        self.assertEqual(self.card()['activity']['kind'], 'delivered')
+
+    def test_dead_worker_on_an_open_row_is_missing_rather_than_ready(self):
+        self.item.update(state='ready')
+        self.item['raw'].update(backlog_state='in_flight', worker_liveness={'state': 'dead'})
+        self.assertEqual(self.card()['activity']['kind'], 'missing')
+        self.item['raw']['worker_liveness']['state'] = 'unknown'
+        self.assertEqual(self.card()['activity']['kind'], 'unknown')
+        self.item['raw']['backlog_state'] = 'queued'
+        self.assertEqual(self.card()['activity']['kind'], 'ready')
+
+    def test_open_missing_worker_never_enters_queue_and_closure_still_delivers(self):
+        from fixtures import fixture, start_fixture, publish_fixture
+        board, home = fixture(self.root / 'routing')
+        snapshot = dict(tasks=[dict(key='task:orphan', title='Orphan', state='ready',
+            backlog_state='in_flight', worker_liveness={'state': 'dead'})],
+            projects=[], subprojects=[])
+        (Path(home.path) / 'work-snapshot.json').write_text(json.dumps(snapshot))
+        start_fixture(board, home)
+        self.addCleanup(board.stop)
+        def card():
+            return next(c for col in board.projection.read()['columns'] for c in col['cards'])
+        self.assertEqual((card()['bucket'], card()['activity']['kind']), ('underway', 'missing'))
+        row = snapshot['tasks'][0]
+        row['outcome'] = {'role': 'final', 'review': 'needed'}
+        publish_fixture(board, home, snapshot)
+        self.assertEqual(card()['activity']['kind'], 'finished')
+        self.assertTrue(card()['activity']['worker_missing'])
+        row.update(state='done', backlog_state='done')
+        publish_fixture(board, home, snapshot)
+        self.assertEqual((card()['bucket'], card()['activity']['kind']), ('landed', 'delivered'))
+        row.update(state='ready', backlog_state='queued', outcome=None)
+        publish_fixture(board, home, snapshot)
+        self.assertEqual((card()['bucket'], card()['activity']['kind']), ('charted', 'ready'))
+
     def test_dated_hold_uses_only_the_structured_owner_date(self):
         self.item['state'] = 'waiting'
         self.item['raw']['pause'] = {'own': {'kind': 'future', 'until': '2999-01-01'}, 'inherited': None}
@@ -105,7 +153,7 @@ class EventProjectionTests(unittest.TestCase):
         self.model.status['task'] = 'paused [at=99]: old wait'
         self.assertEqual(self.card()['activity']['kind'], 'idle')
         self.model.activity['task'] = dict(state='busy')
-        for state, expected in [('done', 'idle'), ('failed', 'idle'),
+        for state, expected in [('done', 'finished'), ('failed', 'idle'),
                                 ('paused', 'paused'), ('parked', 'paused')]:
             with self.subTest(state=state):
                 self.model.status['task'] = f'working [at=100]: started\n{state} [at=101]: ended'

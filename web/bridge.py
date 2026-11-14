@@ -500,10 +500,17 @@ class Board:
         closure = item.get('closure') or human.get('closure') or {}
         cancelled = closure.get('kind') == 'cancelled'
         delivery_available = not cancelled and self.delivery_record(owner, task) is not None
+        # A final result is awaiting closure, even when launch left a busy turn.
+        # A later work/wait/failure declaration supersedes that result.
+        finished = status_state == 'done' or (
+            (item.get('outcome') or {}).get('role') == 'final'
+            and status_state not in ('working', 'paused', 'parked', 'blocked', 'needs-decision', 'failed'))
+        missing = item['raw'].get('backlog_state') == 'in_flight' and worker.get('state') == 'dead'
         active_working = (source.get('available', True) and item['state'] == 'active' and turn.get('state') == 'busy'
-                          and worker.get('state') != 'dead')
+                          and worker.get('state') != 'dead' and not finished)
         status_stops_working = active_working and status_state in ('done', 'failed', 'paused', 'parked')
         kind = ('cancelled' if cancelled else 'decision' if question.get('open') else 'delivered' if item['state'] == 'done' else
+                'finished' if finished else
                 'technical' if coordination else
                 'validating' if validation_live else
                 'validation_gate' if validation and item['state'] == 'paused' else
@@ -511,10 +518,11 @@ class Board:
                 'deferred' if deferred else
                 'held' if hold.get('kind') == 'future' else
                 'paused' if item['state'] in ('paused', 'stopping') or status_stops_working and status_state in ('paused', 'parked') else
-                'idle' if status_stops_working and status_state in ('done', 'failed') else
+                'idle' if status_stops_working and status_state == 'failed' else
+                'missing' if missing else
                 'working' if active_working else
-                'finished' if report_state == 'done' else
                 'idle' if item['state'] == 'active' and turn.get('state') == 'idle' and worker.get('state') != 'dead' else
+                'unknown' if item['state'] == 'ready' and item['raw'].get('backlog_state') == 'in_flight' else
                 'ready' if item['state'] == 'ready' else 'unknown')
         stamp = re.search(r'^Captain hold set: (\S+)', row.get('body') or '', re.M)
         identity_value = stamp[1] + '#' + str(len(re.findall(r'^Resolution recorded by fm-(?:captain|decision)-hold\.', row.get('body') or '', re.M))) if stamp else ''
@@ -540,12 +548,13 @@ class Board:
             presentation=dict(status=None, summary=None) if cancelled else presentation,
             context=dict(phase='human' if question.get('open') else 'technical' if coordination else
                          'integration' if item.get('phase') == 'integration' else
-                         'reported' if report_state == 'done' and not active_working else
+                         'reported' if finished else
                          'waiting' if report_state in ('paused', 'parked', 'blocked') and not active_working else 'unknown'),
             activity=dict(kind=kind, agent='none' if cancelled or worker.get('state') == 'dead' else
                           'validation' if kind == 'validating' else
                           'working' if kind == 'working' and worker.get('state') == 'alive' else
                           'present' if worker.get('state') == 'alive' else 'unknown', turn={} if cancelled else turn,
+                          **({'worker_missing': True} if finished and missing and not cancelled and item['state'] != 'done' else {}),
                           **({'until': until.isoformat()} if kind == 'deferred' else
                              {'until': wait_at.isoformat() if wait_at and wait_at > datetime.now(timezone.utc) else '',
                               'gap': '' if wait_at else 'wait_until'} if kind == 'paused' else

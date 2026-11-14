@@ -132,6 +132,9 @@ window.createDeckUI = function (host) {
         pause:{own:false,inherited:[]},progress:null});
       for (const dep of c.dependencies || []) edges.push({from:keyOf(c.home,c.task),to:keyOf(c.home,dep.id),origin:dep.origin || 'firstmate',completed:dep.state === 'done' || dep.unresolved === false});
     }
+    for (const x of nodes) if (x.kind === 'task' && (['finished','missing'].includes(x.card?.activity?.kind) || x.raw?.backlog_state === 'in_flight' && x.state === 'ready')) {
+      x.state = window.DeckState.displayState(x);
+    }
     const taskNodes=nodes.filter(x=>x.kind==='task'), taskIds=new Map(taskNodes.map(x=>[keyOf(x.home,x.task),x.id])), membersByRequest=new Map();
     for(const x of taskNodes){const r=x.request||x.raw?.request||x.card?.request;if(r?.id){const key=keyOf(x.home,r.id);if(!membersByRequest.has(key))membersByRequest.set(key,[]);membersByRequest.get(key).push(x);}}
     for(const edge of edges) for(const end of ['from','to']) edge[end]=taskIds.get(edge[end])||edge[end];
@@ -154,7 +157,7 @@ window.createDeckUI = function (host) {
     return {nodes,edges,sources};
   }
   function ownPause(x) { return x.pause?.own === true; }
-  function waitingText(x){if(x.reason)return x.reason;const edges=model.edges.filter(e=>e.from===x.id&&!e.completed);if(edges.length)return t('Waits for {name}',{name:edges.map(e=>label(byId.get(e.to))).join(', ')});if(x.raw?.state==='captain')return t('Waiting for your answer');return x.card?host.cardLine(x.card)||host.phaseText(x.card):'';}
+  function waitingText(x){if(['finished','missing'].includes(x.card?.activity?.kind))return host.activityText(x.card);if(x.reason)return x.reason;const edges=model.edges.filter(e=>e.from===x.id&&!e.completed);if(edges.length)return t('Waits for {name}',{name:edges.map(e=>label(byId.get(e.to))).join(', ')});if(x.raw?.state==='captain')return t('Waiting for your answer');return x.card?host.cardLine(x.card)||host.phaseText(x.card):'';}
   function pauseText(x) {
     if (x.state === 'active' && window.DeckState.displayState(x) === 'paused') return host.phaseText(x.card);
     if(x.pause?.state==='unconfirmed')return t('Safe point not confirmed');

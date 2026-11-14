@@ -84,6 +84,7 @@ function whoText(card) {
 function activityText(card, short = false) {
   const a = card.activity || {}, until = a.until && !short ? untilText(a.until) : '';
   if (a.kind === 'idle') return t('No active turn');
+  if (a.kind === 'finished' && a.worker_missing) return t('Done, not closed yet') + ' · ' + t('Worker gone, row still open');
   if (a.kind === 'paused') return until ? t('Paused until {date}', {date: until}) : t('Paused');
   if (a.kind === 'deferred') return until ? t('Deferred until {date}', {date: until}) : t('Deferred');
   if (a.kind === 'decision') return card.bucket === 'underway' ? t('Waiting for your answer') : '';
@@ -96,7 +97,7 @@ function activityText(card, short = false) {
   }
   if (a.kind === 'unknown' && ['unknown', 'active'].includes(card.context?.phase)) return t('Activity unconfirmed');
   return { working: t('Working now'), validating: t('Checks running'), validation_gate: t('Checks need approval'), blocked: t('Waiting on another task'),
-    held: t('On hold'), finished: t('Done, not closed yet'), stopped: t('Stopped'), ready: t('Ready to start'), queued: t('Queued') }[a.kind] || '';
+    held: t('On hold'), finished: t('Done, not closed yet'), missing: t('Worker gone, row still open'), stopped: t('Stopped'), ready: t('Ready to start'), queued: t('Queued') }[a.kind] || '';
 }
 function phaseText(card, short = false) {
   if (card.closure?.kind === 'cancelled') return t('Cancelled');
@@ -201,7 +202,7 @@ function renderBoard(mode) {
   if (!S.board) return;
   if (!relaySettings) relaySettings = window.createRelaySettings({t,node,button,api,state:S});
   if (!deckUI) deckUI = window.createDeckUI({t,node,button,append,api,ago,creationAge,exactTime,openCard,showDetail,closeDetail,detailOpen,parkDetail,state:S,
-    hashOf,cardLine,phaseText,refreshTimes,sourceStatus,poll,setView,placeDetail,openDelivery,reportLink,answerTools,inlineAnswer,showAnswers:async()=>{await loadReceipts();$('receipts-panel').open=true;closeDetail(false);$('receipts-panel').scrollIntoView({block:'start'});}});
+    hashOf,cardLine,phaseText,activityText,refreshTimes,sourceStatus,poll,setView,placeDetail,openDelivery,reportLink,answerTools,inlineAnswer,showAnswers:async()=>{await loadReceipts();$('receipts-panel').open=true;closeDetail(false);$('receipts-panel').scrollIntoView({block:'start'});}});
   deckUI.render(false, mode);
 }
 const flatten = (text) => String(text || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase(locale);

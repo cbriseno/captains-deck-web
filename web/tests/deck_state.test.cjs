@@ -56,3 +56,11 @@ test('a declared pause overrides the active snapshot for presentation', () => {
   assert.equal(state.displayState({state:'active',card:{activity:{kind:'working'}}}),'active');
   assert.equal(state.displayState({state:'done',card:{activity:{kind:'paused'}}}),'done');
 });
+
+test('finished and missing workers wait for reconciliation rather than appearing active or queued', () => {
+  assert.equal(state.displayState({state:'ready',raw:{backlog_state:'in_flight'}}),'unknown');
+  for (const kind of ['finished','missing']) for (const ownerState of ['active','ready']) {
+    assert.equal(state.displayState({state:ownerState,card:{activity:{kind}}}),'waiting');
+    assert.equal(state.displayState({state:'done',card:{activity:{kind}}}),'done');
+  }
+});

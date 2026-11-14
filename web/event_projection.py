@@ -185,7 +185,8 @@ class EventProjection:
                             continue
                     human = model.presentations[task]['presentation']
                     bucket = ('captains_call' if (item.get('question') or {}).get('open') else
-                              'landed' if item['state'] == 'done' else 'underway' if item['state'] in ('active', 'stopping') else 'charted')
+                              'landed' if item['state'] == 'done' else
+                              'underway' if item['state'] in ('active', 'stopping') or item['raw'].get('backlog_state') == 'in_flight' else 'charted')
                     columns[bucket].append(self.board.projected_card(source, item, human, bucket, titles, projects))
                     if task in retained:
                         card = columns[bucket][-1]

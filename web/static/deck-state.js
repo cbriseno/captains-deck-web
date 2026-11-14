@@ -18,7 +18,11 @@ window.DeckState = Object.freeze({
     }
     return nodes;
   },
-  displayState(x) { return x.state === 'active' && x.card?.activity?.kind === 'paused' ? 'paused' : x.state; },
+  displayState(x) {
+    if (x.state !== 'done' && ['finished','missing'].includes(x.card?.activity?.kind)) return 'waiting';
+    if (x.state === 'ready' && x.raw?.backlog_state === 'in_flight') return 'unknown';
+    return x.state === 'active' && x.card?.activity?.kind === 'paused' ? 'paused' : x.state;
+  },
   identity(x) { return x?.alias || x?.raw?.alias || x?.card?.alias || x?.owner_id || (x?.task ? 'task:' + x.task : '') || x?.raw?.key || x?.color_key || x?.id || ''; },
   completionNote(percent, state) { return percent === 100 && state !== 'done'; }
 });
