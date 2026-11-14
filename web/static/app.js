@@ -472,9 +472,7 @@ async function openTicket(key, opener, asTask = false) {
   } catch (err) { if (gen === S.generation) $('detail-content').replaceChildren(node('p', 'notice error', err.message)); }
 }
 function addTechnical(ticket, ...extra) {
-  const details = disclosure(t('Provenance and record'),
-    contextRow(t('Coordinating space'),ticket.owner||'Firstmate'),
-    contextRow(t('Recorded agent'),ticket.agent||t('Not recorded.')),
+  const details = disclosure(t('Task record'),
     contextRow(t('Source record'),ticket.task),
     contextRow(t('Date provenance'),ticket.time?.detail||t('Time not recorded')),
     ticket.report?.text ? contextRow(t('Full recorded report'),ticket.report.text) : null,

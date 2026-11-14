@@ -161,7 +161,7 @@ const sourceSnapshot = (overrides = {}) => [{home: '/tmp/example/space', label: 
   error: null, generated: new Date(supervisorClock - 7200000).toISOString(), supervisor: null, ...overrides}];
 
 
-test('drawer shows the full recorded report and the registered executor without the raw evidence bundle', async () => {
+test('drawer shows the full report without raw evidence or redundant executor metadata', async () => {
   const report = 'Informe completo\n\n' + 'Detalle de evidencia sintética. '.repeat(40) + 'FIN_DEL_INFORME';
   const ticket = {key: 'web', task: 'web', title: 'Synthetic task web', bucket: 'underway', owner: 'Example home', home: '/tmp/example/space',
     context: {phase: 'active', reason: '', firstmate_action: null}, presentation: {summary: 'Short synthetic summary.', waiting_for: '', next_action: 'Next step', executor: {harness: 'codex'}},
@@ -176,7 +176,7 @@ test('drawer shows the full recorded report and the registered executor without 
   assert.ok(all(content).some(e => e.tagName === 'P' && e.textContent === report));
   // One row says who is on it; there is no second "Agent" row.
   const rows = all(content).filter(e => e.className === 'context-row').map(n => n.children[0].textContent);
-  assert.ok(all(content).some(e => e.tagName === 'P' && e.textContent === 'Codex'));
+  assert.equal(all(content).some(e => e.tagName === 'P' && e.textContent === 'Codex'), false);
   assert.equal(rows.filter(r => r === 'Who’s on it' || r === 'Agent').length, 1);
   assert.ok(all(content).some(e => e.textContent === 'web'));
   assert.equal(all(content).some(e => e.className === 'technical-evidence'), false);
@@ -283,6 +283,15 @@ test('question context never adds the call title as a second question', async ()
     assert.equal(nodes.filter(n => n.className === 'question').map(n => n.textContent).join('|'), ticket.call.decide, ticket.key);
     view.doc.getElementById('detail-close').listeners.click[0]();
   }
+});
+
+test('task record keeps technical provenance out of the captain-facing detail', async () => {
+  const ticket = questionTicket('record', 'Choose sample scope', 'Choose sample scope', '');
+  const view = await questionView({record: ticket}); await view.open('record');
+  const technical = descendants(view.doc.getElementById('detail-content')).find(n => n.tagName === 'DETAILS' && n.className === 'source-details');
+  assert.equal(technical.querySelector('summary').textContent, 'Task record');
+  assert.doesNotMatch(technical.textContent, /Coordinating space|Recorded agent|Coordinator|Codex/);
+  assert.ok(technical.textContent.includes(ticket.task), 'keep the source record available');
 });
 
 test('question draft and occurrence guard survive refreshed question context without sending', async () => {

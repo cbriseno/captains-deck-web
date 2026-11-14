@@ -876,6 +876,7 @@
   "Moved to {name}": "Se movió a {name}",
   "View card": "Ver tarjeta",
   "Provenance and record": "Procedencia y registro",
+  "Task record": "Registro de la tarea",
   "This decision is still open. Its origin report has already been delivered; the investigation is not restarting.": "Esta decisión sigue abierta. La investigación que la originó ya se entregó; no vuelve a iniciarse.",
   "Time with the pointer still before changing focus": "Tiempo con el cursor quieto antes de cambiar el foco",
   "Delay": "Espera antes de resaltar",
