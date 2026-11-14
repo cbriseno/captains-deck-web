@@ -14,10 +14,12 @@ test('request spend preserves unknowns, captain decisions and narrow layouts',{s
     const file=path.join(proof,'home/work-snapshot.json'),snapshot=JSON.parse(fs.readFileSync(file));
     const usage={usd:3.28,usd_complete:false,tokens:7463121,tasks:{running:1,not_started:2,unknown:2},by:[{harness:'codex',model:'gpt-6.1-sol',effort:'high',usd:3.28,usd_known:true,tokens:7463121,sessions:1}],unknown:[{task:'ask',title:'Captain choice',reason:'no-session'},{task:'web',title:'Missing transcript',reason:'no-session'}],excludes:['coordinator']};
     const requests=Object.fromEntries(snapshot.requests.map(r=>[r.id,r]));
+    usage.by[0].breakdown=[{task:'running',tier:'standard',pricing_version:'v1',tokens:{input:100,cache_read:200,output:30},rates_per_million:{input:2,cache_read:0.2,output:10}}];
+    usage.pricing=[{task:'running',stale:true,pricing:{version:'v1',verified:'2026-01-01',currency:'USD',sources:{codex:'https://developers.openai.com/api/docs/pricing'}}}];
     requests.run.usage=usage;
     requests.paused.usage={tasks:{unknown:1},by:[],unknown:[{task:'next',title:'No session',reason:'no-session'}]};
     requests.result.usage={tasks:{not_started:1},by:[],unknown:[]};
-    requests.isolated.usage={usd:0,usd_complete:false,tokens:0,tasks:{},by:[{harness:'other',model:'unpriced-model',effort:'unknown',usd_known:false,tokens:0,sessions:1}]};
+    requests.isolated.usage={usd:0,usd_complete:false,tokens:0,tasks:{},by:[{harness:'other',model:'unpriced-model',effort:'unknown',usd_known:false,tokens:0,sessions:2}]};
     snapshot.requests.push({id:'decision',label:'Decision only',project:'project:isolated',tasks:['task:second'],usage:{tasks:{no_agent:1},by:[],unknown:[]}});
     snapshot.tasks.find(x=>x.key==='task:second').request={id:'decision',label:'Decision only',project:'project:isolated'};
     fs.writeFileSync(file,JSON.stringify(snapshot));fs.appendFileSync(path.join(proof,'home/state/fleet-ledger.jsonl'),JSON.stringify({home:path.join(proof,'home'),event:'fixture.snapshot',value:snapshot})+'\n');
@@ -25,12 +27,19 @@ test('request spend preserves unknowns, captain decisions and narrow layouts',{s
     evaluate(`async () => {for(let i=0;i<100;i++){if(document.querySelector('.request-row .usage-line')?.textContent.includes('3.28'))break;await new Promise(r=>setTimeout(r,50));}document.querySelector('.request-group[data-k=done] .col-h button[aria-expanded=false]')?.click();return true;}`);
     const read=()=>evaluate(`() => [...document.querySelectorAll('.request-row')].map(r=>({id:r.dataset.node,line:r.querySelector('.usage-line')?.textContent,detail:r.querySelector('.usage-detail')?.textContent}))`);
     let rows=read(),row=id=>rows.find(r=>r.id.endsWith(':req:'+id));
-    assert.match(row('run').line,/≥ US\$3\.28.*7.5 M tokens.*1 tarea desconocida.*en curso/);
+    assert.match(row('run').line,/≥ US\$3\.28.*GPT-6.1 Sol.*esfuerzo alto.*7.5 M tokens.*precio antiguo.*1 tarea desconocida.*en curso/);
     assert.equal(row('paused').line,'Costo no disponible');assert.equal(row('waiting').line,'Costo no disponible');assert.equal(row('result').line,'Sin gasto aún');
     evaluate(`() => {for(const button of document.querySelectorAll('.request-title[aria-expanded=false]'))button.click();return true;}`);
     rows=read();assert.match(row('run').detail,/Captain choice.*sin gasto de agente/);assert.match(row('run').detail,/Desconocido.*Missing transcript/);
     assert.match(row('run').detail,/Codex.*GPT-6.1 Sol.*esfuerzo alto.*1 sesión/);assert.match(row('run').detail,/No incluye.*coordinación/);
-    assert.match(row('isolated').detail,/precio desconocido.*0 tokens/);
+    assert.match(row('isolated').detail,/precio desconocido.*0 tokens/);assert.match(row('isolated').line,/precio desconocido.*varios/);
+    assert.match(row('run').detail,/Estimación a precio de lista.*no es una factura/);
+    assert.match(row('run').detail,/Entrada nueva: 100 tokens · 2 por millón/);
+    assert.match(row('run').detail,/Lectura de caché: 200 tokens · 0.2 por millón/);
+    assert.match(row('run').detail,/Salida: 30 tokens · 10 por millón/);
+    assert.match(row('run').detail,/versión de precio v1.*2026-01-01.*USD.*Precio antiguo/);
+    assert.match(row('run').detail,/Confianza de atribución: no disponible/);
+    assert.match(row('run').detail,/Missing transcript.*no-session/);
     assert.equal(row('decision').line,'Decisión tuya: sin gasto de agente');
     for(const width of [1970,1440,390]){
       run('resize',[String(width),'1250']);

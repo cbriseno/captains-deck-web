@@ -720,22 +720,45 @@ window.createDeckUI = function (host) {
     const u=r.usage;if(!u)return n('span','usage-line unknown',t('Cost unavailable'));
     const k=u.tasks||{},{missing,decisions}=usageUnknown(r);
     if(!u.by?.length)return n('span','usage-line'+(missing?' unknown':''),missing?t('Cost unavailable'):(k.no_agent||decisions.length)&&!k.not_started?t('Your decision: no agent spend'):t('No spend yet'));
-    const el=n('span','usage-line',(u.usd_complete||decisions.length&&!missing&&u.by.every(x=>x.usd_known)?'≈ ':'≥ ')+money(u.usd)+' · '+megaTokens(u.tokens)+(missing?' · '+t(missing===1?'{count} task unknown':'{count} tasks unknown',{count:missing}):'')+(k.running?' · '+t('in progress'):''));
+    const identity=u.by.length===1&&u.by[0].sessions===1?modelName(u.by[0].model)+' · '+t('effort {level}',{level:effortLabels[u.by[0].effort]?t(effortLabels[u.by[0].effort]):u.by[0].effort||t('effort:unknown')}):t('multiple models or efforts');
+    const amount=u.by.some(x=>x.usd_known)?(u.usd_complete||decisions.length&&!missing&&u.by.every(x=>x.usd_known)?'≈ ':'≥ ')+money(u.usd):t('price unknown');
+    const el=n('span','usage-line',amount+' · '+identity+' · '+megaTokens(u.tokens)+((u.pricing||[]).some(x=>x.stale)?' · '+t('old price'):'')+(missing?' · '+t(missing===1?'{count} task unknown':'{count} tasks unknown',{count:missing}):'')+(k.running?' · '+t('in progress'):''));
     el.title=t('API list-price equivalent. Not a charge to your subscription.');return structural(el);
   }
   function usageDetail(r){
     const u=r.usage;if(!u)return null;const box=n('details','usage-detail');box.open=ui.usageOpen.has(r.id);box.append(n('summary','',t('Spend details')));const content=n('div','usage-detail-content');
     content.append(n('p','usage-h',t('Spend by harness, model and effort')));
-    for(const x of u.by||[])content.append(structural(n('p','usage-row',harnessName(x.harness)+' · '+modelName(x.model)+' · '+t('effort {level}',{level:(effortLabels[x.effort]?t(effortLabels[x.effort]):x.effort||t('effort:unknown'))})+' — '+(x.usd_known?money(x.usd):t('price unknown'))+' · '+megaTokens(x.tokens)+' · '+t(x.sessions===1?'{count} session':'{count} sessions',{count:x.sessions}))));
+    const categories={input:'New input',cache_read:'Cache read',output:'Output',cache_write_5m:'Cache write 5 min',cache_write_1h:'Cache write 1 h'};
+    for(const x of u.by||[]){
+      content.append(structural(n('p','usage-row',harnessName(x.harness)+' · '+modelName(x.model)+' · '+t('effort {level}',{level:(effortLabels[x.effort]?t(effortLabels[x.effort]):x.effort||t('effort:unknown'))})+' — '+(x.usd_known?money(x.usd):t('price unknown'))+' · '+megaTokens(x.tokens)+' · '+t(x.sessions===1?'{count} session':'{count} sessions',{count:x.sessions}))));
+      for(const part of x.breakdown||[]){
+        content.append(n('p','usage-note',t('Task {task} · tier {tier} · price version {version}',{task:part.task||t('unknown'),tier:part.tier||t('unknown'),version:part.pricing_version||t('unknown')})));
+        for(const [key,label] of Object.entries(categories)){
+          if(part.tokens?.[key]===undefined)continue;
+          const rate=part.rates_per_million?.[key];
+          content.append(n('p','usage-note',t(label)+': '+Number(part.tokens[key]).toLocaleString()+' '+t('tokens')+' · '+(rate==null?t('price unknown'):t('{rate} per million',{rate:rate.toLocaleString()}))));
+        }
+      }
+      for(const reason of x.price_unknown||[])content.append(n('p','usage-note unknown',t('Price unavailable: {reason}',{reason})));
+    }
+    content.append(n('p','usage-note',t('Attribution confidence: not available.')));
+    for(const item of u.pricing||[]){
+      const price=item.pricing;
+      if(!price){content.append(n('p','usage-note unknown',t('Price metadata unavailable for {task}.',{task:item.task})));continue;}
+      content.append(n('p','usage-note',t('Task {task}: price version {version} · verified {date} · {currency}',{task:item.task,version:price.version||t('unknown'),date:price.verified||t('unknown'),currency:price.currency||t('unknown')})));
+      if(item.stale)content.append(n('p','usage-note unknown',t('Price is old; verify the current rate.')));
+      if(price.conditions)content.append(n('p','usage-note',price.conditions));
+      for(const [harness,url] of Object.entries(price.sources||{}))if(/^https:\/\//.test(url)){const a=n('a','',harnessName(harness));a.href=url;a.target='_blank';a.rel='noopener noreferrer';const p=n('p','usage-note',t('Price source')+': ');p.append(a);content.append(p);}
+    }
     const k=u.tasks||{};
     if(k.running)content.append(n('p','usage-note',t(k.running===1?'{count} task still running: its figure keeps growing.':'{count} tasks still running: their figures keep growing.',{count:k.running})));
     if(k.not_started)content.append(n('p','usage-note',t(k.not_started===1?'{count} task not started: no spend.':'{count} tasks not started: no spend.',{count:k.not_started})));
     const {decisions,unknown}=usageUnknown(r);
     for(const x of decisions)content.append(n('p','usage-note',t('Your decision: {task} — no agent spend.',{task:x.title||x.task})));
     if(k.no_agent)content.append(n('p','usage-note',t('{count} of your decisions: no agent spend.',{count:k.no_agent})));
-    for(const x of unknown)content.append(n('p','usage-note unknown',t('Unknown: {task} has no identified agent session.',{task:x.title||x.task})));
+    for(const x of unknown)content.append(n('p','usage-note unknown',t('Unknown: {task} — {reason}',{task:x.title||x.task,reason:x.reason||t('unknown')})));
     if((u.excludes||[]).includes('coordinator'))content.append(n('p','usage-note unknown',t('Not included: Firstmate coordination, shared by every request.')));
-    content.append(n('p','usage-note',t('USD = tokens × public API list price of each model. Your Claude and Codex subscriptions are not charged this way.')));box.append(content);
+    content.append(n('p','usage-note',t('List-price estimate; not an invoice or subscription charge.')));box.append(content);
     return box;
   }
 
