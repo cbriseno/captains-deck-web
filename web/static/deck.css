@@ -611,7 +611,7 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .attention-list .inline-answer .own-words{display:block;margin:8px 0 0}
 .attention-list .answer-compose{display:flex;gap:6px;align-items:center}
 .attention-list .answer-compose .answer-label{flex:1;min-width:0;display:block}
-.attention-list .answer-compose input{width:100%;height:30px;min-height:30px;padding:0 10px;border:1px solid var(--control-line,var(--control));border-radius:6px;background:var(--surface);font-size:13px;font-weight:400;box-sizing:border-box}
+.attention-list .answer-compose textarea{width:100%;min-height:64px;padding:7px 10px;resize:vertical;border:1px solid var(--control-line,var(--control));border-radius:6px;background:var(--surface);font-size:13px;font-weight:400;box-sizing:border-box}
 .attention-list .answer-compose .answer-attach{display:inline-grid;place-items:center;flex:none;width:30px;height:30px;min-height:0;padding:0;border:0;border-radius:6px;background:transparent;color:var(--muted)}
 .attention-list .answer-compose .answer-attach:hover:enabled{background:var(--soft);color:var(--ink)}
 .attention-list .answer-compose .answer-send{width:auto;height:30px;min-height:30px;padding:0 12px;border:1px solid var(--control);border-radius:6px;background:var(--surface);color:var(--ink);font-size:13px;font-weight:500}

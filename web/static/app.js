@@ -556,7 +556,7 @@ async function inlineAnswer(card, opener, container) {
     if(ticket.answered||!ticket.call)return;
     const c=ticket.call,draft=readDraft(card.key),items=draft.attachments||[];
     const offered=c.options.filter(o=>o.value!=='reconcile');
-    const note=node('input');note.type='text';note.value=draft.note||'';note.placeholder=t(offered.length?'Or write your answer…':'Write your answer…');note.setAttribute('aria-label',t('Answer in my own words'));
+    const note=node('textarea');note.rows=3;note.value=draft.note||'';note.placeholder=t(offered.length?'Or write your answer…':'Write your answer…');note.setAttribute('aria-label',t('Answer in my own words'));
     const status=node('p','notice');status.hidden=true;status.setAttribute('role','status');
     let edited=false;
     const store=event=>{if(event)edited=true;const saved={...draft,note:note.value,attachments:items,occurrence:edited?c.occurrence:(draft.occurrence||c.occurrence)};S.drafts.set(card.key,saved);try{sessionStorage.setItem('deck-draft-'+card.key,JSON.stringify(saved));}catch{};sync();};
@@ -578,7 +578,7 @@ async function inlineAnswer(card, opener, container) {
     if(!recheck&&c.options.some(o=>o.value==='reconcile')){recheck=true;deckUI?.addMenuItem?.(container,'redo',t('Ask to check it again'),()=>answer('reconcile'));}
     const send=button(t('Send'),()=>sendAnswer(''),'primary answer-send');
     const sync=()=>{const blocked=!!window.DeckAnonymize?.enabled||!S.online||S.busy||!!c.error||!!editor.querySelector('[data-uploading]');send.disabled=blocked||(!note.value.trim()&&!items.length);for(const b of choices.children)b.disabled=blocked;};
-    note.addEventListener('input',store);note.addEventListener('keydown',event=>{if(event.key==='Enter'&&!send.disabled){event.preventDefault();sendAnswer('');}});
+    note.addEventListener('input',store);
     const free=node('div','own-words');free.append(append(node('label','answer-label'),note),send);editor.append(choices,free,status);
     if(c.attachments)answerTools.composer(free,'api/ticket/'+encodeURIComponent(card.key)+'/upload',items,()=>store(true),()=>editor.isConnected&&!window.DeckAnonymize?.enabled&&!S.busy);
     if(c.error){status.textContent=c.error;status.hidden=false;}sync();

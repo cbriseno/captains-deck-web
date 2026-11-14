@@ -80,10 +80,10 @@ for (const language of ['es','en']) test('progress checkpoint: current, historic
       publish('web','current',2,3,'integration');const restored=reading('web','current','67','summary');
       assert.ok(restored.phase.includes(language==='es'?'Integración':'Integration'));
       publish('ask','current',1,2,'validation');
-      run('run',[],`await page.press('Escape');await page.wait('#board .qcard .inline-answer .own-words input');await page.fill('#board .qcard .inline-answer .own-words input','Unsent question draft');await page.eval(()=>{window.questionDraft=document.querySelector('#board .qcard .inline-answer .own-words input');});`);
+      run('run',[],`await page.press('Escape');await page.wait('#board .qcard .inline-answer .own-words textarea');await page.fill('#board .qcard .inline-answer .own-words textarea','Unsent question draft');await page.eval(()=>{window.questionDraft=document.querySelector('#board .qcard .inline-answer .own-words textarea');});`);
       for(const [freshness,done,total,phase] of [['stale',1,2,'activation'],['current',2,2,'complete']]){
         publish('ask',freshness,done,total,phase);
-        const question=evaluate(`async()=>{for(let i=0;i<180;i++){const b=await(await fetch('api/board')).json();if(b.deck.sources[0].snapshot.nodes.find(x=>x.task==='ask')?.phase==='${phase}')break;await new Promise(r=>setTimeout(r,100));}await new Promise(r=>setTimeout(r,500));const input=document.querySelector('#board .qcard .inline-answer .own-words input');return {sameDraft:window.questionDraft===input,draft:input?.value,executionControls:document.querySelectorAll('.qcard .prog,.qcard .card-ctl').length};}`);
+        const question=evaluate(`async()=>{for(let i=0;i<180;i++){const b=await(await fetch('api/board')).json();if(b.deck.sources[0].snapshot.nodes.find(x=>x.task==='ask')?.phase==='${phase}')break;await new Promise(r=>setTimeout(r,100));}await new Promise(r=>setTimeout(r,500));const input=document.querySelector('#board .qcard .inline-answer .own-words textarea');return {sameDraft:window.questionDraft===input,draft:input?.value,executionControls:document.querySelectorAll('.qcard .prog,.qcard .card-ctl').length};}`);
         assert.equal(question.executionControls,0);assert.equal(question.sameDraft,true);assert.equal(question.draft,'Unsent question draft');
       }
       run('run',[],`await page.press('Escape');await page.click('#board [data-node$="task:demo-research"] .card-open');await page.wait('#detail-content .detail-tabs');await page.click('#detail-content .detail-tabs button:nth-child(2)');`);
