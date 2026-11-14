@@ -525,6 +525,7 @@ html[data-deck-hidden=true] .request-signal::before,html[data-deck-hidden=true] 
 .request-tasks .task-row>.rctl{display:inline-flex;flex-wrap:nowrap;align-items:center;gap:12px;align-self:center;justify-self:end;position:static;padding:0;border:0;max-width:none}
 .request-tasks>.task-row{container-type:inline-size}@container (max-width:520px){.request-tasks .task-row>.rctl{grid-column:2;justify-self:start;margin-top:6px}}
 .task-row .rctl .prog{display:inline-flex;align-items:center;gap:8px;margin:0;font-size:12px;color:var(--muted);white-space:nowrap}.task-row .rctl .prog-phase{display:none}.task-row .rctl>*,.task-row .rctl .prog>*{flex:none}.task-row .rctl .prog-bar{width:64px;height:4px;background:var(--line)}.task-row .rctl .prog-bar i{background:var(--ok)}.task-row .rctl .prog-txt{font-size:12px}
+.task-row .rctl .prog{width:240px;white-space:normal}.task-row .rctl .prog .prog-txt{flex:1;min-width:0}
 .task-row .rctl .pause-control{display:flex;align-items:center;gap:8px}.task-row .rctl .pause-explanation{display:none}
 .task-row>.card-menu-btn{position:static;grid-column:4;align-self:center}.task-row>.card-more,.task-row>:not(.dot,.rmain,.rctl,.card-menu-btn,.card-menu){grid-column:1/-1}
 .attention-list .task-card{margin:0}.attention-flash{animation:attention-flash 1.8s ease-out}@keyframes attention-flash{0%,30%{outline:3px solid var(--blue);outline-offset:3px}100%{outline-color:transparent}}
