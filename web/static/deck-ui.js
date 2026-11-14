@@ -637,7 +637,14 @@ window.createDeckUI = function (host) {
   }
   const requestFor=x=>ancestors(x).find(y=>y.kind==='request');
   const activityEpoch=value=>{const e=event(value);return e?.epoch||Date.parse(e?.date||'')/1000||0;};
-  const reviewNeeded=x=>!cancelled(x)&&x.state==='done'&&(x.outcome||x.raw?.outcome||x.card?.outcome)?.review==='needed';
+  function reviewNeeded(x){
+    if(cancelled(x)||(x.outcome||x.raw?.outcome||x.card?.outcome)?.review!=='needed')return false;
+    // An open row keeps its finished result visible until Firstmate closes it.
+    if(x.raw?.backlog_state==='in_flight'&&(x.state==='done'||x.card?.activity?.kind==='finished'))return true;
+    // Old retained results belong in Delivered; updating them is not a new delivery.
+    const completed=activityEpoch(x.completed_at),now=Date.now()/1000;
+    return x.state==='done'&&completed>0&&completed<=now&&now-completed<86400;
+  }
   function requestRows(tasks){
     const groups=new Map(model.nodes.filter(x=>x.kind==='request').map(x=>[x.id,{...x,tasks:[],calls:[]}]));
     const legacyId=x=>'legacy:'+(projectOf(x)?.id||x.home);

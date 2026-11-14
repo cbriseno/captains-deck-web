@@ -337,6 +337,10 @@ It checks hierarchy, exact turn order, preview/apply/undo transport, inline reco
 It skips when that CLI is unavailable; `CD_TEST_BROWSER` chooses its executable and `CD_TEST_SESSION` can select an existing task-owned browser session.
 `board_dom.test.cjs` includes the retained native question/report tests and the browser check; `board_layout.browser.cjs` is a compatibility entrypoint for the same browser check, so run one entrypoint per validation batch.
 These fixture checks do not prove the real Firstmate engine, safe-point protocol or dispatch behavior.
+`node --test web/tests/mac_regressions.browser.cjs` seeds the Mac report cases N1,
+N3, N5 and N6 and verifies Needs you at 1970×1250 and 390×844. It retains unreviewed
+deliveries completed in the last 24 hours, plus finished results whose row is
+still in flight; older or undated closed results remain in Delivered.
 Real acceptance must read the configured local owner first, then exercise the actual owner implementation against disposable state and verify persisted requests and Firstmate receipt.
 
 The native detail helpers run under Node.js 22; production still requires only Python.
