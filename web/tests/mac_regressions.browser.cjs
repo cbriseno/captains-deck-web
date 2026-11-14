@@ -39,6 +39,11 @@ test('Mac regression walkthrough: attention, final, missing worker, activity and
       await t.test('N6 unresolved project has an explicit label at '+width,()=>assert.match(result.project,/Proyecto sin resolver: unlisted/));
       if(process.env.CD_TEST_EVIDENCE){fs.mkdirSync(process.env.CD_TEST_EVIDENCE,{recursive:true});run('screenshot',[path.join(process.env.CD_TEST_EVIDENCE,'seeded-'+width+'.png')]);}
     }
+    // In the two-column layout, a taller neighbouring decision must not stretch a review card.
+    run('resize',['800','900']);
+    const geometry=evaluate(`()=>[...document.querySelectorAll('#board .review-card')].map(card=>{const actions=card.querySelector('.cacts'),rect=card.getBoundingClientRect(),buttons=[...actions.querySelectorAll('button,a')];return {gap:rect.bottom-actions.getBoundingClientRect().bottom,heights:buttons.map(b=>b.getBoundingClientRect().height)};})`);
+    assert.ok(geometry.length>0);
+    for(const card of geometry){assert.ok(card.gap<=14,`Unused space below review actions: ${card.gap}px`);assert.ok(card.heights.every(h=>h>=30));}
     // A new native turn replaces launch uncertainty through normal polling.
     event({event:'agent.activity',task:'launch',value:{gen:'fixture',seq:2,state:'busy',source:'codex',event:'turn-start'}});
     assert.equal(evaluate(`async()=>{${wait}await wait(async()=>{const b=await(await fetch('api/board')).json();return b.columns.flatMap(x=>x.cards).some(c=>c.task==='launch'&&c.activity.kind==='working');});return true;}`),true);
