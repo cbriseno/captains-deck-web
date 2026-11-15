@@ -5,7 +5,7 @@
 .p-measure{display:block;flex:none;width:64px;height:5px;background:var(--control);border-radius:5px;overflow:hidden}
 .p-measure i{display:block;width:40%;height:100%;background:var(--accent)}.p-details{flex-basis:100%}.p-details li{padding:3px 0}
 /* The decorative surface follows the actual header, behind its text. No inset card. */
-.request-head{position:relative;isolation:isolate;overflow:hidden}
+.request-head{position:relative;isolation:isolate}
 .request-row:first-child>.request-head{border-radius:9px 9px 0 0}
 .request-row:last-child:has(.request-title[aria-expanded=false])>.request-head{border-bottom-left-radius:9px;border-bottom-right-radius:9px}
 .p-live{position:absolute;inset:0;overflow:hidden;border-radius:inherit;pointer-events:none;z-index:-1;color:var(--accent)}
@@ -42,7 +42,7 @@ html[data-motion=true][data-concept=j] .p-mark i:first-child{animation:p-fold 3s
 @keyframes p-pendulum{from{transform:rotate(-32deg)}to{transform:rotate(32deg)}}
 @keyframes p-equalize{from{transform:scaleY(.25)}to{transform:scaleY(1)}}
 @keyframes p-fold{0%,15%,100%{transform:scaleX(1)}50%,65%{transform:scaleX(-1)}}
-@media(prefers-reduced-motion:reduce){html[data-motion=true][data-concept] .p-live{display:none}html[data-motion=true][data-concept] .p-live *,html[data-motion=true][data-concept] .p-mark i{animation:none!important}}
+@media(prefers-reduced-motion:reduce){html[data-motion=true][data-concept] .p-live{display:none}html[data-motion=true][data-concept] .p-live *,html[data-motion=true][data-concept] .request-signal .p-mark i{animation:none!important}}
 /* The fixture reserves inline space and disables production actions. */
 #detail-panel[data-active=false],#settings-open,.supervision{display:none!important}
 .request-stage{min-width:0!important;max-width:none!important}.request-meta{min-width:0}.request-row{--project-color:var(--accent)}
