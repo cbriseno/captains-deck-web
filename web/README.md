@@ -291,8 +291,14 @@ Secondmate-owned calls, reconcile requests and unsaved answers send no message.
 Reconcile is a request to recheck, never an answer or a release.
 Explanations use `fm-delivery-explain.sh --task … --request-id … --json`, with `--status` for reads.
 The existing stable home/task request ID owns deduplication; actual replies and ACKs are displayed as recorded.
-Reports and user content only reach DOM `textContent`; report links are text, never commands or authority.
+User prose reaches DOM `textContent`; report links are text, never commands or authority.
+Registered local deliveries can display their self-contained `data/TASK/report.html` in a sandboxed frame, with scripts, forms and network resources blocked.
 Report reads reuse the model’s task scope, size bounds and symlink/traversal protections.
+Reading a report never starts Lavish.
+**Review in Lavish** explicitly posts the result identity through the existing authenticated control, then opens the owner-confirmed session in one reusable browser window.
+The Firstmate capability `report_controls: ["report.review"]` enables `work report.review` with JSON `{target:"task:ID"}`; the owner resolves its registered file, prepares feedback routing and returns `{ok:true,url:"…"}` only when review is ready.
+An older owner reports review as unavailable; Deck never accepts an artifact path or launches a shell command from the report.
+When reading an offline `file://` report without this connected control, the manual fallback is `lavish-axi --no-open <file>` followed by its printed URL; that fallback does not provide the automatic review bridge.
 
 The prior experimental Web Push surface is retired from this server.
 It creates no keys/subscriptions, sends no alerts, and unregisters its old worker on an existing Deck origin.
@@ -315,6 +321,8 @@ Identifiers are server-issued opaque owner/card IDs; clients cannot supply files
 | GET | `/api/receipts` | This actor’s latest ten durable answer receipts |
 | GET | `/api/history?home=ID&q=TEXT` | Retained history search, newest first, up to 1000 results with omission count |
 | GET | `/api/delivery/OWNER/TASK` | Readable summary, report, details and the links its title carried |
+| GET | `/api/delivery/OWNER/TASK/report` | Sandboxed HTML of the registered local delivery; no review side effects |
+| POST | `/api/control/OWNER/report-review` | Explicit review of `{target:"task:ID"}` through the Firstmate owner |
 | GET | `/api/delivery/OWNER/TASK/explanation` | Actual explanation receipt, ACK and reply |
 | POST | `/api/delivery/OWNER/TASK/explanation` | Explicit request through the existing owner intake |
 

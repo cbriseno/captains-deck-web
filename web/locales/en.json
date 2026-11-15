@@ -1254,5 +1254,13 @@
   "Price source": "Price source",
   "Unknown: {task} — {reason}": "Unknown: {task} — {reason}",
   "List-price estimate; not an invoice or subscription charge.": "List-price estimate; not an invoice or subscription charge.",
-  "old price": "old price"
+  "old price": "old price",
+  "HTML report unavailable.": "HTML report unavailable.",
+  "Choose a registered report.": "Choose a registered report.",
+  "On-demand report review is not available from this Firstmate yet.": "On-demand report review is not available from this Firstmate yet.",
+  "Firstmate did not confirm a review session.": "Firstmate did not confirm a review session.",
+  "Review in Lavish": "Review in Lavish",
+  "Allow pop-ups to open the review.": "Allow pop-ups to open the review.",
+  "Preparing review…": "Preparing review…",
+  "Feedback goes to the report author. New tasks or decisions go to Firstmate.": "Feedback goes to the report author. New tasks or decisions go to Firstmate."
 }

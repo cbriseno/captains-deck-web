@@ -480,6 +480,39 @@ class WebTests(unittest.TestCase):
         self.assertEqual(delivery['report'].count('Una línea de evidencia útil'),35)
         self.assertIn('FIN_DEL_INFORME',delivery['report'])
 
+    def test_html_report_reads_are_passive_and_review_keeps_control_guards(self):
+        self.init()
+        home = bridge.home_id(self.home)
+        route = f'/api/delivery/{home}/demo-research'
+        action = f'/api/control/{home}/report-review'
+        report = Path(self.home.path, 'data/demo-research/report.html')
+        report.write_text('<!doctype html><h1>Original report</h1><script>parent.COMPROMISED=true</script>')
+        original = self.board.deck_controls.invoke
+        calls = []
+        def invoke(owner, command, payload=None):
+            if command == 'capabilities':
+                return dict(original(owner, command), report_controls=['report.review'])
+            if command == 'report.review':
+                calls.append(payload)
+                return {'ok': True, 'url': 'http://127.0.0.1:12345/session/synthetic'}
+            return original(owner, command, payload)
+        with patch.object(self.board.deck_controls, 'invoke', side_effect=invoke):
+            self.assertTrue(self.req(route)[1].get('html_report', False))
+            self.assertIn(b'Original report', self.req(route + '/report')[1])
+            self.assertEqual(calls, [], 'Reading never starts a review')
+            for headers in ({'Origin': 'https://evil.test'}, {'X-Deck-CSRF': 'wrong'}, {'Sec-Fetch-Site': 'cross-site'}):
+                self.assertEqual(self.req(action, {'target': 'task:demo-research'}, headers=headers)[0], 403)
+            for payload in ({'target': 'task:missing'}, {'target': 'task:../demo-research'},
+                            {'target': 'task:demo-research', 'path': '/tmp/arbitrary.html'}):
+                self.assertIn(self.req(action, payload)[0], (400, 404))
+            self.assertEqual(calls, [])
+            self.assertEqual(self.req(action, {'target': 'task:demo-research'})[0], 200)
+            self.assertEqual(calls, [{'target': 'task:demo-research'}])
+        report.unlink()
+        report.symlink_to(Path(self.home.path, 'data/demo-research/report.md'))
+        self.assertEqual(self.req(route + '/report')[0], 404)
+        self.assertFalse(self.req(route)[1]['html_report'])
+
     def test_history_is_newest_first_by_the_time_shown_and_titles_carry_no_urls(self):
         records=[{'id':'untimed','title':'Sin hora'},
                  {'id':'old-day','title':'Día viejo','completion':{'date':'2026-10-10'}},

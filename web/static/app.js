@@ -7,6 +7,7 @@ const S = { board: null, home: '', online: false, view: 'board', query: '',
   busy: false, csrf: '', modal: null, opener: null, generation: 0, historyGeneration: 0,
   boardRequest: 0, boardApplied: 0,
   lastRead: 0, receipt: null, drafts: new Map(), historyTimer: null, linkHandled: false };
+const reviewWindows = new Map();
 let sessionReady;
 const initialSession = new Promise(resolve => { sessionReady = resolve; });
 // v14 supersedes the previous Compact preference.
@@ -768,8 +769,28 @@ function renderDelivery() {
   const modal = S.modal, data = modal.data, content = $('detail-content'); content.replaceChildren();
   if (modal.linkNotice) content.append(node('p', 'notice', modal.linkNotice));
   if (data.notice) content.append(node('p', 'notice', data.notice));
+  if (data.html_report) {
+    const status = node('p', 'notice'); status.setAttribute('role', 'status');
+    const review = button(t('Review in Lavish'), async () => {
+      const key = modal.home + ':' + modal.task;
+      let tab = reviewWindows.get(key);
+      if (tab && !tab.closed) { tab.focus(); return; }
+      tab = window.open('about:blank', 'deck-review-' + modal.home + '-' + modal.task);
+      if (!tab) { status.textContent = t('Allow pop-ups to open the review.'); return; }
+      tab.opener = null;
+      review.disabled = true; status.textContent = t('Preparing review…');
+      try {
+        const result = await api('api/control/' + encodeURIComponent(modal.home) + '/report-review', {target: 'task:' + modal.task});
+        tab.location.replace(result.url); reviewWindows.set(key, tab);
+        status.textContent = t('Feedback goes to the report author. New tasks or decisions go to Firstmate.');
+      } catch (error) { tab.close(); status.textContent = error.message; }
+      finally { review.disabled = false; }
+    });
+    review.dataset.action = 'report-review';
+    content.append(review, status);
+  }
   // What changed comes first; without a summary the report opens right away.
-  const views = [['summary', t("Summary")], ['report', t("Report")]].filter(([id]) => data[id]);
+  const views = [['summary', t("Summary")], ['report', t("Report")]].filter(([id]) => data[id] || id === 'report' && data.html_report);
   if (!views.some(([id]) => id === modal.tab)) modal.tab = views[0]?.[0] || 'summary';
   if (views.length > 1) {
     const tabs = node('nav', 'detail-tabs'); tabs.setAttribute('aria-label', t("Delivery content"));
@@ -778,6 +799,11 @@ function renderDelivery() {
   }
   if (!views.length) content.append(node('p', 'detail-empty', t("No summary or report for this one.")));
   else if (modal.tab === 'summary') content.append(prose(data.summary));
+  else if (data.html_report) {
+    const frame = node('iframe', 'html-report'); frame.title = t('Full report'); frame.setAttribute('sandbox', '');
+    frame.src = 'api/delivery/' + encodeURIComponent(modal.home) + '/' + encodeURIComponent(modal.task) + '/report';
+    content.append(frame);
+  }
   else content.append(markdown(data.report_text || data.report), data.report_lead ? disclosure(t("Branch, commits and paths"), markdown(data.report_lead)) : '');
   // A PR address left the title; it opens from here instead.
   for (const link of data.links || []) {

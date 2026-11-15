@@ -1254,5 +1254,13 @@
   "Price source": "Fuente de precio",
   "Unknown: {task} — {reason}": "Desconocido: {task} — {reason}",
   "List-price estimate; not an invoice or subscription charge.": "Estimación a precio de lista; no es una factura ni un cargo de suscripción.",
-  "old price": "precio antiguo"
+  "old price": "precio antiguo",
+  "HTML report unavailable.": "Informe HTML no disponible.",
+  "Choose a registered report.": "Elige un informe registrado.",
+  "On-demand report review is not available from this Firstmate yet.": "Este Firstmate todavía no ofrece revisión de informes bajo demanda.",
+  "Firstmate did not confirm a review session.": "Firstmate no confirmó una sesión de revisión.",
+  "Review in Lavish": "Revisar en Lavish",
+  "Allow pop-ups to open the review.": "Permite las ventanas emergentes para abrir la revisión.",
+  "Preparing review…": "Preparando revisión…",
+  "Feedback goes to the report author. New tasks or decisions go to Firstmate.": "Los comentarios van al autor del informe. Las tareas nuevas o decisiones van a Firstmate."
 }

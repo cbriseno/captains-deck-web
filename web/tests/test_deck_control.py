@@ -44,6 +44,20 @@ def owner(home):
 
 
 class ProjectionTests(unittest.TestCase):
+    def test_report_review_requires_owner_capability_and_a_confirmed_web_url(self):
+        controls = DeckControls(lambda home: {})
+        home = type('Home', (), {'path': 'synthetic'})()
+        body = {'target': 'task:report'}
+        with patch.object(controls, 'invoke', return_value={}) as invoke:
+            with self.assertRaises(ControlError):
+                controls.request(home, 'report-review', body, 'captain')
+            self.assertEqual(invoke.call_count, 1)
+        for response in ({'ok': True, 'url': 'javascript:alert(1)'}, {'ok': True},
+                         {'ok': True, 'url': 'https://user:password@example.test/session/id'}):
+            with patch.object(controls, 'invoke', side_effect=[{'report_controls': ['report.review']}, response]):
+                with self.assertRaises(ControlError):
+                    controls.request(home, 'report-review', body, 'captain')
+
     def test_external_relaunch_reconciles_stale_resume_for_each_scope(self):
         import copy
         raw = {'projects': [{'key': 'project:deck'}], 'tasks': [

@@ -31,6 +31,7 @@ def save():
 
 if command == 'capabilities':
     print(json.dumps({'schema': 'fm-work-capabilities.v1', 'contract_major': 1,
+                      'report_controls': ['report.review'] if (root / 'report-review.json').exists() else [],
                       'ops': ['set_priority', 'set_pause', 'clear_pause', 'add_dep', 'remove_dep', 'move', 'request_removal'],
                       'signals': ['pause.preview', 'pause.request', 'pause.cancel', 'resume.preview', 'resume.request', 'resume.dequeue'] if 'pause_controls' in raw else [],
                       'features': ['progress', 'safe_point', 'group_dependencies', 'manual_order']}));sys.exit()
@@ -41,6 +42,8 @@ if command == 'request-status':
 operation = json.load(sys.stdin)
 with (root / 'work-calls.jsonl').open('a') as out:
     out.write(json.dumps({'command': command, 'operation': operation}) + '\n')
+if command == 'report.review':
+    print((root / 'report-review.json').read_text());sys.exit()
 if '.' in command:
     target = operation['target']
     impact = {'affected': {'running': ['task:web'], 'queued': ['task:next'], 'waiting_behind': []},

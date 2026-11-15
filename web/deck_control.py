@@ -10,6 +10,7 @@ import re
 import subprocess
 import threading
 import time
+from urllib.parse import urlsplit
 
 from deck_platform import endpoint_path, shell_command
 
@@ -225,7 +226,7 @@ class DeckControls:
         # the short metadata budget can expire before a healthy preview returns.
         impact_read = command in ('pause.preview', 'resume.preview') or (
             command == 'preview' and (payload or {}).get('op') in ('set_pause', 'clear_pause'))
-        timeout = None if pause_write else 120 if command == 'bootstrap' else 60 if command == 'snapshot' or impact_read else 8
+        timeout = None if pause_write else 120 if command in ('bootstrap', 'report.review') else 60 if command == 'snapshot' or impact_read else 8
         try:
             result = subprocess.run(shell_command(script, *args),
                                     input=json.dumps(payload, ensure_ascii=False) if payload is not None else None,
@@ -329,6 +330,17 @@ class DeckControls:
         # Serialize this server's snapshot reads with its controls. The owner
         # still takes its authoritative lock and checks revisions/idempotency.
         with self.lock:
+            if command == 'report-review':
+                if not isinstance(body, dict) or set(body) != {'target'} or not isinstance(body['target'], str) or not re.fullmatch(r'task:[A-Za-z0-9][A-Za-z0-9_-]{0,127}', body['target']):
+                    raise ControlError('Choose a registered report.', 400, 'invalid_value')
+                capabilities = self.invoke(home, 'capabilities')
+                if 'report.review' not in capabilities.get('report_controls', []):
+                    raise ControlError('On-demand report review is not available from this Firstmate yet.', 409, 'unsupported_op')
+                data = self.invoke(home, 'report.review', body)
+                url = urlsplit(data.get('url') or '')
+                if data.get('ok') is not True or url.scheme not in ('http', 'https') or not url.hostname or url.username or url.password:
+                    raise ControlError('Firstmate did not confirm a review session.', 502, 'invalid-response')
+                return data
             if command == 'review':
                 if not isinstance(body, dict):
                     raise ControlError('A JSON object is required.', 400, 'invalid_value')

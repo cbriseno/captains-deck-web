@@ -1025,7 +1025,13 @@ class Board:
         # The report opens on what changed; a receipt it led with folds away.
         source = content.pop('report_source', '')
         report, report_lead = report_parts(source)
+        try:
+            self.report_html(identity, task)
+            html_report = True
+        except Refusal:
+            html_report = False
         return {'task': task, 'home': identity, 'owner': home.label, 'title': title,
+                'html_report': html_report,
                 'original_title': str(record.get('title') or ''),
                 'links': title_links(record.get('title')),
                 'project': self.delivered_project(home, rows, record, human),
@@ -1034,6 +1040,18 @@ class Board:
                 'report_text': report, 'report_lead': report_lead, 'sources': note,
                 'time': self.event_json(fm.producer_card_time(record.get('card_time'), 'landed',
                                                        fm.CardTime('Delivered', record.get('closed'))))}
+
+    def report_html(self, identity, task):
+        home = self.home(identity)
+        if not fm.KEY_RE.fullmatch(task) or fm.is_remote_home(home):
+            raise Refusal('HTML report unavailable.', 404)
+        if self.delivery_record(home, task) is None:
+            raise Refusal('HTML report unavailable.', 404)
+        try:
+            return fm.delivery_read(home.path, fm.delivery_task_prefix(task) + 'report.html',
+                                    fm.DELIVERY_FILE_LIMIT)
+        except (OSError, ValueError) as exc:
+            raise Refusal('HTML report unavailable.', 404) from exc
 
     def explanation(self, identity, task, status=True):
         home = self.home(identity)
@@ -1620,6 +1638,12 @@ class Handler(BaseHTTPRequestHandler):
                 operation = parts[3]
                 if unsafe and operation == 'upload':
                     data = board.answer_files.upload('control/' + parts[2], body, actor)
+                elif unsafe and operation == 'report-review':
+                    target = body.get('target')
+                    if not isinstance(target, str) or not target.startswith('task:') or set(body) != {'target'}:
+                        raise Refusal('Choose a registered report.', 400)
+                    board.report_html(parts[2], target[5:])
+                    data = board.deck_controls.request(owner, operation, body, actor)
                 elif (unsafe and operation in ('preview', 'apply', 'review')) or (not unsafe and operation == 'receipt'):
                     if unsafe and body.get('action') == 'scope-removal' and 'attachments' in body and isinstance(body.get('reason', ''), str):
                         # Firstmate's removal note is text: name each attached file on its own line.
@@ -1669,6 +1693,10 @@ class Handler(BaseHTTPRequestHandler):
             elif len(parts) in (4, 5) and parts[:2] == ['api', 'delivery']:
                 if len(parts) == 4 and not unsafe:
                     data = board.delivery(parts[2], parts[3])
+                elif len(parts) == 5 and parts[4] == 'report' and not unsafe:
+                    content = board.report_html(parts[2], parts[3]).encode()
+                    self.respond(200, content, 'text/html; charset=utf-8', sid, secure, report=True)
+                    return
                 elif len(parts) == 5 and parts[4] == 'explanation':
                     data = board.explanation(parts[2], parts[3], status=not unsafe)
                 else:
@@ -1748,15 +1776,17 @@ class Handler(BaseHTTPRequestHandler):
         except (OSError, TimeoutError):
             pass
 
-    def respond(self, status, content, mime='application/json; charset=utf-8', sid='', secure=False):
+    def respond(self, status, content, mime='application/json; charset=utf-8', sid='', secure=False, report=False):
         self.send_response(status)
         self.send_header('Content-Type', mime)
         self.send_header('Content-Length', str(len(content)))
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
-        self.send_header('X-Frame-Options', 'DENY')
-        self.send_header('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
+        self.send_header('X-Frame-Options', 'SAMEORIGIN' if report else 'DENY')
+        self.send_header('Content-Security-Policy',
+                         "sandbox; default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; frame-ancestors 'self'; form-action 'none'" if report else
+                         "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; connect-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
         if sid:
             self.send_header('Set-Cookie', f'deck_session={sid}; HttpOnly; SameSite=Strict; Path=/' + ('; Secure' if secure else ''))
         self.end_headers()
