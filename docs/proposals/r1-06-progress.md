@@ -1,10 +1,13 @@
-# R1-06: five progress concepts in the real Deck
+# R1-06: ten animated concepts in the real Deck
 
-Review round 3 requires five animated patterns and invites treatments across the
-whole card. Version 5 compares A (traveling top edge), B (breathing surface),
-C (light sweep), D (moving title ink), and E (traveling perimeter). All five
-start animated for both measured and unmeasured active work. No replacement
-has been selected. This is proposal-only; production source is unchanged.
+Review round 4 asks for five creative breathing variations and five new concepts.
+Version 6 offers R1 Tinta (uniform surface), R2 Halo (diffuse center), R3 Fuelle
+(paired lateral veils), R4 Marea (light from below), R5 Contorno (stationary outline),
+N1 Trama (diagonal texture), N2 Ondas (expanding waves), N3 Péndulo (hinged stroke),
+N4 Ecualizador (vertical strokes), and N5 Pliegue (folding shape).
+The five new concepts do not repeat the earlier top trace, whole-surface breathing,
+sweep, moving title, traveling perimeter, dot, track, ring, numeric or milestone cues.
+No replacement has been selected. This is proposal-only; production source is unchanged.
 
 ## Manual procedure
 
@@ -18,8 +21,8 @@ has been selected. This is proposal-only; production source is unchanged.
    HTML/CSS/JavaScript and replaces `progress()` and adds card decorations only in the generated page.
    It supplies five synthetic cases through an in-memory fixture transport.
 4. Open the generated HTML locally and with the same sandbox flags as Lavish.
-   Switch A–E, expand requests, search, compare
-   light/dark at desktop and mobile widths, and try optional motion with and
+   Switch R1–R5 and N1–N5, expand requests, search, compare
+   light/dark at desktop and mobile widths, and pause motion with and
    without the system's reduced-motion preference. No backend is contacted.
 5. Review the same artifact in the existing worker-owned Lavish session.
    Obtain independent visual and blind usability reviews before closing P16.
@@ -41,11 +44,13 @@ request's completed-task count is distinct from task steps. Steps are not time,
 effort, installation, or acceptance. Activity freshness and progress freshness
 are independent; the report describes the stale-progress/confirmed-activity case.
 
-All five patterns animate by default on the real active request cards. They do
+All ten patterns animate by default on the real active request cards. They do
 not animate the measured percentage. Waiting, parked and unconfirmed cards
 stay static. The pause checkbox and system `prefers-reduced-motion` disable
-all five; text and actual measurements remain available. The decoration is
-absolutely positioned, preserving card geometry between concepts.
+all ten; text and actual measurements remain available. The decoration is
+absolutely positioned within the real request header, behind its text. Inline
+marks replace the active status dot only for N3–N5. Card dimensions are checked
+at desktop and mobile widths. The measured percentage never animates.
 
 The generated copy removes the service-worker cleanup line: it has no worker to
 unregister and Lavish disallows that API in its sandbox. Appearance controls and
@@ -65,3 +70,13 @@ renderer and synthetic owner projection. Linux is verified; the Mac is not.
 Source references: approved plan v2 P16, report b group 11, attachment R1-02/R1-06,
 `web/static/deck-ui.js` (`progress`, `requestRow`) and `web/static/deck.css`.
 No L1–L23 issue was reopened.
+
+## Breathing geometry correction
+
+The real v5 run reproduced the reported mismatch: a 10px rounded overlay on
+straight request rows, positioned over the entire request including expanded
+content. In v6 the overlay inherits the actual header radius, has zero inset,
+and stays behind its content. It never grows with expanded task details.
+The regression check fails on the v5 fixture and passes on v6. Evidence and
+captures live in the task report directory. This correction is only in the
+proposal layer; no production padding, row geometry or renderer was modified.

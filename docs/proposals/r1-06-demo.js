@@ -23,16 +23,19 @@ window.installProposalPatterns = function () {
   window.addEventListener('message',event=>{
     if(event.source!==parent||event.data?.proposal!=='appearance')return;
     const {concept,motion,theme}=event.data;
-    if(['a','b','c','d','e'].includes(concept))document.documentElement.dataset.concept=concept;
+    if(['a','b','c','d','e','f','g','h','i','j'].includes(concept))document.documentElement.dataset.concept=concept;
     document.documentElement.dataset.motion=String(motion===true);
     window.DeckAppearance?.set('mode',theme);
   });
   new ResizeObserver(()=>parent.postMessage({proposal:'height',height:document.body.scrollHeight+20},'*')).observe(document.body);
   const decorate=()=>{for(const row of board.querySelectorAll('.request-row[data-activity=active]')){
-    if(row.querySelector(':scope > .p-live'))continue;
+    const head=row.querySelector('.request-head');
+    if(!head||head.querySelector(':scope > .p-live'))continue;
     const layer=document.createElement('span');layer.className='p-live';layer.setAttribute('aria-hidden','true');
-    layer.innerHTML='<i class="p-runner"></i><i class="p-glow"></i><i class="p-sheen"></i><svg class="p-orbit" width="100%" height="100%"><rect x="1" y="1" rx="10" pathLength="100"/></svg>';
-    row.append(layer);
+    layer.innerHTML='<i class="p-field"></i><i class="p-echo"></i>';
+    head.append(layer);
+    const signal=row.querySelector('.request-signal');
+    if(signal){const mark=document.createElement('span');mark.className='p-mark';mark.setAttribute('aria-hidden','true');mark.innerHTML='<i></i><i></i><i></i>';signal.prepend(mark);}
   }};
   new MutationObserver(decorate).observe(board,{childList:true,subtree:true});decorate();
 };
