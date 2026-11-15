@@ -7,7 +7,7 @@ test('recent order ignores observations, breaks ties by identity, and traces ren
   const env={...process.env,CD_WEB_LANGUAGE:'es',CD_TEST_RELATIONS:'1',FM_DIAGNOSTICS_HOME:path.join(proof,'diagnostics'),CHROME_DEVTOOLS_AXI_SESSION:'deck-order-'+process.pid};
   const child=spawn('python3',[path.join(__dirname,'approved_fixture.py'),proof],{env,stdio:['ignore','pipe','pipe']});
   const run=(cmd,args=[])=>{const r=spawnSync(cli,[cmd,...args],{env,encoding:'utf8',timeout:60000});assert.equal(r.status,0,r.stdout+r.stderr);return r.stdout;};
-  const evalJS=code=>{let x=JSON.parse(run('eval',[code]).match(/^result: (.*)$/m)[1]);while(typeof x==='string'){try{x=JSON.parse(x);}catch{break;}}return x;};
+  const evalJS=code=>{let x=JSON.parse(run('eval',[code,'--full']).match(/^result: (.*)$/m)[1]);while(typeof x==='string'){try{x=JSON.parse(x);}catch{break;}}return x;};
   try {
     const url=await new Promise((resolve,reject)=>{let output='';const timer=setTimeout(()=>reject(Error('fixture startup')),15000);child.stdout.on('data',c=>{output+=c;const m=output.match(/Fixture at (http:\/\/127\.0\.0\.1:\d+)/);if(m){clearTimeout(timer);resolve(m[1]);}});child.on('exit',code=>{clearTimeout(timer);reject(Error('fixture exit '+code));});});
     const file=path.join(proof,'home/work-snapshot.json'),snapshot=JSON.parse(fs.readFileSync(file));

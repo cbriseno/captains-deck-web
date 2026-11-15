@@ -354,7 +354,7 @@ window.createDeckUI = function (host) {
     }
   }
   const progressReading=x=>JSON.stringify([x.progress,x.progress_evidence,x.declared_progress,x.phase,x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30]);
-  function progress(x, detail=false) {
+  function progress(x, detail=false, compact=false) {
     const box=n('div','prog'),p=x.progress,e=x.progress_evidence;
     const observationStale=x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since >= 30;
     if(x.kind!=='task'&&!p&&!e)return box;
@@ -376,9 +376,10 @@ window.createDeckUI = function (host) {
       const messages={stale:'Progress needs an update.',missing:'No progress declared yet.',unknown:'Progress is not confirmed.',invalid:'The progress declaration is invalid.',unmeasured:'No measured steps yet.'};
       box.append(n('span','prog-txt',t(messages[freshness])));
     }
-    if(observationStale)box.append(n('span','prog-txt',t('Out of date')));
+    if(observationStale){if(compact)box.querySelector('.prog-txt').prepend(n('span','',t('Out of date')+' · '));else box.append(n('span','prog-txt',t('Out of date')));}
     const phases={investigation:'Investigation',implementation:'Implementation',rebase:'Rebasing',validation:'Validation','branch-ready':'Ready for integration',integration:'Integration',activation:'Activation',complete:'Completion stage'};
     if(Object.hasOwn(phases,x.phase))box.append(n('span','prog-phase',t('Phase: {name}',{name:t(phases[x.phase])})));
+    if(compact)for(const text of box.querySelectorAll('.prog-txt,.prog-phase'))text.title=text.textContent;
     const steps=(record,historical)=>{
       const fold=add(n('details'),n('summary','',t(historical?'Last declaration (historical)':'View steps')));
       if(historical){
@@ -575,7 +576,7 @@ window.createDeckUI = function (host) {
     if(cancelled(x)){sub.textContent=t('Cancelled');}
     else if(x.state==='done'){sub.textContent=[x.card?.validation_pending||x.raw?.validation_pending||x.validation_pending,text].filter(Boolean).join(' · ');const pending=questions().filter(c=>byId.get(taskNodeId(c.home,c.task))?.question?.origin_task===x.owner_id);if(pending.length)sub.append(structural(n('span','deck-origin',t('Origin delivered · {count} open decisions',{count:pending.length}))));}
     else{sub.textContent=pauseText(x)||(x.state==='active'&&text)||waitingText(x);if(questions().some(c=>questionNode(c)?.id===x.id))sub.append(n('span','has-q',t('Has a question for you')));}
-    const ctl=n('div','card-ctl rctl');if(x.state==='active')ctl.append(progress(x));if(x.state!=='done')ctl.append(pauseButton(x));
+    const ctl=n('div','card-ctl rctl');if(x.state==='active')ctl.append(progress(x,false,true));if(x.state!=='done')ctl.append(pauseButton(x));
     const chain=new Set(ancestors(x).map(y=>y.id)),related=relationshipEdges().some(e=>chain.has(e.from)||e.to===x.id);
     // As the demo's menu: each entry only when its data or capability exists.
     const chat=x.card?.herdr_url,inDetail=then=>async()=>{if(!(ui.selected===x.id&&detailOpen()))await openNode(x,face);if(ui.selected===x.id&&detailOpen())then($('detail-content'));};
@@ -806,7 +807,7 @@ window.createDeckUI = function (host) {
     const activity=attention.length?'question':work.some(x=>window.DeckState.displayState(x)==='active')?'active':work.some(x=>window.DeckState.displayState(x)==='paused')?'paused':work.some(x=>x.state!=='done')?'waiting':'done';wrap.dataset.activity=activity;
     const title=b('',toggle,'request-title');title.dataset.control='request:'+r.id;title.setAttribute('aria-expanded',String(opened));add(title,n('span','fold'),n('span','dot'),n('span','request-name',label(r)),activity==='done'?null:n('span','request-signal',t({active:'Active',waiting:'Waiting',paused:'Paused',question:'Needs you'}[activity])));
     const bar=n('span','request-bar');bar.style.setProperty('--p',Math.round(100*completed/Math.max(1,work.length))+'%');bar.setAttribute('aria-hidden','true');const requestProject=r.project||projectOf(r)?.title||projectOf(work[0])?.title||t('Project not reported'),meta=add(n('div','request-meta'),window.DeckAnonymize.project(n('span','request-project',projectDisplay(requestProject)),projectOf(r)?.owner_id||r.project?.id||r.project||r.home),add(n('span','request-progress'),bar,structural(n('span','request-count',t(work.length===1?'{done} of {total} task done':'{done} of {total} tasks done',{done:completed,total:work.length})))));
-    if(work.length===1&&work[0].state!=='done'){const x=work[0],stage=progress(x),step=x.progress_evidence?.current===true&&x.progress_evidence?.freshness==='current'&&x.progress?.steps?.find(s=>s.state==='active');if(step)stage.append(n('span','prog-phase',t('Current step: {name}',{name:step.label||step.title||''})));stage.classList.add('request-stage');meta.append(stage);}
+    if(work.length===1&&work[0].state!=='done'){const x=work[0],stage=progress(x,false,true),step=x.progress_evidence?.current===true&&x.progress_evidence?.freshness==='current'&&x.progress?.steps?.find(s=>s.state==='active');if(step){const text=n('span','prog-phase request-step',t('Current step: {name}',{name:step.label||step.title||''}));text.title=text.textContent;stage.append(text);}stage.classList.add('request-stage');meta.append(stage);}
     const reviews=work.filter(reviewNeeded),signals=n('span','request-signals');meta.append(signals);
     if(attention.length)signals.append(structural(b(attention.length>1?t('Needs you · {count}',{count:attention.length}):t('Needs you'),()=>jumpAttention(attention[0].attention_kind==='action'?attention[0].key:'question:'+attention[0].key),'request-chip needs-chip')));
     if(r.calls.some(c=>c.answered)||r.tasks.some(x=>(x.raw?.recorded_answers||[]).some(a=>a.application?.state==='pending')||x.question?.answer?.application?.state==='pending'))signals.append(n('span','reading-note',t('Reading your answer')));
@@ -846,11 +847,14 @@ window.createDeckUI = function (host) {
     for(const [value,text]of [['recent','Recent first'],['mine','My order']]){const btn=b(t(text),()=>{ui.order=value;save('deck-request-sort',value);render(true,'filter');});btn.setAttribute('aria-pressed',String(ui.order===value));nav.append(btn);}
     const rows=orderedRequests(requestRows(model.nodes.filter(x=>x.kind==='task')).filter(r=>r.tasks.some(x=>tasks.some(y=>y.id===x.id))||r.calls.some(c=>asks.some(q=>q.key===c.key)||act.some(q=>q.key===c.key)))),allOpen=rows.length&&rows.every(r=>ui.expanded.has(r.id));nav.append(b(t(allOpen?'Collapse requests':'Expand requests'),()=>{for(const r of rows)allOpen?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');}));
     const previous=ui.renderedOrder||new Map(), current=new Map();
+    for(const row of board.querySelectorAll('.request-row')){
+      const entry=previous.get(row.dataset.node),rect=row.getBoundingClientRect();
+      if(entry)entry.rect={x:rect.x+scrollX,y:rect.y+scrollY,width:rect.width,height:rect.height};
+    }
     for(const [state] of [['now'],['waiting'],['paused'],['done']]){
       const peers=rows.filter(r=>requestState(r)===state), shown=ui.groups.has(state)?peers.filter(requestHasDetail):peers;
       shown.forEach((r,index)=>{const key=activityEpoch(r.updated_at), source=[...r.tasks].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0).find(x=>activityEpoch(x.updated_at)===key)?.updated_at?.source||'unknown';
-        const entry={key,index:index+1,group:state};current.set(r.id,entry);
-        window.DeckTrace?.order(r.id,app.board.cursor,previous.get(r.id),entry,source);});
+        const entry={key,index:index+1,group:state,source};current.set(r.id,entry);});
     }
     ui.renderedOrder=current;
     peersAll=rows;ui.turns=new Map();document.querySelectorAll('.order-note').forEach(x=>x.remove());if(ui.order==='mine'){let k=0;for(const source of model.sources||[])for(const key of source.snapshot?.sigue||[]){const row=rows.find(r=>r.home===source.home&&r.tasks.some(x=>x.owner_id===key));if(row&&!ui.turns.has(row.id))ui.turns.set(row.id,++k);}
@@ -870,6 +874,11 @@ window.createDeckUI = function (host) {
       group.append(add(n('div','request-group-head col-h'),toggle,structural(n('span','n',String(peers.length)))));const shown=folded?peers.filter(requestHasDetail):peers;if(shown.length)group.append(add(n('div','request-table'),...shown.map(r=>requestRow(r,peers))));list.append(group);
     }
     if(!rows.length)list.append(n('p','meta',t('No requests match.')));syncChildren(board,[side,list]);
+    for(const row of list.querySelectorAll('.request-row')){
+      const entry=current.get(row.dataset.node),rect=row.getBoundingClientRect();
+      entry.rect={x:rect.x+scrollX,y:rect.y+scrollY,width:rect.width,height:rect.height};
+      window.DeckTrace?.order(row.dataset.node,app.board.cursor,previous.get(row.dataset.node),entry,entry.source);
+    }
   }
   function render(force=false,mode='state') {
     if(!app.board)return;

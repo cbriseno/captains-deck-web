@@ -9,6 +9,18 @@ import zipfile
 import fm_diagnostics as d
 
 class DiagnosticExportRegression(unittest.TestCase):
+    def test_request_geometry_survives_export_without_task_text(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            logger = d.Logger('deck', '0.7.0', 'unknown', directory=tmp)
+            logger.emit('request.order', task='private task', cursor='10',
+                        old_y=179, new_y=179, old_height=164, new_height=164,
+                        title='private title')
+            logger.flush()
+            record = d._export_record(json.loads((Path(tmp) / 'events.jsonl').read_text()), b'x')
+            self.assertEqual((record['old_height'], record['new_height']), (164, 164))
+            self.assertEqual((record['old_y'], record['new_y']), (179, 179))
+            self.assertNotIn('private', json.dumps(record))
+
     def test_firstmate_and_manifest_and_private_revision(self):
         with tempfile.TemporaryDirectory() as tmp, patch.dict(os.environ, FM_DIAGNOSTICS_HOME=tmp):
             source = Path(tmp) / 'firstmate'

@@ -40,7 +40,8 @@ window.DeckTrace = (() => {
     focus(active) {if(active&&!focusSince){focusSince=now();add('overlay.show',{overlay:'focus',visible_s:0,response});}else if(!active&&focusSince){add('overlay.hide',{overlay:'focus',visible_s:Math.round((now()-focusSince)/1000),response});focusSince=0;}},
     order(key, cursor, before, after, source) {
       const sources=['presentation','status','work.control','fleet.entity:task.changed', 'fleet.entity:task.presentation', 'fleet.entity:task.review', 'fleet.entity:task.completion', 'fleet.entity:call.application', 'fleet.entity:work.structure', 'fleet.entity:work.control', 'fleet.entity:work.aliases','fleet.entity:task.dispatched','fleet.entity:task.cleaned_up','fleet.entity:call.opened','fleet.entity:call.resolved'];
-      add('request.order',{task:id(key),cursor:id(String(cursor||'')),old_key:Math.round((before?.key||0)*1000),new_key:Math.round(after.key*1000),old_position:before?.index||0,new_position:after.index,old_group:before?.group||'none',new_group:after.group,order_source:sources.includes(source)?source:'unknown'});
+      const geometry={};for(const [prefix,entry]of [['old',before],['new',after]])for(const field of ['x','y','width','height'])geometry[prefix+'_'+field]=Math.round(entry?.rect?.[field]||0);
+      add('request.order',{task:id(key),cursor:id(String(cursor||'')),old_key:Math.round((before?.key||0)*1000),new_key:Math.round(after.key*1000),old_position:before?.index||0,new_position:after.index,old_group:before?.group||'none',new_group:after.group,order_source:sources.includes(source)?source:'unknown',...geometry});
     },
     mismatch(key, from, to) {add('reconcile.mismatch',{task:id(key),from_column:from,to_column:to});anomaly();},
     move(key, from, to, cause) {

@@ -21,10 +21,14 @@ test('trace remains bounded and preserves event classes in a capped export', asy
   assert.equal(Object.values(trace.counts()).reduce((a,b)=>a+b,0),2000);
   trace.add('layout',{width:1000,height:700,dpr:2,reduced:'no',browser:'safari'});
   trace.move('private task name','now','waiting','snapshot');
+  trace.order('private task name','10',null,{key:1,index:1,group:'now',rect:{x:16,y:179,width:900,height:164}},'status');
   await trace.flush(true);
   assert.equal(sent[0].events.length,100);
   assert.ok(sent[0].events.some(x=>x.e==='layout'));
   assert.ok(sent[0].events.some(x=>x.e==='card.move'));
+  const order=sent[0].events.find(x=>x.e==='request.order');
+  assert.equal(order.old_height,0,'The initial event must satisfy the complete HTTP schema');
+  assert.equal(order.new_height,164);assert.equal(order.new_y,179);
   assert.ok(!JSON.stringify(sent).includes('private task name'));
   clock += 601000;
   trace.add('card.render',{duration_ms:2});

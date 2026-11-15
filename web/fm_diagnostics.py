@@ -21,7 +21,8 @@ PRODUCT_VERSION = "0.7.0"
 EVENTS = {
     "ui.use": {"action": "enum", "target": "enum", "age": "count"},
     "card.move": {"task":"id", "from_column":"enum", "to_column":"enum", "move_cause":"enum", "age":"count"},
-    "request.order": {"task":"id", "cursor":"id", "old_key":"count", "new_key":"count", "old_position":"count", "new_position":"count", "old_group":"enum", "new_group":"enum", "order_source":"enum", "age":"count"},
+    "request.order": {"task":"id", "cursor":"id", "old_key":"count", "new_key":"count", "old_position":"count", "new_position":"count", "old_group":"enum", "new_group":"enum", "order_source":"enum", "age":"count",
+                      **{prefix + '_' + field: 'measure' for prefix in ('old', 'new') for field in ('x', 'y', 'width', 'height')}},
     "card.render": {"duration_ms":"measure", "age":"count"},
     "anim.start": {"animation":"enum", "duration_ms":"measure", "age":"count"},
     "anim.end": {"animation":"enum", "duration_ms":"measure", "age":"count"},

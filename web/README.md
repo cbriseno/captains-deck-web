@@ -348,6 +348,11 @@ The HTTP tests retain two-browser races, restart deduplication, identity/origin/
 `web/tests/approved_fixture.py /ABSOLUTE/PROOF_DIR` starts the disposable approved-layout fixture on a free loopback port.
 Production has no fixture or arbitrary data-file CLI flag.
 Viewport emulation does not constitute a physical touch-device test.
+`node --test web/tests/evidence_geometry.browser.cjs` checks that evidence and
+usage refreshes keep request height and neighboring rows fixed at 1970 and 390 px,
+with requests collapsed and expanded. Compact readings use stable slots; full
+progress and spend remain available in their details. Request-order diagnostics
+include previous and current document rectangles alongside the cursor and sort key.
 
 ## Stable notification links
 
