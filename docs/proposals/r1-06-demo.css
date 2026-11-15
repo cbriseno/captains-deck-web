@@ -1,0 +1,24 @@
+/* Only the proposal frame uses these styles. Reserve a stable 32 px line. */
+.proposal-progress{display:flex!important;align-items:center;gap:9px;min-height:32px;flex-wrap:wrap;color:var(--ink);font-size:12px}
+.proposal-progress:before{display:none!important}.proposal-progress .p-label{white-space:normal;line-height:1.4}
+.p-glyph{display:inline-flex;align-items:center;flex:none;color:var(--accent)}.p-symbol{width:24px;text-align:center;color:var(--muted);font-size:16px}
+.p-a{width:88px;height:5px;border-radius:5px;background:var(--control);overflow:hidden}.p-fill{width:40%;height:100%;background:var(--accent);border-radius:5px}
+[data-measured=false] .p-a{height:5px;background:none;border:1px dashed var(--control)}[data-measured=false] .p-fill{display:none}
+.p-b{width:28px;height:28px}.p-b svg{width:100%;height:100%;transform:rotate(-90deg)}.p-b circle{fill:none;stroke-width:3;stroke-linecap:round}
+.p-track{stroke:var(--control)}.p-arc{stroke:var(--accent);stroke-dasharray:30.16 75.4}
+[data-measured=false] .p-arc{stroke-dasharray:2 6;stroke:var(--muted)}[data-measured=false] .p-track{stroke:none}
+.p-c{gap:4px}.p-step{height:7px;width:12px;border:1px solid var(--control);border-radius:2px}.p-step.done{background:var(--accent);border-color:var(--accent)}
+.p-d{font-size:23px;line-height:1;font-weight:600;letter-spacing:-1px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.p-e{font-size:12px;font-weight:600}.p-details{flex-basis:100%}.p-details li{padding:3px 0}
+[data-motion=true] [data-measured=false] .p-a{border:0;background:var(--soft)}[data-motion=true] [data-measured=false] .p-fill{display:block;animation:p-sweep 2.4s ease-in-out infinite!important}
+[data-motion=true] [data-measured=false] .p-b svg{animation:p-turn 3s linear infinite!important}
+@keyframes p-sweep{0%,100%{transform:translateX(-100%)}50%{transform:translateX(240%)}}@keyframes p-turn{to{transform:rotate(270deg)}}
+@media(prefers-reduced-motion:reduce){html[data-motion=true] [data-measured=false] .p-glyph *{animation:none!important}}
+/* The real Deck stays inline. Non-review mutations are disabled by the fixture. */
+#detail-panel[data-active=false],#settings-open,.supervision{display:none!important}
+.request-stage{min-width:0!important;max-width:none!important}.request-meta{min-width:0}.request-row{--project-color:var(--accent)}
+
+/* Intrinsic frame height avoids a viewport/ResizeObserver feedback loop. */
+html,body{height:auto}.app{min-height:0}
+
+@media(max-width:600px){.request-meta>.request-stage{grid-column:1/-1;min-height:44px}.p-e{font-size:11px}}

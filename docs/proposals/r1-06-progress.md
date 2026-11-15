@@ -1,58 +1,56 @@
-# R1-06: activity indicator proposal
+# R1-06: five progress concepts in the real Deck
 
-Open [the standalone proposal](r1-06-progress.html) locally or in Lavish.
-This document proposes a shared activity signal; it changes no production behavior.
-Review round 2 rejected the former animated dot and requested at least five
-distinct concepts. Version 3 provides a linear track, ring, discrete steps,
-typographic percentage and milestone log. No replacement has been selected.
-Implementation remains outside P16; the earlier choice of B is superseded.
+Review round 2 rejected the previous animated indicator. Version 4 compares
+A (continuous track), B (ring), C (discrete segments), D (numeric fraction),
+and E (milestone sequence). No replacement has been selected. This is a
+proposal only; no production source is modified.
 
-## Manual review
+## Manual procedure
 
-1. Run the existing isolated `approved_fixture.py` with `CD_TEST_PROGRESS=1`.
-2. Expand the request and its task rows. Observe the completed-task ratio and the
-   measured-step progress separately; check which activities have a signal.
-3. Open the proposal and compare the five concepts, each measured and unmeasured.
-4. Check mobile width, both Grafito themes, movement disabled, and the system's
-   reduced-motion preference. Choose a variant or request adjustments in Lavish.
-5. Record the response. A subsequent implementation uses P10/P12 data and P14
-   layout slots, then repeats the reviewed cases against the real Deck.
+1. Start `web/tests/approved_fixture.py` in a disposable directory with
+   `CD_TEST_PROGRESS=1 CD_WEB_LANGUAGE=es`. Read its printed loopback URL.
+2. Open that real Deck. Expand its requests and observe the task count and
+   measured steps separately. Read `/api/board` and `/api/locale` from that
+   fixture into temporary JSON files; remove the board's `csrf` field.
+3. Run `python3 docs/proposals/build-r1-06.py BOARD_JSON LOCALE_JSON OUTPUT_HTML`.
+   Use only synthetic fixture inputs. The script embeds the existing Deck
+   HTML/CSS/JavaScript and replaces `progress()` only inside the generated page.
+   It supplies five synthetic cases through an in-memory fixture transport.
+4. Open the generated HTML locally. Switch A–E, expand requests, search, compare
+   light/dark at desktop and mobile widths, and try optional motion with and
+   without the system's reduced-motion preference. No backend is contacted.
+5. Review the same artifact in the existing worker-owned Lavish session.
+   Obtain independent visual and blind usability reviews before closing P16.
+   A later implementation requires its own SDLC and the selected design.
+6. Close the fixture and test browser. Keep only the explicitly hosted review
+   board and its supervised listener available for feedback.
 
-## Evidence and boundaries
+## Scope and semantics
 
-Baseline: `71212910948f0100eb4accd69b31b7d2da67deed`, Linux, synthetic local data.
-The live fixture showed a 40 px completed-task bar, a 64 px measured-step bar,
-and `33% · 1/3 pasos` without a pseudo-element indicator on the active task.
-The source limits the request-stage indicator to confirmed active activity with
-non-current progress. This supports comparing a shared signal for measured and
-unmeasured work; it does not establish the reported animation defect on macOS.
+The HTML file in this directory is the report template; build it before review.
+The generated output is a single offline file, with no fonts, CDNs or servers
+required. Original Deck scripts retain search and inline request expansion.
+Fixture transport refuses mutations; real Firstmate data is never read.
 
-The measured examples all represent 2/5 steps. Indeterminate examples show
-confirmed activity, never a percentage. Only the track and ring animate; step,
-type and milestone concepts are static. Phase and milestone text are explicitly
-synthetic; absent producer data must fall back to `Trabajando`, not invented steps.
-Dependency wait, parked and unconfirmed activity have shared static treatment.
-The explanatory text covers independent activity/progress freshness and the two
-different task/step metrics. The prior live baseline remains historical evidence.
+All concepts display the same five states: measured 2/5, unmeasured activity,
+dependency wait, parked, and unconfirmed activity. Only measured current steps
+have `role=progressbar`; no percentage is assigned to the other states. The
+request's completed-task count is distinct from task steps. Steps are not time,
+effort, installation, or acceptance. Activity freshness and progress freshness
+are independent; the report describes the stale-progress/confirmed-activity case.
 
-The artifact uses the Deck's Grafito light/dark tokens and system font, with the
-lightweight Firstmate report structure. It contains no remote assets or libraries.
-Normal controls change only local preview state. Feedback is queued once on form
-submission; the same queue key replaces an unsent answer. Standalone mode exposes
-the answer as text for manual delivery. No bridge, backend or new service is added.
+Motion is off initially. Optional motion only affects indeterminate A and B;
+C–E remain static. CSS honors `prefers-reduced-motion`. The same 32 px progress
+slot is used across concepts. No extra sidebar or dialog is introduced.
 
-Artifact checks cover desktop/mobile geometry, both themes, static/moving signals,
-actual Chromium reduced-motion emulation using its startup flag, keyboard access
-and the offline answer path. A queue-function stub checks zero calls on selection
-and one call on submit; it does not verify Lavish delivery. The same task-owned
-review session is reused. This proposal does not claim measured usability gains.
+The design uses Grafito tokens shared by Captain's Deck and Day Attendant,
+system typography, a plain report layout, and inline disclosure. Benefits and
+tradeoffs are design hypotheses, not measured usability results. Browser checks
+and screenshots belong to the task's private report directory, not this repo.
 
-The baseline screenshot, offline report containing that screenshot, check logs and
-review session are task evidence outside the source tree, under Firstmate's
-`data/macb-p16-20261114/`. The source artifact remains portable and synthetic.
-
-Sources: report b group 11; R1-02/R1-06 in
-`deck-ui-feedback-round-1.json`; approved plan v2 P16; `progress()` in
-`web/static/deck-ui.js`; `.request-stage`, `.request-bar`, `.prog-bar` in
-`web/static/deck.css`. R1-02's positional selector cannot identify the bar subtype.
-No L1–L23 behavior was reopened or changed.
+The former proposal's isolated samples did not meet the requirement to demonstrate
+the concepts in the real interface. This revision replaces them with the actual
+renderer and synthetic owner projection. Linux is verified; the Mac is not.
+Source references: approved plan v2 P16, report b group 11, attachment R1-02/R1-06,
+`web/static/deck-ui.js` (`progress`, `requestRow`) and `web/static/deck.css`.
+No L1–L23 issue was reopened.
