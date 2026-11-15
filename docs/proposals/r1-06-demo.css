@@ -1,24 +1,29 @@
-/* Only the proposal frame uses these styles. Reserve a stable 32 px line. */
+/* Shared measurement; the animated activity cue acts on the real request row. */
 .proposal-progress{display:flex!important;align-items:center;gap:9px;min-height:32px;flex-wrap:wrap;color:var(--ink);font-size:12px}
-.proposal-progress:before{display:none!important}.proposal-progress .p-label{white-space:normal;line-height:1.4}
-.p-glyph{display:inline-flex;align-items:center;flex:none;color:var(--accent)}.p-symbol{width:24px;text-align:center;color:var(--muted);font-size:16px}
-.p-a{width:88px;height:5px;border-radius:5px;background:var(--control);overflow:hidden}.p-fill{width:40%;height:100%;background:var(--accent);border-radius:5px}
-[data-measured=false] .p-a{height:5px;background:none;border:1px dashed var(--control)}[data-measured=false] .p-fill{display:none}
-.p-b{width:28px;height:28px}.p-b svg{width:100%;height:100%;transform:rotate(-90deg)}.p-b circle{fill:none;stroke-width:3;stroke-linecap:round}
-.p-track{stroke:var(--control)}.p-arc{stroke:var(--accent);stroke-dasharray:30.16 75.4}
-[data-measured=false] .p-arc{stroke-dasharray:2 6;stroke:var(--muted)}[data-measured=false] .p-track{stroke:none}
-.p-c{gap:4px}.p-step{height:7px;width:12px;border:1px solid var(--control);border-radius:2px}.p-step.done{background:var(--accent);border-color:var(--accent)}
-.p-d{font-size:23px;line-height:1;font-weight:600;letter-spacing:-1px;font-variant-numeric:tabular-nums;color:var(--ink)}
-.p-e{font-size:12px;font-weight:600}.p-details{flex-basis:100%}.p-details li{padding:3px 0}
-[data-motion=true] [data-measured=false] .p-a{border:0;background:var(--soft)}[data-motion=true] [data-measured=false] .p-fill{display:block;animation:p-sweep 2.4s ease-in-out infinite!important}
-[data-motion=true] [data-measured=false] .p-b svg{animation:p-turn 3s linear infinite!important}
-@keyframes p-sweep{0%,100%{transform:translateX(-100%)}50%{transform:translateX(240%)}}@keyframes p-turn{to{transform:rotate(270deg)}}
-@media(prefers-reduced-motion:reduce){html[data-motion=true] [data-measured=false] .p-glyph *{animation:none!important}}
-/* The real Deck stays inline. Non-review mutations are disabled by the fixture. */
+.proposal-progress:before{display:none!important}.p-label{white-space:normal;line-height:1.4}
+.p-symbol{width:24px;text-align:center;color:var(--muted);font-size:16px}
+.p-measure{display:block;flex:none;width:64px;height:5px;background:var(--control);border-radius:5px;overflow:hidden}
+.p-measure i{display:block;width:40%;height:100%;background:var(--accent)}.p-details{flex-basis:100%}.p-details li{padding:3px 0}
+.request-row{position:relative;isolation:isolate}.p-live{position:absolute;inset:0;overflow:hidden;border-radius:10px;pointer-events:none;z-index:1}
+.p-live>i,.p-orbit{display:none;position:absolute;pointer-events:none}.p-orbit{inset:0;overflow:visible}
+.p-runner{height:2px;width:24%;top:0;left:0;background:linear-gradient(90deg,transparent,var(--accent));border-radius:2px}
+.p-glow{inset:0;background:var(--accent);opacity:.025}
+.p-sheen{inset:0;background:linear-gradient(110deg,transparent 25%,color-mix(in srgb,var(--accent) 13%,transparent) 48%,transparent 70%);transform:translateX(-100%)}
+.p-orbit rect{width:calc(100% - 2px);height:calc(100% - 2px);fill:none;stroke:var(--accent);stroke-width:1.8;stroke-linecap:round;stroke-dasharray:12 88}
+html[data-motion=true][data-concept=a] .p-runner{display:block;animation:p-run 3.2s linear infinite!important}
+html[data-motion=true][data-concept=b] .p-glow{display:block;animation:p-breathe 3.6s ease-in-out infinite!important}
+html[data-motion=true][data-concept=c] .p-sheen{display:block;animation:p-sweep 4.4s ease-in-out infinite!important}
+html[data-motion=true][data-concept=d] .request-row[data-activity=active] .request-name{background:linear-gradient(90deg,var(--ink) 30%,var(--accent) 50%,var(--ink) 70%);background-size:300% 100%;background-clip:text;-webkit-background-clip:text;color:transparent;animation:p-ink 3.4s linear infinite!important}
+html[data-motion=true][data-concept=e] .p-orbit{display:block}
+html[data-motion=true][data-concept=e] .p-orbit rect{animation:p-orbit 5s linear infinite!important}
+@keyframes p-run{from{transform:translateX(-100%)}to{transform:translateX(420%)}}
+@keyframes p-breathe{0%,100%{opacity:.025}50%{opacity:.11}}
+@keyframes p-sweep{0%,12%{transform:translateX(-100%)}88%,100%{transform:translateX(100%)}}
+@keyframes p-ink{from{background-position:100% 0}to{background-position:0 0}}
+@keyframes p-orbit{from{stroke-dashoffset:0}to{stroke-dashoffset:-100}}
+@media(prefers-reduced-motion:reduce){html[data-motion=true][data-concept] .p-live{display:none}html[data-motion=true][data-concept] .p-live *,html[data-motion=true][data-concept] .request-row[data-activity=active] .request-name{animation:none!important;background:none;color:var(--ink)}}
+/* The fixture reserves inline space and disables production actions. */
 #detail-panel[data-active=false],#settings-open,.supervision{display:none!important}
 .request-stage{min-width:0!important;max-width:none!important}.request-meta{min-width:0}.request-row{--project-color:var(--accent)}
-
-/* Intrinsic frame height avoids a viewport/ResizeObserver feedback loop. */
 html,body{height:auto}.app{min-height:0}
-
-@media(max-width:600px){.request-meta>.request-stage{grid-column:1/-1;min-height:44px}.p-e{font-size:11px}}
+@media(max-width:600px){.request-meta>.request-stage{grid-column:1/-1;min-height:44px}}

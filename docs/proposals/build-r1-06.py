@@ -51,7 +51,7 @@ else if(p.includes('api/receipts'))data={receipts:[]};
 else data={events:[],records:[],sources:[]};
 return {ok,status:ok?200:403,json:async()=>structuredClone(data)};};
 try{localStorage.setItem('deck-closed','[]');localStorage.setItem('deck-animations','false');localStorage.setItem('deck-modo','light');}catch{}
-document.documentElement.dataset.concept='a';
+document.documentElement.dataset.concept='a';document.documentElement.dataset.motion='true';
 '''.replace('LOCALE',js(locale)).replace('BOARD',js(board))
 page = (static/'index.html').read_text()
 scripts = re.findall(r'<script src="([^"]+)"[^>]*></script>',page)
@@ -63,9 +63,12 @@ page = page.replace('</head>','<script>'+boot+'</script><style>'+(here/'r1-06-de
 bundle = '<script>'+(here/'r1-06-demo.js').read_text()+'</script>'
 for name in scripts:
     content = (static/name).read_text()
-    if name == 'deck-ui.js': content = content.replace("function progress(x, detail=false, compact=false) {", "function progress(x, detail=false, compact=false) { return window.proposalProgress(x,detail,compact); /* proposal only */")
+    if name == 'app.js': content = re.sub(r"^if \('serviceWorker' in navigator\).*$", '', content, flags=re.M)
+    if name == 'deck-ui.js':
+        content = content.replace("animations:pref('deck-animations',true)", "animations:pref('deck-animations',false)")
+        content = content.replace("function progress(x, detail=false, compact=false) {", "function progress(x, detail=false, compact=false) { return window.proposalProgress(x,detail,compact); /* proposal only */")
     bundle += '<script>'+content.replace('</script','<\/script')+'</script>'
-page = page.replace('</body>',bundle+'</body>')
+page = page.replace('</body>',bundle+'<script>window.installProposalPatterns();</script></body>')
 template = (here/'r1-06-progress.html').read_text()
 if len(sys.argv)>4: template=template.replace('<footer>','<footer><a href="'+html.escape(sys.argv[4],quote=True)+'" target="_blank" rel="noopener">Revisar en Lavish</a> · ')
 Path(sys.argv[3]).write_text(template.replace('<!--DECK_FRAME-->', '<iframe id="demo" title="Deck real con datos ficticios" srcdoc="'+html.escape(page,quote=True)+'"></iframe>'))

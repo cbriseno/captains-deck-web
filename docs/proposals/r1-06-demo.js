@@ -1,4 +1,4 @@
-/* Proposal-only replacement for progress(). The production renderer is unchanged. */
+/* Proposal-only renderer and decorations; never loaded by the production app. */
 window.proposalProgress = function (x, detail, compact) {
   const el=(tag,cls,text)=>{const v=document.createElement(tag);v.className=cls;v.textContent=text||'';return v;};
   const box=el('div','prog proposal-progress'),state=x.demoState;
@@ -6,22 +6,33 @@ window.proposalProgress = function (x, detail, compact) {
   box.dataset.case=state;box.proposalNode=x;box.proposalDetail=detail;box.proposalCompact=compact;
   const fixed={waiting:['◷','Espera una dependencia'],parked:['Ⅱ','Estacionado · espera revisión'],stale:['?','Actividad sin confirmar']};
   if(fixed[state]){box.append(el('span','p-symbol',fixed[state][0]),el('span','p-label',fixed[state][1]));return box;}
-  const measured=state==='measured',kind=document.documentElement.dataset.concept||'a';
-  const glyph=el('span','p-glyph p-'+kind),text=el('span','p-label',measured?'Trabajando':'Trabajando · sin medición');
-  box.dataset.measured=String(measured);
+  const measured=state==='measured';box.dataset.measured=String(measured);
   if(measured){
-    glyph.setAttribute('role','progressbar');glyph.setAttribute('aria-label','Pasos completados');
-    glyph.setAttribute('aria-valuenow','2');glyph.setAttribute('aria-valuemin','0');glyph.setAttribute('aria-valuemax','5');
-    glyph.setAttribute('aria-valuetext','2 de 5 pasos completados');
-  }else glyph.setAttribute('aria-hidden','true');
-  if(kind==='a')glyph.append(el('i','p-fill'));
-  if(kind==='b')glyph.innerHTML='<svg viewBox="0 0 32 32" aria-hidden="true"><circle class="p-track" cx="16" cy="16" r="12"/><circle class="p-arc" cx="16" cy="16" r="12"/></svg>';
-  if(kind==='c'){if(measured)for(let i=0;i<5;i++)glyph.append(el('i',i<2?'p-step done':'p-step'));else glyph.textContent='…';}
-  if(kind==='d')glyph.textContent=measured?'2 / 5':'—';
-  if(kind==='e')glyph.textContent=measured?'✓ Diseño → Conexión':'→ Investigación';
-  box.append(glyph,text);
-  if(measured){text.textContent=kind==='d'?'pasos · Trabajando':kind==='e'?'2 de 5 pasos':kind==='c'?'2 de 5 · Trabajando':'40% · Trabajando';}
+    const bar=el('span','p-measure');bar.append(el('i',''));
+    bar.setAttribute('role','progressbar');bar.setAttribute('aria-label','Pasos completados');
+    bar.setAttribute('aria-valuenow','2');bar.setAttribute('aria-valuemin','0');bar.setAttribute('aria-valuemax','5');
+    bar.setAttribute('aria-valuetext','2 de 5 pasos completados');box.append(bar);
+  }
+  box.append(el('span','p-label',measured?'40% · 2 de 5 pasos':'Trabajando · sin medición'));
   if(detail&&measured){const d=el('details','p-details'),s=el('summary','','Ver los cinco pasos');d.append(s);const list=el('ol','');
     ['✓ Lectura','✓ Diseño','→ Conexión','○ Comprobación','○ Entrega'].forEach(t=>list.append(el('li','',t)));d.append(list);box.append(d);}
   return box;
+};
+window.installProposalPatterns = function () {
+  const board=document.querySelector('#board');
+  window.addEventListener('message',event=>{
+    if(event.source!==parent||event.data?.proposal!=='appearance')return;
+    const {concept,motion,theme}=event.data;
+    if(['a','b','c','d','e'].includes(concept))document.documentElement.dataset.concept=concept;
+    document.documentElement.dataset.motion=String(motion===true);
+    window.DeckAppearance?.set('mode',theme);
+  });
+  new ResizeObserver(()=>parent.postMessage({proposal:'height',height:document.body.scrollHeight+20},'*')).observe(document.body);
+  const decorate=()=>{for(const row of board.querySelectorAll('.request-row[data-activity=active]')){
+    if(row.querySelector(':scope > .p-live'))continue;
+    const layer=document.createElement('span');layer.className='p-live';layer.setAttribute('aria-hidden','true');
+    layer.innerHTML='<i class="p-runner"></i><i class="p-glow"></i><i class="p-sheen"></i><svg class="p-orbit" width="100%" height="100%"><rect x="1" y="1" rx="10" pathLength="100"/></svg>';
+    row.append(layer);
+  }};
+  new MutationObserver(decorate).observe(board,{childList:true,subtree:true});decorate();
 };

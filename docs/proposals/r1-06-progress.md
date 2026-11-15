@@ -1,9 +1,10 @@
 # R1-06: five progress concepts in the real Deck
 
-Review round 2 rejected the previous animated indicator. Version 4 compares
-A (continuous track), B (ring), C (discrete segments), D (numeric fraction),
-and E (milestone sequence). No replacement has been selected. This is a
-proposal only; no production source is modified.
+Review round 3 requires five animated patterns and invites treatments across the
+whole card. Version 5 compares A (traveling top edge), B (breathing surface),
+C (light sweep), D (moving title ink), and E (traveling perimeter). All five
+start animated for both measured and unmeasured active work. No replacement
+has been selected. This is proposal-only; production source is unchanged.
 
 ## Manual procedure
 
@@ -14,9 +15,10 @@ proposal only; no production source is modified.
    fixture into temporary JSON files; remove the board's `csrf` field.
 3. Run `python3 docs/proposals/build-r1-06.py BOARD_JSON LOCALE_JSON OUTPUT_HTML`.
    Use only synthetic fixture inputs. The script embeds the existing Deck
-   HTML/CSS/JavaScript and replaces `progress()` only inside the generated page.
+   HTML/CSS/JavaScript and replaces `progress()` and adds card decorations only in the generated page.
    It supplies five synthetic cases through an in-memory fixture transport.
-4. Open the generated HTML locally. Switch A–E, expand requests, search, compare
+4. Open the generated HTML locally and with the same sandbox flags as Lavish.
+   Switch A–E, expand requests, search, compare
    light/dark at desktop and mobile widths, and try optional motion with and
    without the system's reduced-motion preference. No backend is contacted.
 5. Review the same artifact in the existing worker-owned Lavish session.
@@ -39,9 +41,18 @@ request's completed-task count is distinct from task steps. Steps are not time,
 effort, installation, or acceptance. Activity freshness and progress freshness
 are independent; the report describes the stale-progress/confirmed-activity case.
 
-Motion is off initially. Optional motion only affects indeterminate A and B;
-C–E remain static. CSS honors `prefers-reduced-motion`. The same 32 px progress
-slot is used across concepts. No extra sidebar or dialog is introduced.
+All five patterns animate by default on the real active request cards. They do
+not animate the measured percentage. Waiting, parked and unconfirmed cards
+stay static. The pause checkbox and system `prefers-reduced-motion` disable
+all five; text and actual measurements remain available. The decoration is
+absolutely positioned, preserving card geometry between concepts.
+
+The generated copy removes the service-worker cleanup line: it has no worker to
+unregister and Lavish disallows that API in its sandbox. Appearance controls and
+intrinsic height use `postMessage` between the report and its embedded Deck;
+this supports the manual theme/concept/pause controls without cross-frame DOM
+access. The production code and Lavish's sandbox permissions are unchanged.
+This corrects two observed SecurityErrors in the initial sandbox run.
 
 The design uses Grafito tokens shared by Captain's Deck and Day Attendant,
 system typography, a plain report layout, and inline disclosure. Benefits and
