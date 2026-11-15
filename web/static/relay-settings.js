@@ -3,9 +3,8 @@
 window.createRelaySettings = function ({t, node:n, button:b, api, state}) {
   const $=id=>document.getElementById(id);
   const dialog=$('relay-settings-dialog'), content=$('relay-settings-content'), homes=$('relay-settings-home');
-  const confirmation=$('relay-confirm-dialog'), disclosure=$('relay-confirm-disclosure'), words=$('relay-confirm-words');
-  const confirm=$('relay-confirm-apply'), resultSlot=$('relay-settings-result');
-  let generation=0, source=null, busy=false, proposed=null, receipts=[], planningScope='home';
+  const resultSlot=$('relay-settings-result');
+  let generation=0, source=null, busy=false, receipts=[], planningScope='home';
   try{receipts=JSON.parse(sessionStorage.getItem('deck-settings-receipts')||'[]').slice(0,20);}catch{/* Loading never resubmits. */}
   const field=(text,control)=>{const label=n('label','settings-field');label.append(n('span','',t(text)),control);return label;};
   const select=(items,value)=>{const el=n('select');for(const [key,text] of items)el.append(new Option(t(text),key));el.value=value;return el;};
@@ -28,24 +27,23 @@ window.createRelaySettings = function ({t, node:n, button:b, api, state}) {
     source=data;content.replaceChildren();renderReceipts();
     if(!data.available){content.append(n('p','muted',t('Relay settings are not available for this space.')));return;}
     const relay=data.relay, planning=data.planning;
-    const modes={assisted:'Assisted relay',auto:'Automatic relay',warn:'Warnings only'};
-    content.append(n('h3','',t('Relay mode')),n('p','fact',t(modes[relay.mode]||'Not reported')),
-      n('p','',t(relay.auto_enabled?'Automatic relay is on.':'Automatic relay is off.')));
-    if(relay.reason)content.append(n('p','muted',relay.reason));
-    content.append(n('p','muted',t('Authorization applies to this whole space. Readiness is checked separately for Claude and Codex; every covered harness must pass.')));
-    content.append(enable(b(t(relay.auto_enabled?'Turn off automatic relay':'Turn on automatic relay'),event=>request({action:'automatic',enabled:!relay.auto_enabled},event.currentTarget)),allowed('automatic')&&(relay.auto_enabled||relay.can_authorize)));
-    if(!relay.can_authorize){
-      const details=n('details','source-details');details.append(n('summary','',t('Automatic relay availability')));
-      const reasons=relay.preflight?.reasons||[];
-      for(const row of reasons.filter(row=>!['missing_standing_authorization','invalid_standing_authorization'].includes(row.code)))details.append(n('p','',row.harness+': '+row.message));
-      content.append(details);
-    }
-    content.append(n('h3','',t('Context thresholds')),n('p','muted',t('Use umbral:600K, umbral:80% or compactaciones:5. Together means both; o means whichever happens first.')));
-    for(const row of relay.thresholds){
-      const input=n('input');input.type='text';input.value=row.value;input.placeholder=t('No threshold configured');input.name='threshold-'+row.harness;enable(input,allowed('threshold'));
-      const save=enable(b(t('Save threshold'),()=>request({action:'threshold',harness:row.harness,value:input.value})),allowed('threshold'));
-      content.append(field(row.harness==='codex'?'Codex threshold':'Claude threshold',input),save);
-      if(row.source)content.append(n('p','muted',row.source));
+    content.append(n('h3','',t('Context thresholds')),
+      n('p','muted',t('Zero disables an axis. Either enabled limit can trigger a relay. The checker needs a reported window to evaluate percentages; without one, the percentage is unknown and the token limit still applies.')));
+    for(const role of ['primary','worker']){
+      content.append(n('h4','',t(role==='primary'?'Primary':'Worker')));
+      for(const harness of ['claude','codex']){
+        content.append(n('strong','',harness==='claude'?'Claude':'Codex'));
+        for(const axis of ['percent','tokens']){
+          const row=relay.thresholds.find(row=>row.role===role&&row.harness===harness&&row.axis===axis);
+          const input=n('input');input.type='number';input.min='0';input.step='any';if(axis==='percent')input.max='100';input.value=row.value;input.name=[role,harness,axis].join('-');enable(input,allowed('threshold'));
+          const save=enable(b(t('Save threshold'),async()=>{
+            if(!input.checkValidity()||input.value===''){input.reportValidity();return;}
+            pending(true);try{const result=await api(route(homes.value,'apply'),{action:'threshold',role,harness,axis,value:Number(input.value)});resultSlot.textContent=t(result.message);await load();}catch(err){resultSlot.textContent=err.message;}finally{pending(false);}
+          }),allowed('threshold'));
+          content.append(field(axis==='percent'?'Percent':'Tokens',input),save,
+            n('p','muted',t('Source')+': '+(row.source==='threshold_tokens'?'threshold_tokens (fallback)':row.source==='default'?t('Default: disabled'):row.source)+' · '+t('Effective limit')+': '+t(row.value>0?'Enabled':'Disabled')+' · '+row.value+(axis==='percent'?'%':' '+t('tokens'))));
+        }
+      }
     }
     content.append(n('h3','',t('Planning mode')),n('p','muted',t('Preferences apply to new tasks. Active tasks retain their pinned brief.')));
     content.append(n('p','muted',t('Project and task choices include scopes already known to Deck and registered preferences. This is not a complete inventory.')));
@@ -75,12 +73,6 @@ window.createRelaySettings = function ({t, node:n, button:b, api, state}) {
     for(const el of [scope,target,mode])enable(el,allowed('planning'));
     scope.addEventListener('change',()=>{planningScope=scope.value;updateScope();load(['project','task'].includes(scope.value)?target.value:'');});updateScope();
     content.append(field('Planning scope',scope),targetLabel,field('Planning mode',mode),planningStatus,planningSave);
-    content.append(n('h3','',t('Relay status')));
-    const attempts=relay.attempts||[], requests=relay.requests||[];
-    if(!relay.activity_available)content.append(n('p','muted',t('Relay activity is not available.')));
-    else if(!attempts.length&&!requests.length)content.append(n('p','muted',t('No relay attempts or pending requests recorded.')));
-    for(const row of [...requests,...attempts])content.append(n('p','',String(row.at||'')+' · '+String(row.state||t('Not reported'))));
-    if(relay.activity_reason)content.append(n('p','muted',relay.activity_reason));
     if(!data.actions?.length)content.append(n('p','notice',t('Settings changes are not available with this extension version.')));
   }
   async function load(selection=''){
@@ -99,25 +91,7 @@ window.createRelaySettings = function ({t, node:n, button:b, api, state}) {
         receipts.unshift({home,request_id:body.request_id,state:preview.state||'rejected',message:preview.message});renderReceipts();return;
       }
       body.preview=preview.token;
-      if(operation.action==='automatic'){
-        const enabling=operation.enabled===true, check=preview.preflight;
-        if(enabling&&check?.can_authorize!==true){receipts.unshift({home,request_id:body.request_id,state:'rejected',message:check?.reason||t('The extension cannot authorize automatic relay.')});renderReceipts();return;}
-        proposed={home,body,opener};words.value='';disclosure.replaceChildren();
-        disclosure.append(n('p','',t(enabling?'When a configured threshold is reached, this session will hand over at a safe point without another confirmation.':'Automatic relay will be disabled. Future handoffs will require assisted confirmation.')));
-        if(enabling){
-          disclosure.append(n('p','',t('Authorization applies to this whole space. Readiness is checked separately for Claude and Codex; every covered harness must pass.')));
-          for(const row of source.relay.thresholds)disclosure.append(n('p','',row.harness+': '+(row.value||t('Not reported'))));
-          const limits=check.limits||source.relay.limits;
-          if(!limits||!['window_seconds','daily_cap','min_work_seconds','safe_wait_seconds'].every(key=>Number.isFinite(limits[key])&&limits[key]>0)){
-            proposed=null;receipts.unshift({home,request_id:body.request_id,state:'rejected',message:t('The extension cannot authorize automatic relay.')});renderReceipts();return;
-          }
-          disclosure.append(n('p','',t('One attempt per {minutes} minutes, up to {count} per UTC day. Failed attempts count.',{minutes:limits.window_seconds/60,count:limits.daily_cap})),
-            n('p','',t('Minimum useful work: {work} seconds. Safe-point wait: {wait} seconds.',{work:limits.min_work_seconds,wait:limits.safe_wait_seconds})),
-            n('p','',t('Turn off automatic relay returns to assisted mode.')));
-        }
-        confirm.textContent=t(enabling?'Confirm automatic relay activation':'Confirm automatic relay deactivation');confirm.disabled=true;
-        confirmation.showModal();words.focus();
-      }else await apply(home,body);
+      await apply(home,body);
     }catch(err){receipts.unshift({home,request_id:body.request_id,state:'rejected',message:err.message});renderReceipts();}
     finally{pending(false);}
   }
@@ -128,14 +102,7 @@ window.createRelaySettings = function ({t, node:n, button:b, api, state}) {
     catch(err){entry.state=err.retry?'uncertain':'rejected';entry.message=err.message;}
     finally{pending(false);renderReceipts();if(dialog.open&&homes.value===home)await load(body.selection||'');}
   }
-  words.addEventListener('input',()=>{confirm.disabled=!words.value.trim()||busy;});
-  confirm.addEventListener('click',async()=>{
-    if(!proposed||confirm.disabled||busy)return;
-    const {home,body}=proposed;body.captain_words=words.value;proposed=null;confirmation.close();await apply(home,body);
-  });
-  $('relay-confirm-cancel').addEventListener('click',()=>confirmation.close());
-  confirmation.addEventListener('close',()=>{const opener=proposed?.opener;proposed=null;words.value='';if(opener?.isConnected)opener.focus();});
-  for(const modal of [dialog,confirmation])modal.addEventListener('keydown',event=>event.stopPropagation());
+  for(const modal of [dialog])modal.addEventListener('keydown',event=>event.stopPropagation());
   $('relay-settings-open').addEventListener('click',()=>{
     planningScope='home';
     homes.replaceChildren(...(state.board?.homes||[]).map(home=>new Option(home.label,home.id)));

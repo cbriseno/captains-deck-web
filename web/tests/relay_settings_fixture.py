@@ -23,8 +23,7 @@ start_fixture(board,home)
 if os.environ.get('CD_TEST_REAL_EXTENSION')=='1':
     extension=Path(os.environ['CD_TEST_EXTENSIONS_ROOT'])
     (base/'config').mkdir(exist_ok=True)
-    (base/'config/context-relay.json').write_text(json.dumps({'relay_mode':'assisted'}))
-    (base/'config/umbrales-relevo').write_text('claude: compactaciones:2 umbral:80%\ncodex: umbral:600K o compactaciones:5\n')
+    (base/'config/relay-lite.json').write_text(json.dumps({'threshold_tokens': 250000}))
 else:
     extension=extension_fixture(root/'extension',home.path)
 board.relay_settings=RelaySettings(board.child_env,str(extension),

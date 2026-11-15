@@ -1262,5 +1262,15 @@
   "Review in Lavish": "Review in Lavish",
   "Allow pop-ups to open the review.": "Allow pop-ups to open the review.",
   "Preparing review…": "Preparing review…",
-  "Feedback goes to the report author. New tasks or decisions go to Firstmate.": "Feedback goes to the report author. New tasks or decisions go to Firstmate."
+  "Feedback goes to the report author. New tasks or decisions go to Firstmate.": "Feedback goes to the report author. New tasks or decisions go to Firstmate.",
+  "Zero disables an axis. Either enabled limit can trigger a relay. The checker needs a reported window to evaluate percentages; without one, the percentage is unknown and the token limit still applies.": "Zero disables an axis. Either enabled limit can trigger a relay. The checker needs a reported window to evaluate percentages; without one, the percentage is unknown and the token limit still applies.",
+  "Primary": "Primary",
+  "Percent": "Percent",
+  "Tokens": "Tokens",
+  "Source": "Source",
+  "Default: disabled": "Default: disabled",
+  "Effective limit": "Effective limit",
+  "Threshold saved.": "Threshold saved.",
+  "Enabled": "Enabled",
+  "Disabled": "Disabled"
 }

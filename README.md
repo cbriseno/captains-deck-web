@@ -125,6 +125,6 @@ python3 tests/check_fixture.py
 Linux is the verified environment.
 macOS and Windows/WSL are not yet validated platforms for this distribution.
 Native Windows can host an empty web UI; Firstmate integration and the terminal plugin require a POSIX environment.
-Relay settings are available through an optional Firstmate extensions checkout; automatic relay remains off by default. This distribution contains no relay engine, push-notification sender or installable PWA.
+Relay settings are available through an optional Firstmate extensions checkout; the panel configures relay-lite thresholds without triggering relays. This distribution contains no relay engine, push-notification sender or installable PWA.
 
 Theme colors are adapted from MIT-licensed palettes; see [THEMES-LICENSES.md](THEMES-LICENSES.md).

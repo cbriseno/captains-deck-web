@@ -379,7 +379,7 @@ The current delivery history cannot correlate arbitrary notification item/artifa
 
 ## Relay and planning settings
 
-**Relay settings** opens the selected coordinating space's relay mode, thresholds, planning preferences and recent relay activity.
+**Relay settings** opens the selected coordinating space's relay-lite thresholds and planning preferences. Zero disables an axis; either enabled threshold can trigger the checker. A percentage requires a reported context window.
 Set `CD_WEB_EXTENSIONS_ROOT` to an installed extensions checkout that exposes the versioned `bin/fm-extension settings` contract.
 An absent or incompatible extension, an absent Firstmate endpoint or a remote space shows an unavailable state and permits no writes.
 Deck does not install extensions, prepare hooks, grant harness trust or initiate handoffs.
