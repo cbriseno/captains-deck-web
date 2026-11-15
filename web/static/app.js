@@ -782,7 +782,12 @@ function renderDelivery() {
       try {
         const result = await api('api/control/' + encodeURIComponent(modal.home) + '/report-review', {target: 'task:' + modal.task});
         tab.location.replace(result.url); reviewWindows.set(key, tab);
-        status.textContent = t('Feedback goes to the report author. New tasks or decisions go to Firstmate.');
+        const messages = {
+          author: 'Feedback goes to the report author. New tasks or decisions go to Firstmate.',
+          resumed: 'Feedback goes to the report author, who has been resumed. New tasks or decisions go to Firstmate.',
+          primary: 'Feedback goes to Firstmate, who will arrange its recovery. New tasks or decisions go to Firstmate.',
+        };
+        status.textContent = t(Object.hasOwnProperty.call(messages, result.owner) ? messages[result.owner] : 'The feedback recipient could not be determined. New tasks or decisions go to Firstmate.');
       } catch (error) { tab.close(); status.textContent = error.message; }
       finally { review.disabled = false; }
     });

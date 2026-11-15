@@ -18,7 +18,7 @@ test('HTML reading stays passive; explicit review reuses one window', {timeout:1
     const home=path.join(root,'home');
     fs.writeFileSync(path.join(home,'data/demo-research/report.html'),'<style>body{font-family:system-ui}</style><h1>Original HTML</h1><script>top.COMPROMISED=true</script>');
     const reviewUrl=url+'/?review-consumer-test';
-    fs.writeFileSync(path.join(home,'report-review.json'),JSON.stringify({ok:true,url:reviewUrl}));
+    fs.writeFileSync(path.join(home,'report-review.json'),JSON.stringify({ok:true,url:reviewUrl,owner:'author'}));
     const calls=()=>fs.existsSync(path.join(home,'work-calls.jsonl'))?fs.readFileSync(path.join(home,'work-calls.jsonl'),'utf8').trim().split('\n').map(JSON.parse).filter(c=>c.command==='report.review'):[];
     browser=true;cli('open',[url]);cli('resize',['1970','1250']);
     evaluate("async()=>{const data=await(await fetch('api/board')).json();location.href='/?'+new URLSearchParams({home:data.homes[0].id,task:'demo-research',view:'delivery'});return true;}");
@@ -33,6 +33,17 @@ test('HTML reading stays passive; explicit review reuses one window', {timeout:1
     assert.equal(calls().length,1,'Repeated clicks reuse the confirmed window');
     assert.deepEqual(calls()[0].operation,{target:'task:demo-research'});
     assert.equal(cli('pages').split(reviewUrl).length-1,1,'One review window');
+    for (const [owner, message] of [
+      ['resumed', 'Los comentarios van al autor del informe, que se ha retomado.'],
+      ['primary', 'Los comentarios van a Firstmate, que encargará su recuperación.'],
+      ['unexpected', 'No se pudo determinar el destinatario de los comentarios.'],
+    ]) {
+      fs.writeFileSync(path.join(home,'report-review.json'),JSON.stringify({ok:true,url:reviewUrl,owner}));
+      evaluate("()=>{location.reload();return true;}");
+      cli('wait',['Revisar en Lavish']);
+      cli('run',[],"await page.click('#detail-content [data-action=report-review]');");
+      cli('wait',[message]);
+    }
     evaluate("()=>{window.open(location.href,'deck-review-mobile','popup,width=390,height=844');return true;}");
     const mobile=cli('pages').match(/^  (\d+),[^\n]+view=delivery,false$/m);assert.ok(mobile);
     cli('selectpage',[mobile[1]]);cli('wait',['Revisar en Lavish']);
