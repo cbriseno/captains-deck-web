@@ -125,6 +125,12 @@ if os.environ.get('CD_TEST_ACTIONS') == '1':
          'question': {'open': True, 'origin_task': 'task:demo-research', 'call': {
              'question': '¿Qué destino prefieres?', 'options': [], 'context': 'La elección es libre.'}}}])
     by_task['task:dependent']['blocked_by'] = [{'ref': 'task:chat-action', 'by': 'firstmate', 'open': True}]
+if os.environ.get('CD_TEST_ACTION_COPY') == '1':
+    action = next(row for row in tasks if row['key'] == 'task:chat-action')
+    action['title'] = 'Choose the target branch for example tooling'
+    action['question']['call'].update(
+        instruction='Ask Firstmate to file this decision with its question and options.',
+        context='Choose the target branch for example tooling.')
 if os.environ.get('CD_TEST_QUESTIONS') == '1':
     (base / '.tasks.toml').write_text('backend = "markdown"\n[markdown]\npath = "data/backlog.md"\narchive = "data/done-archive.md"\n')
     (base / 'data/backlog.md').write_text('# Fixture backlog\n\n## In flight\n'

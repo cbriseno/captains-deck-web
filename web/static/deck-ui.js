@@ -602,11 +602,19 @@ window.createDeckUI = function (host) {
     const control=link.tagName==='A'?link:link.querySelector('button');
     if(control)control.textContent=t(c.action.where==='chat'&&link.tagName==='A'?'Open chat':'Open registered link');return link;
   }
+  function actionCopy(c){
+    const seen=new Set(),unique=value=>{
+      if(typeof value!=='string'||!value.trim())return '';
+      const key=value.trim().toLocaleLowerCase().replace(/\s+/g,' ').replace(/[.!?…,:;]+$/,'');
+      if(seen.has(key))return '';seen.add(key);return value;
+    };
+    return {title:unique(c.title),instruction:unique(c.action?.instruction),context:unique(c.action?.context)};
+  }
   function actionDetail(c) {
-    const action=c.action||{};app.modal={type:'action',key:c.key,home:c.home,task:c.task,reading:JSON.stringify(c.action)};
-    const content=$('detail-content');content.replaceChildren(n('p','action-instruction',action.instruction),n('p','fact',actionWhere(c)),n('p','fact',t('This stays here until Firstmate verifies the action is resolved.')));
+    const copy=actionCopy(c);app.modal={type:'action',key:c.key,home:c.home,task:c.task,reading:JSON.stringify(c.action)};
+    const content=$('detail-content');content.replaceChildren();if(copy.instruction)content.append(n('p','action-instruction',copy.instruction));content.append(n('p','fact',actionWhere(c)),n('p','fact',t('This stays here until Firstmate verifies the action is resolved.')));
     const current=byId.get(taskNodeId(c.home,c.task));if(event(current?.created_at))content.append(time('Created',current.created_at));
-    if(action.context)content.append(n('p','fact',action.context));
+    if(copy.context)content.append(n('p','fact',copy.context));
     if(action.error)content.append(n('p','notice error',action.error));
     if(action.link&&host.reportLink)content.append(actionLink(c));
     const own=byId.get(taskNodeId(c.home,c.task)),origin=b(t('Go to source task'),()=>revealQuestionOrigin(c),'more');origin.disabled=!canRevealOrigin(own);content.append(origin);
@@ -615,8 +623,8 @@ window.createDeckUI = function (host) {
     const own=byId.get(taskNodeId(c.home,c.task)),origin=originOf(own),card=setColor(n('article','task-card card action-card'),origin||own||{id:c.key});
     card.dataset.node=own?.id||taskNodeId(c.home,c.task);card.dataset.key=c.key;card.dataset.state=own?.state||'unknown';
     const face=b('',()=>{if(ui.selected===card.dataset.node&&detailOpen()){clearFocus(true);return;}ui.selected=card.dataset.node;ui.pin=ui.focus?ui.selected:'';showDetail(c.title,'',t('Action required'),face);actionDetail(c);highlight();},'card-open');face.dataset.key=c.key;face.setAttribute('aria-controls','detail');face.setAttribute('aria-expanded',String(ui.selected===card.dataset.node&&detailOpen()));
-    const instruction=c.action?.instruction&&c.action.instruction!==c.title?c.action.instruction+' ':'';
-    add(face,n('span','title',c.title),n('span','cctx',instruction+actionWhere(c)+(c.action?.context?' '+c.action.context:'')));
+    const copy=actionCopy(c);
+    add(face,n('span','title',copy.title),n('span','cctx',[copy.instruction,actionWhere(c),copy.context].filter(Boolean).join(' ')));
     if(c.action?.error)face.append(n('span','notice error',c.action.error));
     const source=b(t('Go to source task'),()=>revealQuestionOrigin(c),'more');source.disabled=!canRevealOrigin(own);
     card.append(cardKind('act','ext',t('Do'),{id:c.key},own,[source]),add(n('div','card-face'),face),add(n('div','card-more'),n('div','card-more-inner')));
