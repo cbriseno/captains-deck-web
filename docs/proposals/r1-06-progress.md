@@ -1,82 +1,53 @@
-# R1-06: ten animated concepts in the real Deck
+# R1-06, round 7: activity without recurring motion
 
-Review round 4 asks for five creative breathing variations and five new concepts.
-Version 6 offers R1 Tinta (uniform surface), R2 Halo (diffuse center), R3 Fuelle
-(paired lateral veils), R4 Marea (light from below), R5 Contorno (stationary outline),
-N1 Trama (diagonal texture), N2 Ondas (expanding waves), N3 Péndulo (hinged stroke),
-N4 Ecualizador (vertical strokes), and N5 Pliegue (folding shape).
-The five new concepts do not repeat the earlier top trace, whole-surface breathing,
-sweep, moving title, traveling perimeter, dot, track, ring, numeric or milestone cues.
-No replacement has been selected. This is proposal-only; production source is unchanged.
+This isolated proposal restarts the direction after rounds 1–6. It uses the real Deck renderer with eight simultaneous active requests and three inactive cases. Production files are unchanged.
 
-## Manual procedure
+Manual procedure: (1) start the approved fixture; (2) read its board and locale anonymously over loopback; (3) bundle the actual Deck HTML/CSS/JS; (4) apply a proposal-only signal to real request rows; (5) inspect all six patterns at 1970×1250 and 390×844, light/dark, with and without reduced motion; (6) hand offline artifacts to the coordinator for independent visual and blind review.
 
-1. Start `web/tests/approved_fixture.py` in a disposable directory with
-   `CD_TEST_PROGRESS=1 CD_WEB_LANGUAGE=es`. Read its printed loopback URL.
-2. Open that real Deck. Expand its requests and observe the task count and
-   measured steps separately. Read `/api/board` and `/api/locale` from that
-   fixture into temporary JSON files; remove the board's `csrf` field.
-3. Run `python3 docs/proposals/build-r1-06.py BOARD_JSON LOCALE_JSON OUTPUT_HTML`.
-   Use only synthetic fixture inputs. The script embeds the existing Deck
-   HTML/CSS/JavaScript and replaces `progress()` and adds card decorations only in the generated page.
-   It supplies five synthetic cases through an in-memory fixture transport.
-4. Open the generated HTML locally and with the same sandbox flags as Lavish.
-   Switch R1–R5 and N1–N5, expand requests, search, compare
-   light/dark at desktop and mobile widths, and pause motion with and
-   without the system's reduced-motion preference. No backend is contacted.
-5. Review the same artifact in the existing worker-owned Lavish session.
-   Obtain independent visual and blind usability reviews before closing P16.
-   A later implementation requires its own SDLC and the selected design.
-6. Close the fixture and test browser. Keep only the explicitly hosted review
-   board and its supervised listener available for feedback.
+| Pattern | Direction | Cost / ambiguity |
+| --- | --- | --- |
+| A: fixed dot and text | Familiar status indicator | May imply presence rather than actual work |
+| B: margin tab | Familiar fixed 2px marker | May resemble selection |
+| C: inline label | Familiar small filled status | Eight repeated fills add visual weight |
+| D: current verb | Describe what the agent is doing | Requires trustworthy current stage data |
+| E: recent trace | Show the latest received work event | More reading; never infer work from a ticking clock |
+| F: typography only | Use text weight, remove ornaments | Quietest, harder to scan |
 
-## Scope and semantics
+Activity and measured completion remain separate. Four tasks have 2/5 steps (40%); four have no progress measurement. Waiting, parked and stale observations have no progress bar or recurring motion. The stale fixture has old 4/5 progress explicitly withheld. The existing request-level completion bar remains separate.
 
-The HTML file in this directory is the report template; build it before review.
-The generated output is a single offline file, with no fonts, CDNs or servers
-required. Original Deck scripts retain search and inline request expansion.
-Fixture transport refuses mutations; real Firstmate data is never read.
+The renderer uses Grafito tokens and the existing Day Attendant list rhythm. It introduces no side panels, dialogs, help boxes, timers, external services or dependencies. The event trace and timestamps are synthetic and frozen; a real integration would update only on received evidence.
 
-All concepts display the same five states: measured 2/5, unmeasured activity,
-dependency wait, parked, and unconfirmed activity. Only measured current steps
-have `role=progressbar`; no percentage is assigned to the other states. The
-request's completed-task count is distinct from task steps. Steps are not time,
-effort, installation, or acceptance. Activity freshness and progress freshness
-are independent; the report describes the stale-progress/confirmed-activity case.
+To build, use the five proposal source files in this directory and run from any directory:
 
-All ten patterns animate by default on the real active request cards. They do
-not animate the measured percentage. Waiting, parked and unconfirmed cards
-stay static. The pause checkbox and system `prefers-reduced-motion` disable
-all ten; text and actual measurements remain available. The decoration is
-absolutely positioned within the real request header, behind its text. Inline
-marks replace the active status dot only for N3–N5. Card dimensions are checked
-at desktop and mobile widths. The measured percentage never animates.
+```sh
+python3 /ABSOLUTE/REPO/docs/proposals/build-r1-06.py \
+  /ABSOLUTE/DATA/docs/proposals/r1-06-fixture-board.json \
+  /ABSOLUTE/DATA/docs/proposals/r1-06-locale.json \
+  /ABSOLUTE/REPO/docs/proposals/r1-06-offline.html
+```
 
-The generated copy removes the service-worker cleanup line: it has no worker to
-unregister and Lavish disallows that API in its sandbox. Appearance controls and
-intrinsic height use `postMessage` between the report and its embedded Deck;
-this supports the manual theme/concept/pause controls without cross-frame DOM
-access. The production code and Lavish's sandbox permissions are unchanged.
-This corrects two observed SecurityErrors in the initial sandbox run.
+The standalone HTML needs no server. Search and inline expansion use the actual renderer; POST requests return 403. No production data or endpoints are used. Do not infer installation, integration, usability approval, or a selected design from this prototype. The coordinator owns the existing Lavish review and independent review assignments.
 
-The design uses Grafito tokens shared by Captain's Deck and Day Attendant,
-system typography, a plain report layout, and inline disclosure. Benefits and
-tradeoffs are design hypotheses, not measured usability results. Browser checks
-and screenshots belong to the task's private report directory, not this repo.
+## Integrated independent review
 
-The former proposal's isolated samples did not meet the requirement to demonstrate
-the concepts in the real interface. This revision replaces them with the actual
-renderer and synthetic owner projection. Linux is verified; the Mac is not.
-Source references: approved plan v2 P16, report b group 11, attachment R1-02/R1-06,
-`web/static/deck-ui.js` (`progress`, `requestRow`) and `web/static/deck.css`.
-No L1–L23 issue was reopened.
+The visual review and independent reading walkthrough cover the quiet round-7
+delivery, despite their historical v4 task names. Round 7 supersedes earlier
+animation counts. A is a static comparison reference, not the selected design.
+The reader preferred its scanability without measuring time. They did not read
+source or recommendations, but visible concept descriptions provided context;
+this was not a fully blind participant study or a sustained comfort test.
 
-## Breathing geometry correction
+The prototype now shows the next todo step after the active step when current
+declared progress supplies it. It says "sin declarar" otherwise. No production
+renderer or progress contract changes. The before walkthrough reproduced the
+missing next step; the fixture already supplied Comprobación after Conexión.
 
-The real v5 run reproduced the reported mismatch: a 10px rounded overlay on
-straight request rows, positioned over the entire request including expanded
-content. In v6 the overlay inherits the actual header radius, has zero inset,
-and stays behind its content. It never grows with expanded task details.
-The regression check fails on the v5 fixture and passes on v6. Evidence and
-captures live in the task report directory. This correction is only in the
-proposal layer; no production padding, row geometry or renderer was modified.
+Still open: confusion between request tasks and task steps; consistency of frozen
+source/event timestamps; missing dependency/actor detail; and whether restrained
+motion is comfortable with eight active cards. Text explanation is not evidence
+these usability findings are fixed. A separate motion assignment remains pending;
+its integrated comparison still requires independent visual and reading reviews.
+No change to the general Deck layout or invented live data belongs to this step.
+
+An optional fourth argument to the builder adds a link to the existing review
+session. Opening the offline file does not start a server or create a session.

@@ -22,9 +22,11 @@ project = next(n for n in snapshot['nodes'] if n['id'] == 'project:deck')
 project['title'] = 'Deck · demostración'
 snapshot.update(nodes=[project], edges=[], requests=[], sigue=[], pause_controls=[], events=[])
 source['capabilities'] = {}
-cases = [('measured','Conectar el historial','active'), ('unmeasured','Investigar la conexión','active'),
-         ('waiting','Verificar desde el teléfono','waiting'), ('parked','Revisar la propuesta','paused'),
-         ('stale','Preparar la siguiente entrega','unknown')]
+cases = [(f'active{i}', title, 'active') for i, title in enumerate([
+    'Conectar el historial', 'Investigar la conexión', 'Revisar el arranque', 'Preparar los temas',
+    'Conectar la búsqueda', 'Comprobar la navegación', 'Ordenar los encargos', 'Verificar la lectura'])]
+cases += [('waiting','Verificar desde el teléfono','waiting'), ('parked','Revisar la propuesta','paused'),
+          ('stale','Preparar la siguiente entrega','unknown')]
 for index, (case, title, state) in enumerate(cases):
     node = copy.deepcopy(seed)
     node.update(id='task:'+case,task=case,title=title,parent='project:deck',state=state,
@@ -32,13 +34,17 @@ for index, (case, title, state) in enumerate(cases):
                 progress=None,declared_progress=None,phase=None,request=None,
                 pause={'own':False,'inherited':[],'can_pause':False,'can_resume':False},
                 progress_evidence={'freshness':'missing','current':False})
-    if case == 'measured':
+    if case in ('active0', 'active2', 'active4', 'active6'):
         node['progress'] = {'done':2,'completed':2,'total':5,'steps':[{'label':s,'state':'done' if i<2 else 'active' if i==2 else 'todo'} for i,s in enumerate(['Lectura','Diseño','Conexión','Comprobación','Entrega'])]}
         node['progress_evidence'] = {'freshness':'current','current':True}
+    node['demoVerb'] = ['Conectando', 'Investigando', 'Revisando', 'Diseñando', 'Conectando', 'Comprobando', 'Ordenando', 'Verificando'][index % 8]
+    node['demoEvent'] = ['Lectura completada', 'Fuente localizada', 'Arranque observado', 'Paleta comparada'][index % 4]
+    if case == 'stale': node.update(progress_evidence={'freshness':'stale','current':False},declared_progress={'done':4,'total':5})
     if case == 'parked': node['pause'].update(own=True,state='paused',reason='Espera revisión')
     node['request'] = {'id':case,'label':title,'project':'project:deck'}
     snapshot['nodes'].append(node)
     snapshot['requests'].append({'id':case,'label':title,'project':'Deck · demostración','project_key':'project:deck','tasks':[node['id']],'updated_at':node['updated_at']})
+board['csrf'] = 'offline-fixture'
 for column in board['columns']: column['cards'] = []
 board['history'] = []
 def js(value): return json.dumps(value,ensure_ascii=False).replace('</','<\/')
@@ -50,8 +56,8 @@ else if(p.includes('api/board'))data=BOARD;
 else if(p.includes('api/receipts'))data={receipts:[]};
 else data={events:[],records:[],sources:[]};
 return {ok,status:ok?200:403,json:async()=>structuredClone(data)};};
-try{localStorage.setItem('deck-closed','[]');localStorage.setItem('deck-animations','false');localStorage.setItem('deck-modo','light');}catch{}
-document.documentElement.dataset.concept='a';document.documentElement.dataset.motion='true';
+try{localStorage.setItem('deck-closed','[]');localStorage.setItem('deck-animations','false');localStorage.setItem('deck-modo','light');localStorage.setItem('deck-tema','grafito');localStorage.setItem('deck-expanded-requests','[]');localStorage.setItem('deck-request-sort','recent');}catch{}
+document.documentElement.dataset.concept='a';document.documentElement.dataset.motion='false';
 '''.replace('LOCALE',js(locale)).replace('BOARD',js(board))
 page = (static/'index.html').read_text()
 scripts = re.findall(r'<script src="([^"]+)"[^>]*></script>',page)
@@ -70,5 +76,7 @@ for name in scripts:
     bundle += '<script>'+content.replace('</script','<\/script')+'</script>'
 page = page.replace('</body>',bundle+'<script>window.installProposalPatterns();</script></body>')
 template = (here/'r1-06-progress.html').read_text()
-if len(sys.argv)>4: template=template.replace('<footer>','<footer><a href="'+html.escape(sys.argv[4],quote=True)+'" target="_blank" rel="noopener">Revisar en Lavish</a> · ')
+review_url = sys.argv[4] if len(sys.argv) > 4 else ''
+review_link = '<a href="'+html.escape(review_url,quote=True)+'" target="_blank" rel="noopener">Revisar en Lavish</a>' if review_url else ''
+template = template.replace('<!--REVIEW_LINK-->', review_link)
 Path(sys.argv[3]).write_text(template.replace('<!--DECK_FRAME-->', '<iframe id="demo" title="Deck real con datos ficticios" srcdoc="'+html.escape(page,quote=True)+'"></iframe>'))
