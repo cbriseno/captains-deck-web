@@ -373,8 +373,8 @@ window.createDeckUI = function (host) {
       const completionNote=window.DeckState.completionNote(pct,x.state)?` · ${t('all declared steps; task not finished')}`:'';
       box.append(bar,structural(n('span','prog-txt',`${pct}% · ${completed}/${total} ${t('steps')}${completionNote}`)));
     }else{
-      const messages={stale:'Progress needs an update.',missing:'No progress declared yet.',unknown:'Progress is not confirmed.',invalid:'The progress declaration is invalid.',unmeasured:'No measured steps yet.'};
-      box.append(n('span','prog-txt',t(messages[freshness])));
+      const messages={stale:'Needs an update',missing:'Not reported yet',unknown:'Not confirmed',invalid:'Invalid declaration',unmeasured:'No measured steps yet'};
+      box.append(n('span','prog-txt',t('Progress: {value}',{value:t(messages[freshness])})));
     }
     if(observationStale){if(compact)box.querySelector('.prog-txt').prepend(n('span','',t('Out of date')+' · '));else box.append(n('span','prog-txt',t('Out of date')));}
     const phases={investigation:'Investigation',implementation:'Implementation',rebase:'Rebasing',validation:'Validation','branch-ready':'Ready for integration',integration:'Integration',activation:'Activation',complete:'Completion stage'};

@@ -43,7 +43,7 @@ for (const language of ['es','en']) test('progress checkpoint: current, historic
       assert.equal(historical.bar,false);assert.equal(historical.text.includes('%'),false);
       assert.ok(historical.summary.includes(language==='es'?'histórica':'historical'));assert.ok(historical.text.includes(language==='es'?'4 de 7':'4 of 7'));assert.ok(historical.text.includes('Earlier scope'));
       const missing=evaluate(`async()=>{document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}));[...document.querySelectorAll('#board .task-card')].find(x=>x.dataset.node.endsWith('task:integration')).querySelector('.card-open').click();for(let i=0;i<100&&!document.querySelector('#detail-content .prog[data-freshness=missing]');i++)await new Promise(r=>setTimeout(r,50));const p=document.querySelector('#detail-content .prog');return {text:p.textContent,bar:!!p.querySelector('[role=progressbar]'),history:!!p.querySelector('details'),alias:document.querySelector('#detail-content .node-id').textContent};}`);
-      assert.equal(missing.bar,false);assert.equal(missing.history,false);assert.equal(missing.alias,cards.integration.alias);
+      assert.equal(missing.bar,false);assert.equal(missing.text.includes('%'),false);assert.match(missing.text,language==='es'?/^Avance: /:/^Progress: /);assert.equal(missing.history,false);assert.equal(missing.alias,cards.integration.alias);
       assert.equal(fs.readFileSync(path.join(proof,'home/work-snapshot.json'),'utf8'),original);
       // Change the disposable owner snapshot, then wait for the real HTTP poll.
       // No browser response injection or detail close/reopen drives a transition.
