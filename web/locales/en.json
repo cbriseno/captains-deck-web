@@ -1029,6 +1029,7 @@
   "Everforest": "Everforest",
   "Kanagawa": "Kanagawa",
   "Request not recorded": "Request not recorded",
+  "Tasks completed: {done} of {total}": "Tasks completed: {done} of {total}",
   "{done} of {total} tasks done": "{done} of {total} tasks done",
   "Needs you · {count}": "Needs you · {count}",
   "Review · {count}": "Review · {count}",
