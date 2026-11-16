@@ -21,13 +21,17 @@ test('captain waits and unheld decisions stay visible without an answer form',{t
     for(const [width,height] of [[1970,1250],[390,844]]){
       run('resize',[String(width),String(height)]);
       const result=evaluate(`async()=>{${wait}await wait(()=>document.querySelectorAll('.action-card').length===2);
-        if(document.getElementById('detail').hidden)document.querySelector('.action-card[data-node$="task:web"] .card-open').click();
+        if(document.getElementById('detail').hidden)document.querySelector('.action-card[data-node$="task:next"] .card-open').click();
         await new Promise(r=>setTimeout(r,1200));
         return {open:!document.getElementById('detail').hidden,overflow:document.documentElement.scrollWidth>innerWidth,
           forms:document.querySelectorAll('#detail-content textarea,#detail-content input').length,
-          repair:document.body.innerText.includes('not filed correctly'),text:document.getElementById('detail-content').innerText};}`);
-      assert.equal(result.open,true);assert.equal(result.overflow,false);assert.equal(result.forms,0);assert.equal(result.repair,true);assert.ok(result.text.includes('review board'));
+          choices:document.querySelectorAll('#detail-content .option-list,#detail-content .option-choice').length,
+          text:document.getElementById('detail-content').innerText};}`);
+      assert.equal(result.open,true);assert.equal(result.overflow,false);assert.equal(result.forms,0);assert.equal(result.choices,0);
+      assert.match(result.text,/Ask Firstmate to record the decision for this task with its question and options\./);
+      assert.match(result.text,/This task is waiting for a decision, but no open question is recorded\./);
     }
+    run('eval',[`document.querySelector('.action-card[data-node$="task:web"] .card-open').click()`]);
     event({event:'task.status',task:'web',state:'working',text:'Feedback received; resumed.'});
     assert.equal(evaluate(`async()=>{${wait}await wait(()=>document.querySelectorAll('.action-card').length===1&&document.getElementById('detail').hidden);return true;}`),true);
   }finally{

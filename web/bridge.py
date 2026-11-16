@@ -492,8 +492,8 @@ class Board:
         attention = None
         if item['state'] != 'done' and not question.get('open'):
             if row.get('kind') == 'captain':
-                attention = dict(instruction=self.t('Ask Firstmate to file this decision with its question and options.'),
-                                 where='chat', context=self.t('This decision was not filed correctly.'), source='backlog.kind')
+                attention = dict(instruction=self.t('Ask Firstmate to record the decision for this task with its question and options.'),
+                                 where='chat', context=self.t('This task is waiting for a decision, but no open question is recorded.'), source='backlog.kind')
             elif pause_reason and not supervisor_pause and re.search(
                     r'\b(captain|user|capitán|usuario|usuaria|lavish|visual review board|review board|tablero de revisión)\b', pause_reason, re.I):
                 review = bool(re.search(r'\b(lavish|board|tablero)\b', pause_reason, re.I))

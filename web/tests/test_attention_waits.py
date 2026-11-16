@@ -59,7 +59,10 @@ class AttentionWaitTests(unittest.TestCase):
         card = self.only_card(self.prepare(kind='captain', state='ready'))
         self.assertEqual(card['bucket'], 'captains_call')
         self.assertEqual(card['attention_kind'], 'action')
-        self.assertIn('not filed correctly', card['action']['context'])
+        self.assertEqual(card['action']['instruction'],
+                         'Ask Firstmate to record the decision for this task with its question and options.')
+        self.assertEqual(card['action']['context'],
+                         'This task is waiting for a decision, but no open question is recorded.')
         self.assertIsNone(card['inline_call'])
         code, _ = self.req('/api/ticket/' + card['key'] + '/answer',
                            dict(value='yes', note='', occurrence='a'*64, request_id='b'*32))
