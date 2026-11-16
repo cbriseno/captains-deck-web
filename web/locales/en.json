@@ -1283,5 +1283,12 @@
   "Threshold saved.": "Threshold saved.",
   "Enabled": "Enabled",
   "Disabled": "Disabled",
-  "Requests are grouped by project and remain separate. Fold a project to hide its requests in this section.": "Requests are grouped by project and remain separate. Fold a project to hide its requests in this section."
+  "Requests are grouped by project and remain separate. Fold a project to hide its requests in this section.": "Requests are grouped by project and remain separate. Fold a project to hide its requests in this section.",
+  "Reports to review": "Reports to review",
+  "View previous reports": "View previous reports",
+  "Waiting for dependency": "Waiting for dependency",
+  "Waiting for capacity": "Waiting for capacity",
+  "{questions} decisions · {approvals} approvals · {actions} actions · {reports} reports (categories may overlap)": "{questions} decisions · {approvals} approvals · {actions} actions · {reports} reports (categories may overlap)",
+  "{count} reports": "{count} reports",
+  "Ready work": "Ready"
 }

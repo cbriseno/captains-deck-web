@@ -717,3 +717,5 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .request-project-toggle{display:flex;align-items:center;gap:8px;width:100%;min-width:0;text-align:left;padding:8px 12px;color:var(--muted)}
 .request-project-toggle span{min-width:0;overflow-wrap:anywhere}
 .project-group-explanation{color:var(--muted);font-size:12px;margin:0 0 8px}
+
+.attention-list > .request-group-head .n { margin-left: .5rem; }

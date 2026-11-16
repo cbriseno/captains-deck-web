@@ -8,7 +8,7 @@ window.createDeckUI = function (host) {
   const pref = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Current page still works. */ } };
   const ui = {pin:'',view:'board', scope:'', selected:'', hover:'', column:'', closed:new Set(pref('deck-closed', [])), hasClosedPreference:pref('deck-closed',null)!==null, initialized:false, tree:new Set(),
-    order:pref('deck-request-sort','recent'),expanded:new Set(pref('deck-expanded-requests',[])),needsClosed:pref('deck-needs-closed',false),density:pref('deck-density','auto'),animations:pref('deck-animations',true),groups:new Set(['done']),projectFolds:new Set(),steps:new Set(),logOpen:new Set(),usageOpen:new Set(),logs:new Map(), reordering:false, pausedOpen:pref('deck-paused-open',true),done:pref('deck-done', true), focus:pref('deck-focus', true), hoverDelay:Math.max(0,Math.min(10,Number(pref('deck-hover-delay',1))||0)), mixer:false, stacks:new Set(), log:[], busy:false, drag:null, signature:'', generation:0,renderedQuery:null,nextRenderMode:''};
+    order:pref('deck-request-sort','recent'),expanded:new Set(pref('deck-expanded-requests',[])),needsClosed:pref('deck-needs-closed',false),density:pref('deck-density','auto'),animations:pref('deck-animations',true),groups:new Set(['done']),projectFolds:new Set(),reviewGroups:new Set(),steps:new Set(),logOpen:new Set(),usageOpen:new Set(),logs:new Map(), reordering:false, pausedOpen:pref('deck-paused-open',true),done:pref('deck-done', true), focus:pref('deck-focus', true), hoverDelay:Math.max(0,Math.min(10,Number(pref('deck-hover-delay',1))||0)), mixer:false, stacks:new Set(), log:[], busy:false, drag:null, signature:'', generation:0,renderedQuery:null,nextRenderMode:''};
   const motion=window.createDeckMotion({t,settled:highlight});
   const announceFocus=(_id,text='')=>{const status=$('focus-status');if(status)status.textContent=ui.focus?(text?t('Focused: {name}',{name:text}):t('Focus cleared')):t('Focus disabled');};
   let hoverTimer=0, hoverTarget=null, keyboardFocus=false;
@@ -56,7 +56,8 @@ window.createDeckUI = function (host) {
   function projectDisplay(project) {
     const value=typeof project==='string'?project:project?.label||'';
     const id=typeof project==='string'?project:project?.id||'';
-    if([value,id].some(x=>['workspace','proyecto sin registrar'].includes(String(x).trim().toLowerCase())))return t('Workspace');
+    if([value,id].some(x=>String(x).trim().toLowerCase()==='proyecto sin registrar'))return t('Project not reported');
+    if([value,id].some(x=>String(x).trim().toLowerCase()==='workspace'))return t('Workspace');
     return value||t('Project not reported');
   }
   // Unknown observation is not an explicit dependency/hold. It has its own
@@ -645,11 +646,11 @@ window.createDeckUI = function (host) {
   const activityEpoch=value=>{const e=event(value);return e?.epoch||Date.parse(e?.date||'')/1000||0;};
   function reviewNeeded(x){
     if(cancelled(x)||(x.outcome||x.raw?.outcome||x.card?.outcome)?.review!=='needed')return false;
-    // An open row keeps its finished result visible until Firstmate closes it.
-    if(x.raw?.backlog_state==='in_flight'&&(x.state==='done'||x.card?.activity?.kind==='finished'))return true;
-    // Old retained results belong in Delivered; updating them is not a new delivery.
-    const completed=activityEpoch(x.completed_at),now=Date.now()/1000;
-    return x.state==='done'&&completed>0&&completed<=now&&now-completed<86400;
+    // Owner placement is the authority for a report awaiting review; it has no age limit.
+    const placement=x.raw?.placement;
+    if(placement)return placement.attention?.includes('reports')===true;
+    // Older owners do not publish placement; preserve their review declaration.
+    return x.state==='done'||x.raw?.backlog_state==='in_flight'&&x.card?.activity?.kind==='finished';
   }
   function requestRows(tasks){
     const groups=new Map(model.nodes.filter(x=>x.kind==='request').map(x=>[x.id,{...x,tasks:[],calls:[]}]));
@@ -662,7 +663,7 @@ window.createDeckUI = function (host) {
         if(!groups.has(id))groups.set(id,{...r,tasks:[],calls:[]});
       }
       const group=groups.get(r.id);if(!group)continue;
-      if(!questionOnly(x))group.tasks.push(x);
+      if(!questionOnly(x)||x.raw?.placement&&x.raw.placement.section!=='needs_you')group.tasks.push(x);
       if(activityEpoch(x.updated_at)>activityEpoch(group.updated_at))group.updated_at=x.updated_at;
     }
     for(const c of attentionCards()){const own=byId.get(taskNodeId(c.home,c.task)),r=own&&(requestFor(own)||requestFor(questionNode(c))||groups.get(legacyId(own)));if(r)groups.get(r.id)?.calls.push(c);}
@@ -671,10 +672,21 @@ window.createDeckUI = function (host) {
   // Approved demo situation(): «En curso» only while a task has a live agent.
   // Queued (ready), held or unconfirmed work is waiting, never in progress.
   function requestState(r){if(ownPause(r)||['pending','paused','queued','unconfirmed','failed'].includes(r.pause?.state))return 'paused';return r.tasks.some(x=>window.DeckState.displayState(x)==='active')?'now':r.tasks.some(x=>['stopping','paused'].includes(window.DeckState.displayState(x)))?'paused':r.calls.some(x=>!x.answered)||r.tasks.some(x=>x.state!=='done')?'waiting':'done';}
+  const placementSection=x=>({running:'now',ready:'ready',dependency:'dependency',capacity:'capacity',waiting:'waiting',paused:'paused',finished:'done',needs_you:'needs'}[x.raw?.placement?.section]);
+  function requestsInSection(rows,state){
+    return rows.flatMap(r=>{
+      const hasPlacement=r.tasks.some(x=>placementSection(x));
+      if(!hasPlacement)return requestState(r)===state?[r]:[];
+      const tasks=r.tasks.filter(x=>(placementSection(x)||requestState({...r,tasks:[x],calls:[]}))===state);
+      return tasks.length?[{...r,tasks}]:[];
+    });
+  }
   function orderedRequests(rows){return [...rows].sort(ui.order==='mine'?(a,b)=>a.home.localeCompare(b.home)||(a.manual??Infinity)-(b.manual??Infinity): (a,b)=>activityEpoch(b.updated_at)-activityEpoch(a.updated_at)||(a.id<b.id?-1:a.id>b.id?1:0));}
+  let reviewGroupOf=new Map();
   function jumpAttention(x){
     if(ui.view!=='board')host.setView('board');
     if(ui.needsClosed){ui.needsClosed=false;save('deck-needs-closed',false);render(true,'filter');}
+    if(reviewGroupOf.has(x)){ui.reviewGroups.add(reviewGroupOf.get(x));render(true,'filter');}
     const isQuestion=String(x).startsWith('question:'),call=isQuestion&&attentionCards().find(c=>'question:'+c.key===x);
     if(call){ui.selected=x;ui.stacks.add(call.project?.id||call.home);render(true,'filter');}
     const el=[...$('board').querySelectorAll('.attention-list .task-card')].find(el=>el.dataset.key===x||el.dataset.node===x);
@@ -810,7 +822,7 @@ window.createDeckUI = function (host) {
     if(work.length===1&&work[0].state!=='done'){const x=work[0],stage=progress(x,false,true),step=x.progress_evidence?.current===true&&x.progress_evidence?.freshness==='current'&&x.progress?.steps?.find(s=>s.state==='active');if(step){const text=n('span','prog-phase request-step',t('Current step: {name}',{name:step.label||step.title||''}));text.title=text.textContent;stage.append(text);}stage.classList.add('request-stage');meta.append(stage);}
     const reviews=work.filter(reviewNeeded),signals=n('span','request-signals');meta.append(signals);
     if(attention.length)signals.append(structural(b(attention.length>1?t('Needs you · {count}',{count:attention.length}):t('Needs you'),()=>jumpAttention(attention[0].attention_kind==='action'?attention[0].key:'question:'+attention[0].key),'request-chip needs-chip')));
-    if(r.calls.some(c=>c.answered)||r.tasks.some(x=>(x.raw?.recorded_answers||[]).some(a=>a.application?.state==='pending')||x.question?.answer?.application?.state==='pending'))signals.append(n('span','reading-note',t('Reading your answer')));
+    if(r.tasks.some(x=>(x.raw?.recorded_answers||[]).some(a=>a.application?.state==='pending')||x.question?.answer?.application?.state==='pending'))signals.append(n('span','reading-note',t('Reading your answer')));
     if(reviews.length)signals.append(structural(b(t('Review · {count}',{count:reviews.length}),()=>jumpAttention(reviews[0].id),'request-chip review-chip')));
     if(r.project_group)meta.querySelector('.request-project').textContent=t('Grouped by project');
     if(ui.order==='mine'){const turn=ui.turns?.get(r.id);if(turn)signals.append(structural(n('span','request-chip turn-chip',t('Next · #{count}',{count:turn}))));
@@ -845,33 +857,45 @@ window.createDeckUI = function (host) {
     board.classList.add('request-board');board.closest('.deck').classList.add('request-layout');$('projects-toggle').hidden=true;
     const nav=$('columns-nav');nav.className='request-tools';nav.removeAttribute('role');
     for(const [value,text]of [['recent','Recent first'],['mine','My order']]){const btn=b(t(text),()=>{ui.order=value;save('deck-request-sort',value);render(true,'filter');});btn.setAttribute('aria-pressed',String(ui.order===value));nav.append(btn);}
-    const rows=orderedRequests(requestRows(model.nodes.filter(x=>x.kind==='task')).filter(r=>r.tasks.some(x=>tasks.some(y=>y.id===x.id))||r.calls.some(c=>asks.some(q=>q.key===c.key)||act.some(q=>q.key===c.key)))),allOpen=rows.length&&rows.every(r=>ui.expanded.has(r.id));nav.append(b(t(allOpen?'Collapse requests':'Expand requests'),()=>{for(const r of rows)allOpen?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');}));
+    const rows=orderedRequests(requestRows(model.nodes.filter(x=>x.kind==='task'&&visible(x)&&(!x.raw?.placement||x.raw.placement.section!=='needs_you'))).filter(r=>r.tasks.some(x=>tasks.some(y=>y.id===x.id))||r.calls.some(c=>asks.some(q=>q.key===c.key)||act.some(q=>q.key===c.key)))),allOpen=rows.length&&rows.every(r=>ui.expanded.has(r.id));nav.append(b(t(allOpen?'Collapse requests':'Expand requests'),()=>{for(const r of rows)allOpen?ui.expanded.delete(r.id):ui.expanded.add(r.id);save('deck-expanded-requests',[...ui.expanded]);render(true,'filter');}));
     const previous=ui.renderedOrder||new Map(), current=new Map();
     for(const row of board.querySelectorAll('.request-row')){
       const entry=previous.get(row.dataset.node),rect=row.getBoundingClientRect();
       if(entry)entry.rect={x:rect.x+scrollX,y:rect.y+scrollY,width:rect.width,height:rect.height};
     }
-    for(const [state] of [['now'],['waiting'],['paused'],['done']]){
-      const peers=rows.filter(r=>requestState(r)===state), shown=ui.groups.has(state)?peers.filter(requestHasDetail):peers;
+    for(const [state] of [['now'],['ready'],['dependency'],['capacity'],['waiting'],['paused'],['done']]){
+      const peers=requestsInSection(rows,state), shown=ui.groups.has(state)?peers.filter(requestHasDetail):peers;
       shown.forEach((r,index)=>{const key=activityEpoch(r.updated_at), source=[...r.tasks].sort((a,b)=>a.id<b.id?-1:a.id>b.id?1:0).find(x=>activityEpoch(x.updated_at)===key)?.updated_at?.source||'unknown';
         const entry={key,index:index+1,group:state,source};current.set(r.id,entry);});
     }
     ui.renderedOrder=current;
     peersAll=rows;ui.turns=new Map();document.querySelectorAll('.order-note').forEach(x=>x.remove());if(ui.order==='mine'){let k=0;for(const source of model.sources||[])for(const key of source.snapshot?.sigue||[]){const row=rows.find(r=>r.home===source.home&&r.tasks.some(x=>x.owner_id===key));if(row&&!ui.turns.has(row.id))ui.turns.set(row.id,++k);}
       nav.after(n('p','order-note',t('Firstmate starts at the top: it dispatches first whatever is ready highest in your order. If room runs out, it pauses only the lowest running request, at its safe point, and only to make way for one you put above it.')));}
-    const side=board.querySelector(':scope > .attention-list')||n('section','attention-list'),reviews=tasks.filter(reviewNeeded);side.setAttribute('aria-label',t('Needs you'));const needsToggle=b('',()=>{ui.needsClosed=!ui.needsClosed;save('deck-needs-closed',ui.needsClosed);render(true,'filter');});add(needsToggle,n('span','fold'),n('span','dot'),n('span','',t('Needs you')));needsToggle.dataset.control='needs-fold';needsToggle.setAttribute('aria-expanded',String(!ui.needsClosed));
-    const head=add(n('div','request-group-head'),needsToggle,structural(n('span','n',String(asks.length+act.length+reviews.length)))),previousHead=side.querySelector(':scope > .request-group-head');
-    const attention=[previousHead?.textContent===head.textContent&&previousHead.querySelector('button').getAttribute('aria-expanded')===needsToggle.getAttribute('aria-expanded')?previousHead:head];
+    const side=board.querySelector(':scope > .attention-list')||n('section','attention-list'),reviews=model.nodes.filter(x=>x.kind==='task'&&visible(x)&&reviewNeeded(x)).sort((a,b)=>(b.state==='done'?activityEpoch(b.completed_at):activityEpoch(b.updated_at))-(a.state==='done'?activityEpoch(a.completed_at):activityEpoch(a.updated_at)));side.setAttribute('aria-label',t('Needs you'));
+    const kinds={questions:new Set(),approvals:new Set(),actions:new Set(),reports:new Set()};
+    for(const c of [...asks,...act]){const key=keyOf(c.home,c.task),placement=byId.get(taskNodeId(c.home,c.task))?.raw?.placement;for(const kind of placement?.attention||[c.attention_kind==='action'?'actions':'questions'])if(kinds[kind])kinds[kind].add(key);}
+    for(const x of reviews)kinds.reports.add(keyOf(x.home,x.task));
+    const identities=new Set(Object.values(kinds).flatMap(set=>[...set]));
+    const head=add(n('div','request-group-head'),n('span','',t('Needs you')),structural(n('span','n',String(identities.size)))),previousHead=side.querySelector(':scope > .request-group-head');
+    const attention=[previousHead?.textContent===head.textContent?previousHead:head];
     const feedback=reviewFeedback();if(feedback)attention.push(feedback);
-    // Keep owner attention order; card kinds are labels, never separate stacks.
-    const pending=new Set([...asks,...act].map(c=>c.key));if(!ui.needsClosed){for(const c of attentionCards().filter(c=>pending.has(c.key)).sort((a,b)=>(b.attention_kind==='action')-(a.attention_kind==='action')))attention.push(c.attention_kind==='action'?actionCard(c):questionCard(c));attention.push(...reviews.map(reviewCard));if(!pending.size&&!reviews.length)attention.push(n('p','meta',t('Nothing needs you right now.')));}
+    attention.push(n('p','meta',t('{questions} decisions · {approvals} approvals · {actions} actions · {reports} reports (categories may overlap)',Object.fromEntries(Object.entries(kinds).map(([key,set])=>[key,set.size])))));
+    const pending=new Set([...asks,...act].map(c=>c.key));
+    for(const c of attentionCards().filter(c=>pending.has(c.key)).sort((a,b)=>(b.attention_kind==='action')-(a.attention_kind==='action')))attention.push(c.attention_kind==='action'?actionCard(c):questionCard(c));
+    attention.push(n('h3','',t('Reports to review')),b(t('View previous reports'),()=>host.setView('history'),'more'));
+    const reportGroups=[];for(const x of reviews){const project=projectOf(x),key=project?.id||keyOf(x.home,'unregistered'),last=reportGroups[reportGroups.length-1];if(last?.key===key)last.tasks.push(x);else reportGroups.push({key,project,tasks:[x]});}
+    reviewGroupOf=new Map();for(const group of reportGroups){const key='reports:'+group.tasks[0].id;for(const x of group.tasks)reviewGroupOf.set(x.id,key);const open=group.tasks.length===1||ui.reviewGroups.has(key)||group.tasks.some(x=>x.id===ui.selected),name=group.project?projectDisplay(label(group.project)):t('Project not reported');
+      const fold=b('',()=>{ui.reviewGroups.has(key)?ui.reviewGroups.delete(key):ui.reviewGroups.add(key);render(true,'filter');},'stack-h');fold.dataset.control='report-group';fold.setAttribute('aria-expanded',String(open));fold.disabled=group.tasks.length===1;add(fold,n('span','fold'),n('span','',name),structural(n('span','n',t('{count} reports',{count:group.tasks.length}))));
+      attention.push(add(n('div','stackq'),fold,...(open?group.tasks.map(reviewCard):[])));
+    }
+    if(!pending.size&&!reviews.length)attention.push(n('p','meta',t('Nothing needs you right now.')));
     syncChildren(side,attention);
     const list=n('div','request-list');list.append(n('p','project-group-explanation',t('Requests are grouped by project and remain separate. Fold a project to hide its requests in this section.')));
-    for(const [state,title]of [['now','In progress'],['waiting','Waiting'],['paused','Paused'],['done','Finished requests']]){
-      const peers=rows.filter(r=>requestState(r)===state);if(!peers.length)continue;
+    for(const [state,title]of [['now','In progress'],['ready','Ready work'],['dependency','Waiting for dependency'],['capacity','Waiting for capacity'],['waiting','Waiting'],['paused','Paused'],['done','Finished requests']]){
+      const peers=requestsInSection(rows,state);
       const group=n('section','request-group');group.dataset.k=state;group.id='state-column-'+state;
       const folded=ui.groups.has(state),toggle=b('',()=>{folded?ui.groups.delete(state):ui.groups.add(state);render(true,'filter');});add(toggle,n('span','fold'),n('span','dot'),n('span','',t(title)));toggle.setAttribute('aria-expanded',String(!folded));
-      group.append(add(n('div','request-group-head col-h'),toggle,structural(n('span','n',String(peers.length)))));const shown=folded?peers.filter(requestHasDetail):peers;
+      group.append(add(n('div','request-group-head col-h'),toggle,structural(n('span','n',String(peers.reduce((sum,r)=>sum+r.tasks.length,0))))));const shown=folded?peers.filter(requestHasDetail):peers;
       if(shown.length){
         const table=n('div','request-table'),projects=new Map();
         let previous='',segment=0;for(const r of shown){const project=projectOf(r)||projectOf(r.tasks[0]),identity=project?.id||r.id;if(identity!==previous)segment++;previous=identity;const key=ui.order==='mine'?identity+':'+segment:identity;if(!projects.has(key))projects.set(key,{project,identity,rows:[]});projects.get(key).rows.push(r);}
@@ -944,7 +968,8 @@ window.createDeckUI = function (host) {
     if(ui.mixer)mixer();
     if(ui.view==='projects')tree();
     const board=$('board');questionEditors=new Map([...board.querySelectorAll('.qcard')].map(card=>[card.dataset.key,card]));reviewCards=new Map([...board.querySelectorAll('.review-card')].map(card=>[card.dataset.node,card]));board.dataset.done=ui.done?'open':'closed';board.dataset.paused=ui.pausedOpen?'open':'closed';
-    renderRequests(board,ts,asks,act);
+    const boardTasks=model.nodes.filter(x=>x.kind==='task'&&visible(x)&&(x.raw?.placement?x.raw.placement.section!=='needs_you':ts.includes(x)));
+    renderRequests(board,boardTasks,asks,act);
     mountPausePreview();
     if(wasOpen){const face=[...board.querySelectorAll('.card-open')].find(y=>!detail.contains(y)&&y.dataset.key===app.openerKey && y.getClientRects().length);if(face){app.opener=face;host.placeDetail(face);face.setAttribute('aria-expanded','true');face.closest('.task-card').dataset.open='true';}else if(ui.selected&&byId.has(ui.selected)){const group=[...(ui.view==='projects'?$('project-tree'):board).querySelectorAll('[data-node]')].find(y=>!detail.contains(y)&&y.dataset.node===ui.selected && y.getClientRects().length);if(group){group.append(detail);detail.hidden=false;$('detail-panel').dataset.active='false';}}}
     if(wasOpen){refreshDetailProgress(focused);refreshDetailPause(focused);if(app.modal?.type==='action'){const current=actions().find(c=>c.key===app.modal.key);if(current&&JSON.stringify(current.action)!==app.modal.reading)actionDetail(current);}}

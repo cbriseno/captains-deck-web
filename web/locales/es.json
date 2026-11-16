@@ -1283,5 +1283,12 @@
   "Threshold saved.": "Umbral guardado.",
   "Enabled": "Activado",
   "Disabled": "Desactivado",
-  "Requests are grouped by project and remain separate. Fold a project to hide its requests in this section.": "Los encargos se agrupan por proyecto y siguen siendo independientes. Pliega un proyecto para ocultar sus encargos en esta sección."
+  "Requests are grouped by project and remain separate. Fold a project to hide its requests in this section.": "Los encargos se agrupan por proyecto y siguen siendo independientes. Pliega un proyecto para ocultar sus encargos en esta sección.",
+  "Reports to review": "Reportes por revisar",
+  "View previous reports": "Ver reportes anteriores",
+  "Waiting for dependency": "Espera una dependencia",
+  "Waiting for capacity": "Espera capacidad",
+  "{questions} decisions · {approvals} approvals · {actions} actions · {reports} reports (categories may overlap)": "{questions} decisiones · {approvals} aprobaciones · {actions} acciones · {reports} reportes (las categorías pueden coincidir)",
+  "{count} reports": "{count} reportes",
+  "Ready work": "Listo"
 }
