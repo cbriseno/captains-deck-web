@@ -113,6 +113,8 @@ function theme(saved, systemDark, storageFails = false) {
   const base = new Date(2026, 0, 15, 12), clock = base.getTime() / 1000;
   const dayAgo = (n, from = base) => new Date(from.getFullYear(), from.getMonth(), from.getDate() - n, 12);
   assert.ok(en.api.eventTime({label: 'Updated', date: iso(base)}, clock).includes('today'));
+  assert.equal(en.api.eventTime({date: iso(base)}, clock), en.api.t('today'));
+  assert.equal(es.api.eventTime({date: iso(base)}, clock), es.api.t('today'));
   assert.ok(en.api.eventTime({label: 'Updated', date: iso(dayAgo(1))}, clock).includes('yesterday'));
   assert.ok(en.api.eventTime({label: 'Updated', date: iso(dayAgo(3))}, clock).includes('3 days ago'));
   assert.ok(en.api.eventTime({label: 'Updated', date: '2025-01-15'}, clock).includes('last year'));
