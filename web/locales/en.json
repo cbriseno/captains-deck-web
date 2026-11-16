@@ -1281,5 +1281,6 @@
   "Effective limit": "Effective limit",
   "Threshold saved.": "Threshold saved.",
   "Enabled": "Enabled",
-  "Disabled": "Disabled"
+  "Disabled": "Disabled",
+  "Requests are grouped by project and remain separate. Fold a project to hide its requests in this section.": "Requests are grouped by project and remain separate. Fold a project to hide its requests in this section."
 }

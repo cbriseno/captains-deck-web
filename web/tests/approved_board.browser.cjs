@@ -35,6 +35,16 @@ test('approved Deck: hierarchy, controls, receipts, inline questions, history, t
     browserStarted=true;if(process.env.CD_TEST_PAGE_ID)run('selectpage',[process.env.CD_TEST_PAGE_ID]);run('open',[url]);run('resize',['1440','1000']);
     // The approved board groups work by request (including legacy project groups).
     // Open requests before expecting task controls; finished steps fold separately.
+    const projectFold=evaluate(`async()=>{${wait}
+      await wait(()=>document.querySelector('.request-project-toggle'));
+      const toggle=()=>document.querySelector('.request-project-toggle');
+      const before=document.querySelectorAll('.request-row').length;toggle().click();
+      await wait(()=>toggle().getAttribute('aria-expanded')==='false'&&!document.querySelector('.request-row'));
+      const hidden=document.querySelectorAll('.request-row').length;toggle().click();
+      await wait(()=>toggle().getAttribute('aria-expanded')==='true'&&document.querySelectorAll('.request-row').length===before);
+      return {before,hidden,restored:document.querySelectorAll('.request-row').length,explanation:document.querySelector('.project-group-explanation').textContent};
+    }`);
+    assert.ok(projectFold.before>0);assert.equal(projectFold.hidden,0);assert.equal(projectFold.restored,projectFold.before);assert.match(projectFold.explanation,/independientes/);
     const initial=evaluate(`async()=>{${wait}
       await wait(()=>document.querySelector('.request-row'));
       const folded=document.querySelector('.request-title').getAttribute('aria-expanded');
@@ -48,7 +58,7 @@ test('approved Deck: hierarchy, controls, receipts, inline questions, history, t
     }`);
     assert.equal(initial.folded,'false');assert.equal(initial.requests,1);assert.equal(initial.ready,2);
     assert.ok(initial.aliases.length>=7);assert.ok(initial.aliases.every(x=>/^ID: T-[2-9A-HJ-NP-Z]{3}$/.test(x)));assert.ok(initial.progress.includes('33'));
-    for(const [width,height] of [[1440,1000],[2560,1200]]){
+    for(const [width,height] of [[1440,1000],[1970,1250],[2560,1200]]){
       run('resize',[String(width),String(height)]);
       const layout=evaluate(`()=>{const box=e=>{const r=e.getBoundingClientRect();return {left:r.left,right:r.right,top:r.top,bottom:r.bottom};};
         const a=box(document.querySelector('.attention-list')),b=box(document.querySelector('.request-list'));
@@ -101,12 +111,13 @@ test('approved Deck: hierarchy, controls, receipts, inline questions, history, t
     run('resize',['390','844']);run('open',[url]);
     // The question summary can push choices below the fold; verify the marked choice after scrolling.
     const phone=evaluate(`async()=>{${wait}await wait(()=>document.querySelector('.qcard'));document.querySelector('.qcard .card-open').click();await wait(()=>document.querySelector('.recommended-choice'));const choice=document.querySelector('.recommended-choice');await Promise.all(document.querySelector('.card-more').getAnimations().map(a=>a.finished));choice.scrollIntoView({block:'center',behavior:'instant'});const r=choice.getBoundingClientRect(),mark=choice.querySelector('.recommended'),m=mark.getBoundingClientRect();return {overflow:document.documentElement.scrollWidth-innerWidth,width:innerWidth,height:innerHeight,recommended:r.top>=0&&r.bottom<=innerHeight&&m.width>0&&m.height>0&&getComputedStyle(mark).visibility==='visible'&&mark.textContent.includes('Recomendada')&&choice.contains(document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)),lines:[...document.querySelectorAll('svg.links')].filter(x=>getComputedStyle(x).display!=='none').length,draft:document.querySelector('#board .qcard .inline-answer textarea').value};}`);
-    if(process.env.CD_TEST_EVIDENCE){fs.mkdirSync(process.env.CD_TEST_EVIDENCE,{recursive:true});fs.writeFileSync(path.join(process.env.CD_TEST_EVIDENCE,'phone-check.json'),JSON.stringify(phone,null,2));}
+    if(process.env.CD_TEST_EVIDENCE){fs.mkdirSync(process.env.CD_TEST_EVIDENCE,{recursive:true});fs.writeFileSync(path.join(process.env.CD_TEST_EVIDENCE,'phone-check.json'),JSON.stringify(phone,null,2));run('screenshot',[path.join(process.env.CD_TEST_EVIDENCE,'layout-390.png')]);}
     assert.equal(phone.overflow,0);assert.equal(phone.width,390);assert.equal(phone.height,844);assert.equal(phone.recommended,true);assert.equal(phone.draft,'Borrador del fixture');
     run('resize',['360','844']);assert.equal(evaluate(`()=>document.documentElement.scrollWidth-innerWidth`),0);
     evaluate(`async()=>{${wait}document.querySelector('#history-tab').click();await wait(()=>document.querySelector('.history-row'));document.querySelector('.history-row').click();await wait(()=>document.querySelector('#explain-request'));return {dialog:document.querySelectorAll('dialog').length,report:document.querySelector('#detail-content').textContent.includes('informe')};}`);
     // A busy worker's declared pause must agree across the request and detail.
     snapshot=JSON.parse(fs.readFileSync(path.join(proof,'home/work-snapshot.json')));
+    const originalTasks=structuredClone(snapshot.tasks);
     snapshot.tasks=snapshot.tasks.filter(x=>x.key==='task:web');
     snapshot.tasks[0].request={id:'pause-demo',label:'Pausa declarada',project:'project:deck'};
     snapshot.requests=[{id:'pause-demo',key:'request:pause-demo',scope:'req:pause-demo',label:'Pausa declarada',project:'project:deck',tasks:['task:web']}];
@@ -116,6 +127,17 @@ test('approved Deck: hierarchy, controls, receipts, inline questions, history, t
     run('resize',['1970','1250']);run('open',[url]);
     const paused=evaluate(`async()=>{${wait}await wait(()=>document.querySelector('.request-row[data-node$="req:pause-demo"]'));const row=()=>document.querySelector('.request-row[data-node$="req:pause-demo"]');if(row().querySelector('.request-title').getAttribute('aria-expanded')==='false')row().querySelector('.request-title').click();await wait(()=>row().querySelector('.task-row .card-open'));row().querySelector('.task-row .card-open').click();await wait(()=>row().textContent.includes('No hay hora de fin para esta pausa'));return {signal:row().querySelector('.request-signal').textContent,line:row().querySelector('.task-row .rs').textContent};}`);
     assert.equal(paused.signal,'En pausa');assert.equal(paused.line,'En pausa');
+    // Equal labels must not combine distinct projects or their requests.
+    snapshot.projects=[{key:'project:one',label:'Mismo nombre'},{key:'project:two',label:'Mismo nombre'}];
+    snapshot.subprojects=[];
+    snapshot.tasks=originalTasks.filter(x=>['task:next','task:dependent','task:integration'].includes(x.key));
+    snapshot.requests=snapshot.tasks.map((task,i)=>{const project=i===2?'project:two':'project:one',id='group-test-'+i;Object.assign(task,{project,subproject:null,state:'ready',pause:{own:null,inherited:null},blocked_by:[],request:{id,label:'Encargo '+i,project}});return {id,key:'request:'+id,scope:'req:'+id,label:'Encargo '+i,project,tasks:[task.key]};});
+    fs.writeFileSync(path.join(proof,'home/work-snapshot.json'),JSON.stringify(snapshot));
+    fs.appendFileSync(journal,JSON.stringify({home,event:'fixture.snapshot',value:snapshot})+'\n');
+    run('open',[url]);
+    const identities=evaluate(`async()=>{${wait}await wait(()=>document.querySelectorAll('.request-project-group').length===2);const groups=[...document.querySelectorAll('.request-project-group')];return groups.map(g=>({name:g.querySelector('.request-project-toggle').textContent,requests:g.querySelectorAll('.request-row').length,ids:[...g.querySelectorAll('.request-row')].map(r=>r.dataset.node)}));}`);
+    assert.deepEqual(identities.map(g=>g.requests).sort(),[1,2]);assert.equal(new Set(identities.flatMap(g=>g.ids)).size,3);
+
     const evidence={initial,hierarchy,consultation,failedReceipt,advice,question,changed,lines,keyboard,phone,contrastFailures:contrast.length};
     if(process.env.CD_TEST_EVIDENCE){fs.mkdirSync(process.env.CD_TEST_EVIDENCE,{recursive:true});fs.writeFileSync(path.join(process.env.CD_TEST_EVIDENCE,'browser-fixture-checks.json'),JSON.stringify(evidence,null,2));}
   } finally {

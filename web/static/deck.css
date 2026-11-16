@@ -713,3 +713,7 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .task-row>.task-actions{display:flex;gap:12px;flex-wrap:wrap;grid-column:2/-1;min-width:0}
 .card .task-actions button{flex:0 1 auto;min-height:44px;text-align:left}
 .html-report{display:block;width:100%;min-width:0;height:65vh;border:1px solid var(--line);border-radius:8px;background:#fff}
+.request-project-group+.request-project-group{border-top:1px solid var(--line2)}
+.request-project-toggle{display:flex;align-items:center;gap:8px;width:100%;min-width:0;text-align:left;padding:8px 12px;color:var(--muted)}
+.request-project-toggle span{min-width:0;overflow-wrap:anywhere}
+.project-group-explanation{color:var(--muted);font-size:12px;margin:0 0 8px}

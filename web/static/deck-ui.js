@@ -8,7 +8,7 @@ window.createDeckUI = function (host) {
   const pref = (key, fallback) => { try { return JSON.parse(localStorage.getItem(key)) ?? fallback; } catch { return fallback; } };
   const save = (key, value) => { try { localStorage.setItem(key, JSON.stringify(value)); } catch { /* Current page still works. */ } };
   const ui = {pin:'',view:'board', scope:'', selected:'', hover:'', column:'', closed:new Set(pref('deck-closed', [])), hasClosedPreference:pref('deck-closed',null)!==null, initialized:false, tree:new Set(),
-    order:pref('deck-request-sort','recent'),expanded:new Set(pref('deck-expanded-requests',[])),needsClosed:pref('deck-needs-closed',false),density:pref('deck-density','auto'),animations:pref('deck-animations',true),groups:new Set(['done']),steps:new Set(),logOpen:new Set(),usageOpen:new Set(),logs:new Map(), reordering:false, pausedOpen:pref('deck-paused-open',true),done:pref('deck-done', true), focus:pref('deck-focus', true), hoverDelay:Math.max(0,Math.min(10,Number(pref('deck-hover-delay',1))||0)), mixer:false, stacks:new Set(), log:[], busy:false, drag:null, signature:'', generation:0,renderedQuery:null,nextRenderMode:''};
+    order:pref('deck-request-sort','recent'),expanded:new Set(pref('deck-expanded-requests',[])),needsClosed:pref('deck-needs-closed',false),density:pref('deck-density','auto'),animations:pref('deck-animations',true),groups:new Set(['done']),projectFolds:new Set(),steps:new Set(),logOpen:new Set(),usageOpen:new Set(),logs:new Map(), reordering:false, pausedOpen:pref('deck-paused-open',true),done:pref('deck-done', true), focus:pref('deck-focus', true), hoverDelay:Math.max(0,Math.min(10,Number(pref('deck-hover-delay',1))||0)), mixer:false, stacks:new Set(), log:[], busy:false, drag:null, signature:'', generation:0,renderedQuery:null,nextRenderMode:''};
   const motion=window.createDeckMotion({t,settled:highlight});
   const announceFocus=(_id,text='')=>{const status=$('focus-status');if(status)status.textContent=ui.focus?(text?t('Focused: {name}',{name:text}):t('Focus cleared')):t('Focus disabled');};
   let hoverTimer=0, hoverTarget=null, keyboardFocus=false;
@@ -866,12 +866,24 @@ window.createDeckUI = function (host) {
     // Keep owner attention order; card kinds are labels, never separate stacks.
     const pending=new Set([...asks,...act].map(c=>c.key));if(!ui.needsClosed){for(const c of attentionCards().filter(c=>pending.has(c.key)).sort((a,b)=>(b.attention_kind==='action')-(a.attention_kind==='action')))attention.push(c.attention_kind==='action'?actionCard(c):questionCard(c));attention.push(...reviews.map(reviewCard));if(!pending.size&&!reviews.length)attention.push(n('p','meta',t('Nothing needs you right now.')));}
     syncChildren(side,attention);
-    const list=n('div','request-list');
+    const list=n('div','request-list');list.append(n('p','project-group-explanation',t('Requests are grouped by project and remain separate. Fold a project to hide its requests in this section.')));
     for(const [state,title]of [['now','In progress'],['waiting','Waiting'],['paused','Paused'],['done','Finished requests']]){
       const peers=rows.filter(r=>requestState(r)===state);if(!peers.length)continue;
       const group=n('section','request-group');group.dataset.k=state;group.id='state-column-'+state;
       const folded=ui.groups.has(state),toggle=b('',()=>{folded?ui.groups.delete(state):ui.groups.add(state);render(true,'filter');});add(toggle,n('span','fold'),n('span','dot'),n('span','',t(title)));toggle.setAttribute('aria-expanded',String(!folded));
-      group.append(add(n('div','request-group-head col-h'),toggle,structural(n('span','n',String(peers.length)))));const shown=folded?peers.filter(requestHasDetail):peers;if(shown.length)group.append(add(n('div','request-table'),...shown.map(r=>requestRow(r,peers))));list.append(group);
+      group.append(add(n('div','request-group-head col-h'),toggle,structural(n('span','n',String(peers.length)))));const shown=folded?peers.filter(requestHasDetail):peers;
+      if(shown.length){
+        const table=n('div','request-table'),projects=new Map();
+        let previous='',segment=0;for(const r of shown){const project=projectOf(r)||projectOf(r.tasks[0]),identity=project?.id||r.id;if(identity!==previous)segment++;previous=identity;const key=ui.order==='mine'?identity+':'+segment:identity;if(!projects.has(key))projects.set(key,{project,identity,rows:[]});projects.get(key).rows.push(r);}
+        for(const [key,entry] of projects){
+          if(!entry.project){table.append(...entry.rows.map(r=>requestRow(r,peers)));continue;}
+          const projectGroup=n('section','request-project-group'),foldKey=state+':'+entry.identity,open=!ui.projectFolds.has(foldKey)||!!app.query||entry.rows.some(requestHasDetail);
+          const projectToggle=b('',()=>{open?ui.projectFolds.add(foldKey):ui.projectFolds.delete(foldKey);render(true,'filter');},'request-project-toggle');
+          projectToggle.setAttribute('aria-expanded',String(open));add(projectToggle,n('span','fold'),window.DeckAnonymize.project(n('span','',projectDisplay(label(entry.project))),entry.project.owner_id||entry.project.id),structural(n('span','n',String(entry.rows.length))));
+          projectGroup.append(projectToggle);if(open)projectGroup.append(...entry.rows.map(r=>requestRow(r,peers)));table.append(projectGroup);
+        }
+        group.append(table);
+      }list.append(group);
     }
     if(!rows.length)list.append(n('p','meta',t('No requests match.')));syncChildren(board,[side,list]);
     for(const row of list.querySelectorAll('.request-row')){
@@ -888,7 +900,7 @@ window.createDeckUI = function (host) {
     // SSE already identifies a new reading; only local renders need a content comparison.
     const cardSignature=mode==='refresh'?null:app.board.columns.map(c=>[c.id,c.cards.map(x=>[x.key,x.title,x.question,x.question_summary,x.attention_kind,x.action,x.answered,x.project,host.cardLine(x),host.phaseText(x),x.dependencies,x.time?.epoch,x.time?.date,x.summary,x.presentation])]);
     const workSignature=mode==='refresh'?null:app.board.deck?.sources.map(s=>[s.home,s.available,s.error,s.capabilities,s.snapshot?.nodes,s.snapshot?.edges,s.snapshot?.requests,s.snapshot?.rev,s.snapshot?.sigue,s.snapshot?.yields,s.snapshot?.pause_controls,s.snapshot?.crew,s.snapshot?.events,s.retained_at && Date.now()/1000-s.retained_at>=30,s.snapshot?.nodes?.map(x=>x.observation_uncertain_since && Date.now()/1000-x.observation_uncertain_since>=30)]);
-    const signature=mode==='refresh'?null:JSON.stringify([cardSignature,workSignature,app.board.diagnostics,app.historyRows,app.query,ui.scope,ui.view,ui.column,ui.done,ui.pausedOpen,ui.order,ui.needsClosed,ui.density,[...ui.expanded],[...ui.groups],[...ui.steps],ui.mixer,[...ui.closed],[...ui.stacks],[...ui.tree],app.online]);
+    const signature=mode==='refresh'?null:JSON.stringify([cardSignature,workSignature,app.board.diagnostics,app.historyRows,app.query,ui.scope,ui.view,ui.column,ui.done,ui.pausedOpen,ui.order,ui.needsClosed,ui.density,[...ui.expanded],[...ui.groups],[...ui.projectFolds],[...ui.steps],ui.mixer,[...ui.closed],[...ui.stacks],[...ui.tree],app.online]);
     // Nothing changed: leave the DOM as it is, only ages that moved.
     if(!force&&signature!==null&&signature===ui.signature){refreshAges();return;}ui.signature=signature;
     // A refresh may rebuild rows for unrelated detail/focus changes. Preserve
