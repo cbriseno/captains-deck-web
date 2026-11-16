@@ -1035,6 +1035,7 @@ class Board:
                 'original_title': str(record.get('title') or ''),
                 'links': title_links(record.get('title')),
                 'project': self.delivered_project(home, rows, record, human),
+                'request': human.get('request'),
                 **content, 'summary': summary, 'notice': notice,
                 'report': content['report'] if source else '',
                 'report_text': report, 'report_lead': report_lead, 'sources': note,

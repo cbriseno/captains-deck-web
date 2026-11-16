@@ -762,6 +762,8 @@ async function openDelivery(home, task, opener) {
     if (gen !== S.generation || !detailOpen()) return;
     S.modal = { type: 'delivery', home, task, data, tab: 'summary' };
     $('detail-title').textContent = data.title; detailMeta(data.owner, data.time, data.project);
+    if (!data.project?.label && typeof data.request?.label === 'string' && data.request.label.trim())
+      $('detail-meta').prepend(node('span', 'request-context', t('Request: ') + data.request.label));
     renderDelivery(); refreshExplanation();
   } catch (err) { if (gen === S.generation) $('detail-content').replaceChildren(node('p', 'notice error', err.message)); }
 }

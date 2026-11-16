@@ -598,6 +598,17 @@ class WebTests(unittest.TestCase):
         _,delivery=self.req('/api/delivery/'+data['records'][0]['home']+'/tagged')
         self.assertEqual(delivery['project'],{'id':'day attendant','label':'Day Attendant'})
 
+    def test_delivery_without_project_retains_request_context(self):
+        self.publish_history([{'id':'plain','title':'Delivered task',
+                               'presentation':{'request':{'id':'req','label':'Improve the Deck'}},
+                               'completion':{'date':'2026-10-19'}}])
+        self.init()
+        _, history = self.req('/api/history')
+        status, delivery = self.req('/api/delivery/'+history['records'][0]['home']+'/plain')
+        self.assertEqual(status, 200)
+        self.assertIsNone(delivery['project'])
+        self.assertEqual(delivery['request']['label'], 'Improve the Deck')
+
     def test_history_reads_the_project_each_task_declared_current_or_archived(self):
         # The history script copies no card text: each task's own declaration
         # gives the row its project. A declaration for another home or task,
