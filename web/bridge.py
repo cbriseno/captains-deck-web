@@ -1061,7 +1061,7 @@ class Board:
             raise Refusal('HTML report unavailable.', 404)
         try:
             return fm.delivery_read(home.path, fm.delivery_task_prefix(task) + 'report.html',
-                                    fm.DELIVERY_FILE_LIMIT)
+                                    fm.HTML_REPORT_LIMIT)
         except (OSError, ValueError) as exc:
             raise Refusal('HTML report unavailable.', 404) from exc
 

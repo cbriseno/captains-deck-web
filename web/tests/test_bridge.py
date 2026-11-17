@@ -513,6 +513,19 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.req(route + '/report')[0], 404)
         self.assertFalse(self.req(route)[1]['html_report'])
 
+    def test_html_report_over_the_text_limit_is_still_offered_and_served(self):
+        self.init()
+        home = bridge.home_id(self.home)
+        route = f'/api/delivery/{home}/demo-research'
+        body = '<!doctype html><h1>Informe grande</h1><img src="data:image/png;base64,' + 'A' * (bridge.fm.DELIVERY_FILE_LIMIT + 4096) + '">'
+        Path(self.home.path, 'data/demo-research/report.html').write_text(body)
+        self.assertTrue(self.req(route)[1]['html_report'])
+        status, served = self.req(route + '/report')
+        self.assertEqual(status, 200)
+        self.assertIn(b'Informe grande', served)
+        Path(self.home.path, 'data/demo-research/report.html').write_text('x' * (bridge.fm.HTML_REPORT_LIMIT + 1))
+        self.assertFalse(self.req(route)[1]['html_report'])
+
     def test_history_is_newest_first_by_the_time_shown_and_titles_carry_no_urls(self):
         records=[{'id':'untimed','title':'Sin hora'},
                  {'id':'old-day','title':'Día viejo','completion':{'date':'2026-10-10'}},

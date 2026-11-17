@@ -3216,6 +3216,8 @@ if (data.config !== undefined) {
 }
 """
 DELIVERY_FILE_LIMIT = 512 * 1024
+# A self-contained HTML report embeds its screenshots and fonts, so it outgrows the text limit.
+HTML_REPORT_LIMIT = 16 * 1024 * 1024
 DELIVERY_INDEX_LIMIT = 16 * 1024 * 1024
 DELIVERY_TOTAL_LIMIT = 2 * 1024 * 1024
 
