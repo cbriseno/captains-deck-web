@@ -207,6 +207,12 @@ if os.environ.get('CD_TEST_RELATIONS') == '1':
                 task.update(request={field: request[field] for field in ('id', 'label', 'project')},
                             project=request['project'])
                 task.pop('subproject', None)
+if os.environ.get('CD_TEST_REPORT_ACTIONS') == '1':
+    next(row for row in tasks if row['key'] == 'task:completed-question')['question']['call']['options'] = [
+        {'id': 'investigate', 'label': 'Investigar'}, {'id': 'keep', 'label': 'Mantener'}]
+    result = next(row for row in tasks if row['key'] == 'task:demo-research')
+    result.update(outcome_occurrence='report-A',
+                  presentation={'outcome': {'role': 'partial', 'review': 'needed'}})
 (base / 'work-snapshot.json').write_text(json.dumps(snapshot))
 if os.environ.get('CD_TEST_INVENTORY') == '1':
     gates, _ = bridge.fm.make_cards(home, {'gates': [{'id': '(main-inventory)',

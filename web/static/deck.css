@@ -719,3 +719,6 @@ html[data-animations=false] *,html[data-animations=false] *::before,html[data-an
 .project-group-explanation{color:var(--muted);font-size:12px;margin:0 0 8px}
 
 .attention-list > .request-group-head .n { margin-left: .5rem; }
+
+.attention-list .option-choice[aria-pressed="true"]{outline:3px solid var(--accent);outline-offset:2px}
+.answer-batch{position:sticky;bottom:0;padding:12px;background:var(--surface);border-top:1px solid var(--control);z-index:2}

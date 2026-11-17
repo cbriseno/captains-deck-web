@@ -203,7 +203,7 @@ function renderBoard(mode) {
   if (!S.board) return;
   if (!relaySettings) relaySettings = window.createRelaySettings({t,node,button,api,state:S});
   if (!deckUI) deckUI = window.createDeckUI({t,node,button,append,api,ago,creationAge,exactTime,openCard,showDetail,closeDetail,detailOpen,parkDetail,state:S,
-    hashOf,cardLine,phaseText,activityText,refreshTimes,sourceStatus,poll,setView,placeDetail,openDelivery,reportLink,answerTools,inlineAnswer,showAnswers:async()=>{await loadReceipts();$('receipts-panel').open=true;closeDetail(false);$('receipts-panel').scrollIntoView({block:'start'});}});
+    hashOf,cardLine,phaseText,activityText,refreshTimes,sourceStatus,poll,setView,placeDetail,openDelivery,reportLink,answerTools,inlineAnswer,answerBatch,showAnswers:async()=>{await loadReceipts();$('receipts-panel').open=true;closeDetail(false);$('receipts-panel').scrollIntoView({block:'start'});}});
   deckUI.render(false, mode);
 }
 const flatten = (text) => String(text || '').replace(/\s+/g, ' ').trim().toLocaleLowerCase(locale);
@@ -497,7 +497,26 @@ async function openStableLink(params) {
   try {
     const result = await api('api/resolve?' + new URLSearchParams({ home, task, view, item: params.get('item') || '' }));
     if (gen !== S.generation || !detailOpen()) return;
-    if (result.view === 'call') { setView('board'); await openTicket(result.key, deckUI?.locateCall(result.key)); return; }
+    if (result.view === 'call') {
+      setView('board'); await openTicket(result.key, deckUI?.locateCall(result.key));
+      const option=params.get('option');
+      if(option && S.modal?.key===result.key && S.modal.ticket?.call?.options.some(o=>o.value===option)) {
+        const row=[...document.querySelectorAll('.qcard')].find(el=>el.dataset.key==='question:'+result.key);
+        await row?._answerReady;row?._answerRow?.select(option);
+      }
+      return;
+    }
+    if (result.view === 'delivery' && params.get('do')==='decisions' && !result.notice) {
+      closeDetail(false);setView('board');
+      for(const [name,value] of params){
+        if(!name.startsWith('r.')||!value)continue;
+        const call=await api('api/resolve?'+new URLSearchParams({home:result.home,task:name.slice(2),view:'call'}));
+        if(call.view!=='call')continue;
+        const opener=deckUI?.locateCall(call.key),row=opener?.closest('.qcard');
+        await row?._answerReady;row?._answerRow?.select(value);
+      }
+      deckUI?.clearFocus();document.querySelector('.answer-batch .answer-send')?.focus();return;
+    }
     if (result.view === 'delivery') { const owner = result.home; $('history-search').value = task; setView('history'); await loadHistory(); const opener = [...$('history-results').querySelectorAll('.card-open')].find(n => n.dataset.key === 'history:' + owner + ':' + task); await openDelivery(owner, task, opener); if (S.modal?.type === 'delivery') { Object.assign(S.modal, {linkNotice: result.notice, linkOccurrence: params.get('item') || result.occurrence, linkReview: result.review, linkAction: params.get('do'), linkStale: !!result.notice}); renderDelivery(); const action = S.modal.linkAction === 'reviewed' ? 'delivery-reviewed' : S.modal.linkAction === 'lavish' ? 'report-review' : ''; if (action) contentFocus(action); } return; }
     S.modal = { type: 'task' };
     $('detail-title').textContent = t("The question from this notification"); $('detail-meta').textContent = result.owner + ' · ' + result.task;
@@ -551,15 +570,17 @@ async function inlineAnswer(card, opener, container) {
   const editor=node('div','inline-answer'),more=container.querySelector('.card-more');more?more.before(editor):container.append(editor);
   // The card's menu item is added once and answers through the newest reading.
   let answer=null,recheck=false;
-  if(card.inline_call) fill({call:card.inline_call});
+  try { fill(await api('api/ticket/'+encodeURIComponent(card.key))); }
+  catch(error){editor.append(node('p','notice error',error.message));}
   function fill(ticket){
     if(ticket.answered||!ticket.call)return;
     const c=ticket.call,draft=readDraft(card.key),items=draft.attachments||[];
+    let answered=false,selected=draft.occurrence===c.occurrence?draft.value||'':'';
     const offered=c.options.filter(o=>o.value!=='reconcile');
     const note=node('textarea');note.rows=3;note.value=draft.note||'';note.placeholder=t(offered.length?'Or write your answer…':'Write your answer…');note.setAttribute('aria-label',t('Answer in my own words'));
     const status=node('p','notice');status.hidden=true;status.setAttribute('role','status');
     let edited=false;
-    const store=event=>{if(event)edited=true;const saved={...draft,note:note.value,attachments:items,occurrence:edited?c.occurrence:(draft.occurrence||c.occurrence)};S.drafts.set(card.key,saved);try{sessionStorage.setItem('deck-draft-'+card.key,JSON.stringify(saved));}catch{};sync();};
+    const store=event=>{if(event)edited=true;const saved={...draft,value:selected,request:draft.request||crypto.randomUUID().replaceAll('-',''),note:note.value,attachments:items,occurrence:edited?c.occurrence:(draft.occurrence||c.occurrence)};S.drafts.set(card.key,saved);try{sessionStorage.setItem('deck-draft-'+card.key,JSON.stringify(saved));}catch{};sync();};
     const sendAnswer=async value=>{
       if(S.busy||!S.online||window.DeckAnonymize?.enabled||editor.querySelector('[data-uploading]'))return;
       store();await openTicket(card.key,opener);
@@ -570,19 +591,60 @@ async function inlineAnswer(card, opener, container) {
     const choices=node('div','option-list');
     for(const option of offered){
       const label=c.presentation?.options?.find(o=>o.value===option.value)||option;
-      const choice=button(label.label,()=>sendAnswer(option.value),'option-choice');
+      const choice=button(label.label,()=>select(option.value),'option-choice');choice.dataset.value=option.value;choice.setAttribute('aria-pressed',String(selected===option.value));
       if(option.value===c.recommend){choice.classList.add('recommended-choice');choice.title=t('Recommended');choice.append(node('small','recommended',t('Recommended')));}
       choices.append(choice);
     }
     answer=sendAnswer;
     if(!recheck&&c.options.some(o=>o.value==='reconcile')){recheck=true;deckUI?.addMenuItem?.(container,'redo',t('Ask to check it again'),()=>answer('reconcile'));}
-    const send=button(t('Send'),()=>sendAnswer(''),'primary answer-send');
-    const sync=()=>{const blocked=!!window.DeckAnonymize?.enabled||!S.online||S.busy||!!c.error||!!editor.querySelector('[data-uploading]');send.disabled=blocked||(!note.value.trim()&&!items.length);for(const b of choices.children)b.disabled=blocked;};
+    function select(value){
+      if(!offered.some(o=>o.value===value))return;
+      selected=value;store(true);
+      for(const choice of choices.children)choice.setAttribute('aria-pressed',String(choice.dataset.value===value));
+      [...choices.children].find(choice=>choice.dataset.value===value)?.focus();
+    }
+    container._answerRow={select,ready:()=>!answered&&!c.error&&!editor.querySelector('[data-uploading]')&&!!(selected||note.value.trim()||items.length),
+      snapshot:()=>({key:card.key,body:{...readDraft(card.key),occurrence:draft.occurrence&&draft.occurrence!==c.occurrence&&!edited?draft.occurrence:c.occurrence,attachments:items.map(file=>file.id)}}),
+      status:receipt=>{status.hidden=false;status.replaceChildren(receiptView(receipt));if(receipt.saved){answered=true;selected='';S.drafts.delete(card.key);try{sessionStorage.removeItem('deck-draft-'+card.key);}catch{}}
+        else status.append(button(t('See the new question'),async()=>{const latest=await api('api/ticket/'+encodeURIComponent(card.key));editor.replaceChildren();fill(latest);}));}};
+    const sync=()=>{const blocked=!!window.DeckAnonymize?.enabled||!S.online||S.busy||!!c.error||!!editor.querySelector('[data-uploading]');document.dispatchEvent(new Event('deck-answer-selection'));for(const b of choices.children)b.disabled=blocked;};
     note.addEventListener('input',store);
-    const free=node('div','own-words');free.append(append(node('label','answer-label'),note),send);editor.append(choices,free,status);
+    const free=node('div','own-words');free.append(append(node('label','answer-label'),note));editor.append(choices,free,status);
     if(c.attachments)answerTools.composer(free,'api/ticket/'+encodeURIComponent(card.key)+'/upload',items,()=>store(true),()=>editor.isConnected&&!window.DeckAnonymize?.enabled&&!S.busy);
     if(c.error){status.textContent=c.error;status.hidden=false;}sync();
   }
+}
+// One submit gesture, with each row sent through the existing independent intake.
+let currentAnswerBatch=null;
+function answerBatch(cards) {
+  const key=cards.map(card=>card.key).join('|');
+  if(currentAnswerBatch?.key===key||S.busy&&currentAnswerBatch){currentAnswerBatch.sync();return currentAnswerBatch.box;}
+  const box=node('div','answer-batch'),status=node('div','notice');status.setAttribute('role','status');status.hidden=true;
+  const rows=()=>cards.map(card=>[...document.querySelectorAll('.qcard')].find(el=>el.dataset.key==='question:'+card.key)?._answerRow).filter(Boolean);
+  const send=button(t('Send'),async()=>{
+    if(S.busy||!S.online||window.DeckAnonymize?.enabled)return;
+    const selected=rows().filter(row=>row.ready()).map(row=>({row,...row.snapshot()}));if(!selected.length)return;
+    S.busy=true;sync();let cancelled=false;status.hidden=false;
+    status.replaceChildren(node('span','',t('Answer not sent yet · Undo is available for 10 s.')),button(t('Undo'),()=>{cancelled=true;S.busy=false;status.replaceChildren(node('p','notice',t('Sending cancelled. Your draft is saved.')));sync();}));
+    await new Promise(resolve=>setTimeout(resolve,10000));if(cancelled)return;
+    status.textContent=t('Sending…');
+    try {
+      for(const entry of selected){
+        try {
+          const receipt=await api('api/ticket/'+encodeURIComponent(entry.key)+'/answer',{value:entry.body.value||'',note:entry.body.note||'',attachments:entry.body.attachments,occurrence:entry.body.occurrence,request_id:entry.body.request});
+          entry.row.status(receipt);
+        } catch(error){entry.row.status({saved:false,message:error.message});}
+      }
+      status.replaceChildren(button(t('See answer status'),async()=>{await loadReceipts();$('receipts-panel').open=true;$('receipts-panel').scrollIntoView({block:'start'});}));
+      await poll();loadReceipts();
+    } finally {S.busy=false;sync();}
+  },'primary answer-send');
+  function sync(){send.disabled=S.busy||!S.online||!!window.DeckAnonymize?.enabled||!rows().some(row=>row.ready());}
+  // The control is recreated with the board; its event listener belongs to this node.
+  box.addEventListener('pointerover',sync);box.addEventListener('focusin',sync);
+  const update=()=>{if(box.isConnected)sync();else document.removeEventListener('deck-answer-selection',update);};
+  document.addEventListener('deck-answer-selection',update);
+  box.append(send,status);queueMicrotask(sync);currentAnswerBatch={key,box,sync};return box;
 }
 function choose(value) {
   if (S.busy || S.receipt || S.modal?.type !== 'call') return;

@@ -6,7 +6,7 @@ class Projection:
         self.value = base['snapshot']
         self.rows = {row['key'][5:]: dict(row, id=row['key'][5:], name=row['title'],
                      body=row.get('body', ''), closed=row.get('closed')) for row in self.value['tasks']}
-        self.presentations = {task: {'presentation': row.get('presentation', {})} for task, row in self.rows.items()}
+        self.presentations = {task: {'presentation': row.get('presentation', {}), 'outcome_occurrence': row.get('outcome_occurrence')} for task, row in self.rows.items()}
         self.history = {task for task, row in self.rows.items() if row['state'] == 'done'}
         self.activity, self.status, self.calls, self.messages = {}, {}, {}, []
 
