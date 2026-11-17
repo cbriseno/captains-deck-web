@@ -1116,6 +1116,7 @@
   "Last activity not recorded": "Última actividad no registrada",
   "Settings": "Ajustes",
   "Appearance": "Apariencia",
+  "Appearance mode": "Modo de apariencia",
   "Row size": "Tamaño de filas",
   "Automatic": "Automático",
   "Comfortable": "Amplio",
@@ -1218,7 +1219,7 @@
   "{count} of your decisions: no agent spend.": "{count} decisiones tuyas: sin gasto de agente.",
   "Agent started": "Empezó el agente",
   "Progress": "Avance",
-  "Asked you": "Te preguntó",
+  "Requested a decision": "Solicitó una decisión",
   "Blocked": "Se bloqueó",
   "Failed": "Falló",
   "Resolved": "Se resolvió",
@@ -1290,5 +1291,6 @@
   "Waiting for capacity": "Espera capacidad",
   "{questions} decisions · {approvals} approvals · {actions} actions · {reports} reports (categories may overlap)": "{questions} decisiones · {approvals} aprobaciones · {actions} acciones · {reports} reportes (las categorías pueden coincidir)",
   "{count} reports": "{count} reportes",
-  "Ready work": "Listo"
+  "Ready work": "Listo",
+  "This result has changed since this link was created. Open the current result to review it.": "Este resultado cambió desde que se creó el enlace. Abre el resultado actual para revisarlo."
 }

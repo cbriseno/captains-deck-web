@@ -658,7 +658,7 @@ window.createDeckUI = function (host) {
     const placement=x.raw?.placement;
     if(placement)return placement.attention?.includes('reports')===true;
     // Older owners do not publish placement; preserve their review declaration.
-    return x.state==='done'||x.raw?.backlog_state==='in_flight'&&x.card?.activity?.kind==='finished';
+    return true;
   }
   function requestRows(tasks){
     const groups=new Map(model.nodes.filter(x=>x.kind==='request').map(x=>[x.id,{...x,tasks:[],calls:[]}]));
@@ -723,10 +723,11 @@ window.createDeckUI = function (host) {
     const reading=JSON.stringify([x.raw,x.card,projectOf(x)?.title,app.online,x.source?.available,x.source?.capabilities]);
     const previous=reviewCards.get(x.id);if(previous?._reading===reading)return previous;
     const card=setColor(n('article','task-card card review-card'),x);card._reading=reading;card.dataset.node=x.id;card.dataset.key=x.card?.key||x.id;card.dataset.state=x.state;card.dataset.open=String(ui.selected===x.id);
-    const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}openNode(x,face);},'card-open');face.dataset.key=card.dataset.key;face.setAttribute('aria-expanded',String(ui.selected===x.id));face.setAttribute('aria-controls','detail');
+    const openResult=()=>x.state==='done'?openNode(x,face):host.openDelivery(x.home,x.task,face);
+    const face=b('',()=>{if(card.hasAttribute('data-dim')&&!ui.pin){clearFocus();return;}openResult();},'card-open');face.dataset.key=card.dataset.key;face.setAttribute('aria-expanded',String(ui.selected===x.id));face.setAttribute('aria-controls','detail');
     const outcome=x.outcome||x.raw?.outcome||x.card?.outcome||{},validation=x.card?.validation_pending||x.raw?.validation_pending||x.validation_pending,summary=x.card?.summary||x.raw?.summary||x.summary;
     add(face,n('span','title',label(x)),validation||summary?n('span','cctx',[validation,summary].filter(Boolean).join(' ')):null);
-    const view=withCardIcon(b(t('View result'),()=>openNode(x,face)),'chevronDown'),mark=workControl(withCardIcon(b(t('I have reviewed it'),()=>changeReview(x),'review-mark'),'check'),can(x,'review'));if(mark.disabled)mark.title=t('Shared review is not available from this Firstmate yet.');
+    const view=withCardIcon(b(t('View result'),openResult),'chevronDown'),mark=workControl(withCardIcon(b(t('I have reviewed it'),()=>changeReview(x),'review-mark'),'check'),can(x,'review'));if(mark.disabled)mark.title=t('Shared review is not available from this Firstmate yet.');
     add(card,cardKind('rev','file',t(outcome.role==='partial'?'Progress update':'Review'),x,x,[]),add(n('div','card-face'),face),add(n('div','card-more'),n('div','card-more-inner')),add(n('div','cacts'),view,mark));
     const saved=host.answerTools?.summary(x,()=>openNode(x,face));if(saved)card.append(saved);wireEvents(card,x.id);return card;
   }
@@ -791,7 +792,7 @@ window.createDeckUI = function (host) {
 
   let peersAll=[];
   // Bitácora: what each agent did for this request, newest first, from Firstmate's records (web/timeline.py).
-  const LOG_LABEL={created:'Task created',started:'Agent started',working:'Progress',['needs-decision']:'Asked you',blocked:'Blocked',paused:'Waiting',done:'Reported done',failed:'Failed',resolved:'Resolved','closed-done':'Closed','closed-merged':'Integrated','closed-reported':'Report delivered'};
+  const LOG_LABEL={created:'Task created',started:'Agent started',working:'Progress',['needs-decision']:'Requested a decision',blocked:'Blocked',paused:'Waiting',done:'Reported done',failed:'Failed',resolved:'Resolved','closed-done':'Closed','closed-merged':'Integrated','closed-reported':'Report delivered'};
   function chatLink(home,task,number,x,agents){
     const live=x&&x.state!=='done'&&x.card?.herdr_url;
     const last=agents?.length?agents.length-1:null;
@@ -891,8 +892,8 @@ window.createDeckUI = function (host) {
     const pending=new Set([...asks,...act].map(c=>c.key));
     for(const c of attentionCards().filter(c=>pending.has(c.key)).sort((a,b)=>(b.attention_kind==='action')-(a.attention_kind==='action')))attention.push(c.attention_kind==='action'?actionCard(c):questionCard(c));
     attention.push(n('h3','',t('Reports to review')),b(t('View previous reports'),()=>host.setView('history'),'more'));
-    const reportGroups=[];for(const x of reviews){const project=projectOf(x),key=project?.id||keyOf(x.home,'unregistered'),last=reportGroups[reportGroups.length-1];if(last?.key===key)last.tasks.push(x);else reportGroups.push({key,project,tasks:[x]});}
-    reviewGroupOf=new Map();for(const group of reportGroups){const key='reports:'+group.tasks[0].id;for(const x of group.tasks)reviewGroupOf.set(x.id,key);const open=group.tasks.length===1||ui.reviewGroups.has(key)||group.tasks.some(x=>x.id===ui.selected),name=group.project?projectDisplay(label(group.project)):t('Project not reported');
+    const reportGroups=new Map();for(const x of reviews){const project=projectOf(x),key=project?.id||keyOf(x.home,'unregistered');if(!reportGroups.has(key))reportGroups.set(key,{key,project,tasks:[]});reportGroups.get(key).tasks.push(x);}
+    reviewGroupOf=new Map();for(const group of reportGroups.values()){const key='reports:'+group.key;for(const x of group.tasks)reviewGroupOf.set(x.id,key);const open=group.tasks.length===1||ui.reviewGroups.has(key)||group.tasks.some(x=>x.id===ui.selected),name=group.project?projectDisplay(label(group.project)):t('Project not reported');
       const fold=b('',()=>{ui.reviewGroups.has(key)?ui.reviewGroups.delete(key):ui.reviewGroups.add(key);render(true,'filter');},'stack-h');fold.dataset.control='report-group';fold.setAttribute('aria-expanded',String(open));fold.disabled=group.tasks.length===1;add(fold,n('span','fold'),n('span','',name),structural(n('span','n',t('{count} reports',{count:group.tasks.length}))));
       attention.push(add(n('div','stackq'),fold,...(open?group.tasks.map(reviewCard):[])));
     }

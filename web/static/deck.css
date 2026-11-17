@@ -199,7 +199,7 @@ html[data-deck-hidden=true] .mix>.group-activity>i{animation-play-state:paused}
 .sub-h{display:flex;align-items:center;gap:7px;padding:0 4px}
 .sub-h h3{font-size:12px;font-weight:700;color:var(--muted)}
 .sub-h .n{margin-left:auto;font-size:11px;color:var(--muted)}
-.stackq{display:grid;gap:6px}
+.stackq{display:grid;gap:6px;align-self:start}
 .stack-h{display:flex;align-items:center;gap:6px;border:0;background:transparent;padding:2px 4px;min-height:24px;text-align:left}
 .stack-h:disabled{cursor:default;opacity:1}
 .stack-h .n{margin-left:auto;font-size:11px;color:var(--blue);font-weight:650}

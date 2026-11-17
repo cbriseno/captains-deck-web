@@ -62,7 +62,9 @@ class TraceTests(unittest.TestCase):
         self.init()
         event = {'e': 'request.order', 'task': '1', 'cursor': '2', 'old_key': 100, 'new_key': 200,
                  'old_position': 3, 'new_position': 1, 'old_group': 'waiting', 'new_group': 'waiting',
-                 'order_source': 'fleet.entity:task.changed', 'age': 0}
+                 'order_source': 'fleet.entity:task.changed', 'age': 0,
+                 **{prefix + '_' + field: 0 for prefix in ('old', 'new')
+                    for field in ('x', 'y', 'width', 'height')}}
         with patch.dict(os.environ, FM_DIAGNOSTICS_HOME=str(self.root / 'diagnostics')):
             self.assertEqual(self.req('/api/diagnostics/trace', {'events': [event], 'exporting': False})[0], 200)
             path = bridge.diagnostics.export(['deck'], self.root / 'downloads')

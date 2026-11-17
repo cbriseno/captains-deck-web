@@ -876,11 +876,20 @@ class Board:
     def resolve(self, identity, task, view, actor, item=''):
         if not fm.KEY_RE.fullmatch(task) or view not in ('call', 'delivery'):
             raise Refusal('Invalid task link.', 400)
+        if not identity:
+            matches = [key for key, reader in self.projection.readers.items() if task in reader['model'].rows]
+            if len(matches) != 1:
+                raise Refusal('Deck isn’t sure which crew this task belongs to yet.', 409)
+            identity = matches[0]
         home = self.home(identity)
         if view == 'delivery':
             try:
-                return {'view': 'delivery', 'delivery': self.delivery(identity, task),
-                        'notice': self.t('This is the delivery for this task. Deck can’t confirm it’s the one from your notification.') if item else ''}
+                delivery = self.delivery(identity, task)
+                current = self.projection.readers[identity]['model'].presentations.get(task, {})
+                occurrence = current.get('outcome_occurrence')
+                return {'view': 'delivery', 'home': identity, 'delivery': delivery,
+                        'occurrence': occurrence, 'review': (current.get('presentation', {}).get('outcome') or {}).get('review'),
+                        'notice': self.t('This result has changed since this link was created. Open the current result to review it.') if item and item != occurrence else ''}
             except Refusal as exc:
                 return {'view': 'unavailable', 'task': task, 'owner': home.label, 'message': self.t(str(exc)), 'receipts': []}
         matches = []
@@ -940,6 +949,8 @@ class Board:
         if (human.get('closure') or record.get('closure') or {}).get('kind') == 'cancelled':
             return None
         if task in model.history:
+            return record
+        if human.get('outcome'):
             return record
         if record.get('state') != 'done':
             return None
@@ -1009,7 +1020,7 @@ class Board:
         # else the delivery's own recap. A generated "no summary yet" says
         # nothing, so the reader opens on the report instead.
         reopened = self.t('The task was reopened; this delivery is historical.')
-        notice = reopened if record.get('state') and record['state'] != 'done' else ''
+        notice = reopened if record.get('state') and record['state'] != 'done' and not human.get('outcome') else ''
         summary = content['summary'].removeprefix(reopened).strip()
         if any(summary.endswith(self.t(stock)) for stock in (
                 'No summary yet. Read the report or ask Firstmate to explain.',

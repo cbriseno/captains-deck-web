@@ -11,6 +11,7 @@ Run: python3 tests/test_flow_answered_calls.py
 from __future__ import annotations
 
 import importlib.util
+import functools
 import json
 import os
 import shutil
@@ -34,11 +35,6 @@ HOME = Path(tempfile.mkdtemp(prefix="deck-answered-home-")) / "home"
 shutil.copytree(FIXTURES / "owner", HOME)
 CARD_STORE = HOME / "state" / "decision-cards" / "decision-1.json"
 FIXTURE_STAMP = "2026-01-01T00:00:00Z"
-
-os.environ["HERDR_PLUGIN_STATE_DIR"] = str(STATE_DIR)
-os.environ["HERDR_PLUGIN_CONFIG_DIR"] = str(CONFIG_DIR)
-os.environ.pop("FM_FLOW_HIDE_ANSWERED", None)
-os.environ.pop("FM_FLOW_ANSWER_MATCH", None)
 
 FAILURES: list[str] = []
 
@@ -328,6 +324,21 @@ def test_the_setting_can_turn_the_hiding_off() -> None:
     check(flow.hide_answered_default() is False, "hide_answered_calls=0 turns it off")
     (CONFIG_DIR / "hide_answered_calls").write_text("1\n")
     check(flow.hide_answered_default() is True, "hide_answered_calls=1 turns it on")
+
+
+def isolated_environment(test):
+    @functools.wraps(test)
+    def run():
+        with patch.dict(os.environ, HERDR_PLUGIN_STATE_DIR=str(STATE_DIR), HERDR_PLUGIN_CONFIG_DIR=str(CONFIG_DIR)):
+            os.environ.pop("FM_FLOW_HIDE_ANSWERED", None)
+            os.environ.pop("FM_FLOW_ANSWER_MATCH", None)
+            return test()
+    return run
+
+
+for name, value in list(globals().items()):
+    if name.startswith("test_") and callable(value):
+        globals()[name] = isolated_environment(value)
 
 
 def main() -> int:

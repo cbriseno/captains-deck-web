@@ -745,6 +745,20 @@ class WebTests(unittest.TestCase):
         self.assertEqual(self.req(route.replace('hold:1','hold:2'))[1]['view'],'call')
         self.assertEqual(len((Path(self.home.path)/'mutations.jsonl').read_text().splitlines()),1)
 
+    def test_active_result_link_resolves_its_occurrence_without_home(self):
+        identity = bridge.home_id(self.home)
+        with self.board.projection.condition:
+            model = self.board.projection.readers[identity]['model']
+            model.presentations['web'] = {'presentation': {'summary': 'Partial result',
+                'outcome': {'role': 'partial', 'review': 'needed'}}, 'outcome_occurrence': 'version-A'}
+        self.assertIsNotNone(self.board.delivery_record(self.home, 'web'))
+        current = self.board.resolve('', 'web', 'delivery', 'local', 'version-A')
+        self.assertEqual((current['home'], current['occurrence'], current['review'], current['notice']),
+                         (identity, 'version-A', 'needed', ''))
+        stale = self.board.resolve('', 'web', 'delivery', 'local', 'version-old')
+        self.assertIn('changed', stale['notice'])
+        self.assertFalse((Path(self.home.path)/'work-calls.jsonl').exists())
+
     def test_owner_cas_race_receipt_and_inherited_namespace_isolation(self):
         key,body=self.call()
         (Path(self.home.path)/'race-rehold').touch()

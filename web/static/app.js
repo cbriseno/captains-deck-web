@@ -498,7 +498,7 @@ async function openStableLink(params) {
     const result = await api('api/resolve?' + new URLSearchParams({ home, task, view, item: params.get('item') || '' }));
     if (gen !== S.generation || !detailOpen()) return;
     if (result.view === 'call') { setView('board'); await openTicket(result.key, deckUI?.locateCall(result.key)); return; }
-    if (result.view === 'delivery') { $('history-search').value = task; setView('history'); await loadHistory(); const opener = [...$('history-results').querySelectorAll('.card-open')].find(n => n.dataset.key === 'history:' + home + ':' + task); await openDelivery(home, task, opener); if (S.modal?.type === 'delivery' && result.notice) { S.modal.linkNotice = result.notice; renderDelivery(); } return; }
+    if (result.view === 'delivery') { const owner = result.home; $('history-search').value = task; setView('history'); await loadHistory(); const opener = [...$('history-results').querySelectorAll('.card-open')].find(n => n.dataset.key === 'history:' + owner + ':' + task); await openDelivery(owner, task, opener); if (S.modal?.type === 'delivery') { Object.assign(S.modal, {linkNotice: result.notice, linkOccurrence: params.get('item') || result.occurrence, linkReview: result.review, linkAction: params.get('do'), linkStale: !!result.notice}); renderDelivery(); const action = S.modal.linkAction === 'reviewed' ? 'delivery-reviewed' : S.modal.linkAction === 'lavish' ? 'report-review' : ''; if (action) contentFocus(action); } return; }
     S.modal = { type: 'task' };
     $('detail-title').textContent = t("The question from this notification"); $('detail-meta').textContent = result.owner + ' · ' + result.task;
     $('detail-content').replaceChildren(prose(result.message));
@@ -507,6 +507,7 @@ async function openStableLink(params) {
     $('detail-content').append(button(t("Find this task in history"), () => { $('history-search').value = task; closeDetail(false); setView('history'); }));
   } catch (err) { if (gen === S.generation) $('detail-content').replaceChildren(node('p', 'notice error', err.message)); }
 }
+function contentFocus(action) { $('detail-content').querySelector('[data-action="' + action + '"]')?.focus(); }
 // Long authored text leads with one short line; the rest opens on demand.
 const abbreviation = (text) => /(?:^|[^\p{L}.])(?:vs|e\.g|i\.e|etc|approx|aprox|mrs?|dra?|sra?|p\. ?ej)$/iu.test(text) || /(?:^|[^\p{L}.])No$/u.test(text);
 function shortLine(text, limit = 140) {
@@ -795,6 +796,20 @@ function renderDelivery() {
     });
     review.dataset.action = 'report-review';
     content.append(review, status);
+  }
+  if (modal.linkOccurrence) {
+    const status = node('p', 'notice'); status.setAttribute('role', 'status');
+    const mark = button(t('I have reviewed it'), async () => {
+      mark.disabled = true;
+      try {
+        const result = await api('api/control/' + encodeURIComponent(modal.home) + '/review', {target: 'task:' + modal.task, occurrence: modal.linkOccurrence, review: 'done', expected_review: modal.linkReview});
+        status.textContent = result.ok && result.state === 'applied' ? t('Marked as reviewed.') : (result.message || t('Could not apply'));
+        if (result.undo) status.append(button(t('Undo'), async () => { const undone = await api('api/control/' + encodeURIComponent(modal.home) + '/review', result.undo); status.textContent = undone.ok ? t('Review mark restored.') : (undone.message || t('Could not apply')); await poll(); }));
+        await poll();
+      } catch (error) { status.textContent = error.message; }
+    });
+    mark.dataset.action = 'delivery-reviewed'; mark.disabled = modal.linkStale || modal.linkReview !== 'needed';
+    content.append(mark, status);
   }
   // What changed comes first; without a summary the report opens right away.
   const views = [['summary', t("Summary")], ['report', t("Report")]].filter(([id]) => data[id] || id === 'report' && data.html_report);
