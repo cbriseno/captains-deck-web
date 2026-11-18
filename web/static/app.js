@@ -151,7 +151,7 @@ function syncSubmit() {
 const answerTools=window.createAnswerTools({t,node,button,api,state:S,syncSubmit});
 const retryable = (message) => Object.assign(new Error(message), {retry: true});
 async function api(path, body) {
-  if (body && path !== '/api/diagnostics/trace' && path !== '/api/diagnostics/export' && window.DeckAnonymize?.enabled) throw new Error(t('Editing is unavailable while text is hidden.'));
+  if (body && path !== '/api/diagnostics/trace' && path !== '/api/diagnostics/export' && path !== '/api/diagnostics/clear' && window.DeckAnonymize?.enabled) throw new Error(t('Editing is unavailable while text is hidden.'));
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), body ? 100000 : 20000);
   try {
@@ -1034,10 +1034,18 @@ const diagnosticsDialog = document.querySelector('#diagnostics-dialog');
 document.querySelector('#diagnostics-open').addEventListener('click', async () => {
   window.DeckTrace?.use('open', 'diagnostics');
   diagnosticsDialog.showModal();
-  try { document.querySelector('#diagnostics-preview').textContent = (await api('/api/diagnostics/preview')).preview + ' · browser: ' + JSON.stringify(window.DeckTrace?.counts() || {}); }
+  try {
+    const result = await api('/api/diagnostics/preview');
+    $('diagnostics-retention').textContent = t('Usage is recorded locally without titles, search text or answers and kept for {weeks} weeks (CD_WEB_USAGE_WEEKS). Export saves a ZIP to Downloads and then clears the log; Clear log deletes it now. Nothing is sent online.', {weeks: result.weeks});
+    $('diagnostics-preview').textContent = result.preview + ' · browser: ' + JSON.stringify(window.DeckTrace?.counts() || {});
+  }
   catch (error) { document.querySelector('#diagnostics-preview').textContent = error.message; }
 });
 document.querySelector('#diagnostics-close').addEventListener('click', () => diagnosticsDialog.close());
+$('diagnostics-clear').addEventListener('click', async () => {
+  try { await api('/api/diagnostics/clear', {}); $('diagnostics-preview').textContent = t("Log cleared."); }
+  catch (error) { $('diagnostics-preview').textContent = error.message; }
+});
 document.querySelector('#diagnostics-export').addEventListener('click', async () => {
   try { window.DeckTrace?.use('export', 'diagnostics'); await window.DeckTrace?.flush(true); const result = await api('/api/diagnostics/export', {}); document.querySelector('#diagnostics-preview').textContent = `Saved: ${result.file}`; }
   catch (error) { document.querySelector('#diagnostics-preview').textContent = error.message; }

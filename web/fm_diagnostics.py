@@ -91,9 +91,10 @@ def root(component):
     return base / component
 
 class Logger:
-    def __init__(self, component, version, revision, directory=None):
+    def __init__(self, component, version, revision, directory=None, weeks=None):
         self.component, self.version, self.revision = component, _version(version), _revision(revision)
         self.directory = Path(directory) if directory else root(component)
+        self.weeks = weeks
         self.salt = secrets.token_bytes(32)
         self.buffer = []
 
@@ -127,6 +128,28 @@ class Logger:
         with target.open("ab") as f:
             f.write(data)
         self.buffer.clear()
+        if self.weeks:
+            prune(self.directory, self.weeks)
+
+def prune(directory, weeks):
+    """Drop events older than `weeks`. Files are append-only, oldest first, so a
+    fresh first line means nothing later is expired and the file is not rewritten."""
+    cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(weeks=weeks)
+    def fresh(line):
+        try: return datetime.datetime.fromisoformat(json.loads(line)["t"].replace("Z", "+00:00")) >= cutoff
+        except (ValueError, KeyError, TypeError, AttributeError): return False
+    for name in ("events.1.jsonl", "events.jsonl"):
+        path = Path(directory) / name
+        if not path.is_file(): continue
+        with path.open("rb") as f:
+            if fresh(f.readline()): return
+        lines = path.read_bytes().splitlines(keepends=True)
+        path.write_bytes(b"".join(line for line in lines if fresh(line)))
+
+def clear(directory):
+    """Delete the retained event files of one component."""
+    for name in ("events.1.jsonl", "events.jsonl"):
+        (Path(directory) / name).unlink(missing_ok=True)
 
 def _version(x): return x if isinstance(x, str) and re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:[-+][A-Za-z0-9.-]{1,16})?", x) else "unknown"
 def _revision(x): return x if isinstance(x, str) and re.fullmatch(r"[0-9a-f]{7,40}", x) else "unknown"

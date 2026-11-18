@@ -74,3 +74,32 @@ class TraceTests(unittest.TestCase):
             self.assertTrue(row['task'].startswith('t-') and row['cursor'].startswith('t-'))
             for key in ('old_key', 'new_key', 'old_position', 'new_position', 'order_source'):
                 self.assertEqual(row[key], event[key])
+
+    def test_log_keeps_configured_weeks_and_clears_on_request_or_export(self):
+        import datetime
+        bridge.TRACE_TIMES.clear()
+        self.init()
+        event = {'e': 'ui.use', 'action': 'open', 'target': 'settings', 'age': 0}
+        body = {'events': [event], 'exporting': False}
+        with patch.dict(os.environ, FM_DIAGNOSTICS_HOME=str(self.root / 'diagnostics'), CD_WEB_USAGE_WEEKS='2'):
+            folder = bridge.diagnostics.root('deck')
+            folder.mkdir(parents=True)
+            old = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(weeks=3)
+            stale = {'t': old.isoformat(), 'c': 'deck', 'e': 'ui.use', 'v': '0.7.0', 'r': 'unknown', 'action': 'view', 'target': 'history', 'age': 0}
+            (folder / 'events.1.jsonl').write_text(json.dumps(stale) + '\n')
+            self.assertEqual(self.req('/api/diagnostics/trace', body)[0], 200)
+            status, result = self.req('/api/diagnostics/preview')
+            self.assertEqual((status, result['weeks']), (200, 2))
+            self.assertIn('1 eventos', result['preview'])
+            self.assertNotIn(b'history', (folder / 'events.1.jsonl').read_bytes())
+            status, result = self.req('/api/diagnostics/clear', {})
+            self.assertEqual((status, result['cleared']), (200, True))
+            self.assertFalse(any(folder.glob('events*.jsonl')))
+            self.assertEqual(self.req('/api/diagnostics/trace', body)[0], 200)
+            with patch.dict(os.environ, HOME=str(self.root)):
+                status, result = self.req('/api/diagnostics/export', {})
+            self.assertEqual(status, 200)
+            import zipfile
+            with zipfile.ZipFile(result['file']) as archive:
+                self.assertEqual(len(archive.read('events.jsonl').splitlines()), 1)
+            self.assertFalse(any(folder.glob('events*.jsonl')))

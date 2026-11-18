@@ -98,6 +98,7 @@ Linux execution does not certify native macOS hooks, remote proxy behavior or a 
 | `CD_WEB_IDENTITY_HEADER` | empty (disabled) | Dedicated X- prefixed header set only by the authenticating proxy; required with origin and users |
 | `CD_WEB_HERDR_ORIGIN` | empty | Optional supported Herdr Web HTTPS origin |
 | `CD_WEB_EXTENSIONS_ROOT` | unset | Absolute extensions checkout exposing `bin/fm-extension settings` |
+| `CD_WEB_USAGE_WEEKS` | `8` | Weeks the diagnostic and usage log is kept (1–52) |
 | `CD_WEB_DATA` | user config directory | Private deduplication receipts; no new task queue |
 | `CD_WEB_RUNTIME` | user state directory | Managed instance control record, lifetime lock and log |
 | `FM_ROOT_OVERRIDE` | empty | Optional Firstmate code root fallback |
@@ -409,8 +410,12 @@ The optional push module requires cryptography and the icon generator requires P
 
 ## Diagnostics retention and browser trace
 
-The Deck diagnostic log rotates by size, not by age: two JSONL files retain
-approximately 20 MiB in total. How much time that covers depends on activity.
+The Deck diagnostic log keeps events for eight weeks by default. Set
+`CD_WEB_USAGE_WEEKS` (1–52; invalid values use eight, out-of-range integers are
+clamped) in the environment or the launcher config, then restart. Each write,
+preview and export drops expired events; no timer or unattended agent runs. The
+two rotating JSONL files still cap the log at about 20 MiB, which can evict
+events sooner on a very busy Deck.
 The current UI records `ui.use` actions for opening the page, tasks, deliveries,
 settings and diagnostics; switching views or spaces; refreshing; committing a
 search field; changing appearance; and exporting. Only fixed action and target
@@ -420,12 +425,13 @@ session and CSRF guard, sharing the 200 browser events per minute limit. Failed
 or offline writes are dropped and do not interrupt the UI.
 
 Settings → Export diagnostics previews the log and saves an anonymized ZIP into
-`~/Downloads`. Nothing is uploaded to an external service. This reuses Day
+`~/Downloads`, then clears the retained log. **Clear log** in the same dialog
+deletes it without exporting. Nothing is uploaded to an external service. This reuses Day
 Attendant's standard-library JSONL schema (`t`, `c`, `e`, `v`, `r`), platform state
 directory, rotation and export design. On Linux the directory is
 `$XDG_STATE_HOME/firstmate/diagnostics/deck` (default `~/.local/state`); on macOS it
 is `~/Library/Logs/Firstmate/Diagnostics/deck`. `FM_DIAGNOSTICS_HOME` overrides the
-base directory. Delete the two event files to clear retained history.
+base directory.
 
 The browser also keeps up to 2,000 structural events from the last ten minutes
 in memory. It records card moves and render durations, motion starts, ends and

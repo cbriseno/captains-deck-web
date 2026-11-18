@@ -69,10 +69,22 @@ try:
 except (OSError, subprocess.SubprocessError):
     REVISION = 'unknown'
 
+def usage_weeks():
+    """Weeks of Deck diagnostics kept: CD_WEB_USAGE_WEEKS, 1-52, default 8."""
+    try:
+        return max(1, min(52, int(os.environ.get('CD_WEB_USAGE_WEEKS', '8'))))
+    except ValueError:
+        return 8
+
+
+def deck_logger():
+    return diagnostics.Logger('deck', diagnostics.PRODUCT_VERSION, REVISION, weeks=usage_weeks())
+
+
 def diagnostic(event, **fields):
     with DIAG_LOCK:
         try:
-            logger = diagnostics.Logger('deck', diagnostics.PRODUCT_VERSION, REVISION)
+            logger = deck_logger()
             logger.emit(event, **fields)
             logger.flush()
         except OSError:
@@ -1541,7 +1553,7 @@ class Server(ThreadingHTTPServer):
 
 
 # Route segments a request line may name; ids, files and text print as '*'.
-ROUTE_WORDS = {'', 'api', 'health', 'locale', 'board', 'history', 'diagnostics', 'preview', 'trace', 'export',
+ROUTE_WORDS = {'', 'api', 'health', 'locale', 'board', 'history', 'diagnostics', 'preview', 'trace', 'export', 'clear',
                'settings', 'apply', 'control', 'upload', 'review', 'receipt', 'receipts', 'resolve', 'ticket',
                'report', 'attachments', 'answers', 'correct', 'file', 'answer', 'delivery', 'explanation',
                'icons'} | {x.name for x in STATIC.iterdir()}
@@ -1600,7 +1612,9 @@ class Handler(BaseHTTPRequestHandler):
                 checked = [x.get('checked_at') or 0 for x in data.get('sources', [])]
                 self.age = round(time.time() - min(checked)) if checked and min(checked) else None
             elif not unsafe and path == '/api/diagnostics/preview':
-                data = {'preview': diagnostics.export(['deck'], preview=True)}
+                with DIAG_LOCK:
+                    diagnostics.prune(diagnostics.root('deck'), usage_weeks())
+                    data = {'preview': diagnostics.export(['deck'], preview=True), 'weeks': usage_weeks()}
             elif unsafe and path == '/api/diagnostics/trace':
                 events = body.get('events')
                 allowed = {'request.order', 'ui.use', 'card.move', 'card.render', 'anim.start', 'anim.end', 'anim.cancel', 'overlay.show', 'overlay.hide', 'layout', 'reconcile.mismatch'}
@@ -1622,14 +1636,22 @@ class Handler(BaseHTTPRequestHandler):
                     TRACE_TIMES[:] = [t for t in TRACE_TIMES if t > now - 60]
                     if len(TRACE_TIMES) + len(clean) > 200:
                         raise Refusal('Trace limit reached.', 429)
-                    logger = diagnostics.Logger('deck', diagnostics.PRODUCT_VERSION, REVISION)
+                    logger = deck_logger()
                     for event, fields in clean:
                         logger.emit(event, **fields)
                     logger.flush()
                     TRACE_TIMES.extend([now] * len(clean))
                 data = {'accepted': len(clean)}
             elif unsafe and path == '/api/diagnostics/export':
-                data = {'file': str(diagnostics.export(['deck']))}
+                # Exporting hands the log to the captain, so the retained copy is cleared.
+                with DIAG_LOCK:
+                    diagnostics.prune(diagnostics.root('deck'), usage_weeks())
+                    data = {'file': str(diagnostics.export(['deck']))}
+                    diagnostics.clear(diagnostics.root('deck'))
+            elif unsafe and path == '/api/diagnostics/clear':
+                with DIAG_LOCK:
+                    diagnostics.clear(diagnostics.root('deck'))
+                data = {'cleared': True}
             elif not unsafe and path == '/api/history':
                 data = board.history(value('home'), value('q')[:300])
             elif len(parts) == 3 and parts[:2] == ['api', 'settings'] and not unsafe:
