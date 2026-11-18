@@ -10,6 +10,8 @@ import time
 
 from deck_control import project_snapshot
 
+RETRY_FIRST, RETRY_LIMIT = 1, 60
+
 
 def delta(before, after):
     if before == after:
@@ -34,7 +36,7 @@ class EventProjection:
         self.condition = threading.Condition(threading.RLock())
         self.stop_event = threading.Event()
         self.cursor, self.sources, self.readers = time.time_ns(), {}, {}
-        self.error, self.loading = '', True
+        self.error, self.loading, self.retry = '', True, RETRY_FIRST
         self.thread, self.body = None, None
 
     def start(self):
@@ -49,39 +51,54 @@ class EventProjection:
             self.thread.join(10)
 
     def run(self):
-        try:
-            for home in self.homes:
-                base = self.board.deck_controls.invoke(home, 'bootstrap')
-                if base.get('state') == 'rejected':
-                    getattr(self.board, 'diagnostic', lambda *a, **k: None)('snapshot.error', cause='error')
-                    identity = self.board.home_identity(home)
-                    self.sources[identity] = dict(
-                        home=identity, available=False, snapshot={}, answerable=False,
-                        code='bootstrap-rejected',
-                        error=self.board.t(base.get('message') or 'Firstmate rejected the event bootstrap.'))
-                    continue
-                self.install(home, base)
-            with self.condition:
-                self.loading = False
-                self.publish()
-            while not self.stop_event.wait(.05):
+        # A failed reader is rebuilt from a canonical base with a growing wait;
+        # the thread never ends while the HTTP server is alive.
+        while True:
+            try:
+                self.follow()
+                return
+            except Exception as exc:
+                getattr(self.board, 'diagnostic', lambda *a, **k: None)('snapshot.error', cause='error')
                 with self.condition:
-                    for identity, reader in self.readers.items():
-                        if self.read_suffix(reader):
-                            self.sources[identity] = self.present(reader)
-                            self.publish()
-        except Exception as exc:
-            getattr(self.board, 'diagnostic', lambda *a, **k: None)('snapshot.error', cause='error')
+                    self.error, self.loading = str(exc), False
+                    for source in self.sources.values():
+                        source['available'], source['error'] = False, self.error
+                    try:
+                        self.publish()
+                    except Exception:
+                        pass
+                if self.stop_event.wait(self.retry):
+                    return
+                self.retry = min(self.retry * 2, RETRY_LIMIT)
+
+    def follow(self):
+        for home in self.homes:
+            base = self.board.deck_controls.invoke(home, 'bootstrap')
+            if base.get('state') == 'rejected':
+                getattr(self.board, 'diagnostic', lambda *a, **k: None)('snapshot.error', cause='error')
+                identity = self.board.home_identity(home)
+                self.sources[identity] = dict(
+                    home=identity, available=False, snapshot={}, answerable=False,
+                    code='bootstrap-rejected',
+                    error=self.board.t(base.get('message') or 'Firstmate rejected the event bootstrap.'))
+                continue
+            self.install(home, base)
+        with self.condition:
+            self.error, self.loading, self.retry = '', False, RETRY_FIRST
+            self.publish()
+        while not self.stop_event.wait(.05):
             with self.condition:
-                self.error, self.loading = str(exc), False
-                for source in self.sources.values():
-                    source['available'], source['error'] = False, self.error
-                self.publish()
+                for identity, reader in self.readers.items():
+                    if self.read_suffix(reader):
+                        self.sources[identity] = self.present(reader)
+                        self.publish()
 
     def install(self, home, base):
         if base.get('schema') != 'fm-work-bootstrap.v1':
             raise ValueError('Firstmate does not expose the event bootstrap.')
-        sys.path.insert(0, str(Path(self.board.endpoint(home)).parent))
+        endpoint_dir = str(Path(self.board.endpoint(home)).parent)
+        if endpoint_dir not in sys.path:
+            sys.path.insert(0, endpoint_dir)
         module = importlib.import_module('fm_work_projection')
         reader = dict(home=home, root=str(Path(home.path).resolve()), model=module.Projection(base), offset=base['position'][2],
                       file_id=base['position'][:2], enabled=base['enabled'])

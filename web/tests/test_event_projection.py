@@ -70,6 +70,29 @@ class EventProjectionTests(unittest.TestCase):
         self.assertEqual(source['error'], 'Falta data/backlog.md; créalo con las secciones In flight, Queued y Done antes de abrir el tablero.')
         self.assertEqual(self.board.projection.body['sources'][0]['error'], source['error'])
 
+    def test_failed_reader_is_rebuilt_from_a_canonical_base_with_growing_waits(self):
+        projection = self.board.projection
+        self.board.home_identity = lambda home: 'home'
+        self.board.columns, self.board.titles = [], lambda: {}
+        projection.readers.clear()
+        outcomes = [RuntimeError('first'), RuntimeError('second'),
+                    {'state': 'rejected', 'message': 'ok now'}]
+        def invoke(home, command):
+            outcome = outcomes.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome
+        self.board.deck_controls = SimpleNamespace(invoke=invoke, actions=lambda capabilities: [])
+        waits = []
+        def wait(seconds=None):
+            waits.append(seconds)
+            return not outcomes and seconds is not None
+        projection.stop_event = SimpleNamespace(wait=wait, is_set=lambda: False)
+        projection.run()
+        self.assertEqual(waits[:2], [1, 2])
+        self.assertEqual((projection.error, projection.loading), ('', False))
+        self.assertEqual(projection.retry, 1)
+
     def test_turn_end_preserves_task_and_worker_facts(self):
         self.model.activity['task'] = dict(state='busy', source='claude-hook', seq=1)
         self.assertEqual(self.card()['activity']['kind'], 'working')
