@@ -77,8 +77,9 @@ def usage_weeks():
         return 8
 
 
-def deck_logger():
-    return diagnostics.Logger('deck', diagnostics.PRODUCT_VERSION, REVISION, weeks=usage_weeks())
+def deck_logger(usage=False):
+    folder = diagnostics.root('deck') / 'usage' if usage else None
+    return diagnostics.Logger('deck', diagnostics.PRODUCT_VERSION, REVISION, folder, usage_weeks())
 
 
 def diagnostic(event, **fields):
@@ -1614,7 +1615,7 @@ class Handler(BaseHTTPRequestHandler):
             elif not unsafe and path == '/api/diagnostics/preview':
                 with DIAG_LOCK:
                     diagnostics.prune(diagnostics.root('deck'), usage_weeks())
-                    data = {'preview': diagnostics.export(['deck'], preview=True), 'weeks': usage_weeks()}
+                data = {'preview': diagnostics.export(['deck'], preview=True), 'weeks': usage_weeks()}
             elif unsafe and path == '/api/diagnostics/trace':
                 events = body.get('events')
                 allowed = {'request.order', 'ui.use', 'card.move', 'card.render', 'anim.start', 'anim.end', 'anim.cancel', 'overlay.show', 'overlay.hide', 'layout', 'reconcile.mismatch'}
@@ -1636,18 +1637,22 @@ class Handler(BaseHTTPRequestHandler):
                     TRACE_TIMES[:] = [t for t in TRACE_TIMES if t > now - 60]
                     if len(TRACE_TIMES) + len(clean) > 200:
                         raise Refusal('Trace limit reached.', 429)
-                    logger = deck_logger()
+                    logger, usage = deck_logger(), deck_logger(usage=True)
                     for event, fields in clean:
-                        logger.emit(event, **fields)
+                        (usage if event == 'ui.use' else logger).emit(event, **fields)
                     logger.flush()
+                    usage.flush()
                     TRACE_TIMES.extend([now] * len(clean))
                 data = {'accepted': len(clean)}
             elif unsafe and path == '/api/diagnostics/export':
-                # Exporting hands the log to the captain, so the retained copy is cleared.
+                # Exporting hands the log to the captain, so what it saved is cleared.
+                # Reading a busy log takes seconds, so writers are not held meanwhile.
                 with DIAG_LOCK:
                     diagnostics.prune(diagnostics.root('deck'), usage_weeks())
-                    data = {'file': str(diagnostics.export(['deck']))}
-                    diagnostics.clear(diagnostics.root('deck'))
+                started = datetime.now(timezone.utc)
+                data = {'file': str(diagnostics.export(['deck']))}
+                with DIAG_LOCK:
+                    diagnostics.clear(diagnostics.root('deck'), before=started)
             elif unsafe and path == '/api/diagnostics/clear':
                 with DIAG_LOCK:
                     diagnostics.clear(diagnostics.root('deck'))

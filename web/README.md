@@ -413,9 +413,11 @@ The optional push module requires cryptography and the icon generator requires P
 The Deck diagnostic log keeps events for eight weeks by default. Set
 `CD_WEB_USAGE_WEEKS` (1–52; invalid values use eight, out-of-range integers are
 clamped) in the environment or the launcher config, then restart. Each write,
-preview and export drops expired events; no timer or unattended agent runs. The
-two rotating JSONL files still cap the log at about 20 MiB, which can evict
-events sooner on a very busy Deck.
+preview and export drops expired events; no timer or unattended agent runs.
+Server diagnostics still rotate two JSONL files at about 20 MiB, which on a busy
+Deck covers only a few weeks. UI usage (`ui.use`) is therefore written to its own
+`usage/` folder, which that busy traffic never rotates, so it keeps the full
+retention; export and clear include both folders.
 The current UI records `ui.use` actions for opening the page, tasks, deliveries,
 settings and diagnostics; switching views or spaces; refreshing; committing a
 search field; changing appearance; and exporting. Only fixed action and target

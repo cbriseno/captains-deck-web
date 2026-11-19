@@ -83,23 +83,33 @@ class TraceTests(unittest.TestCase):
         body = {'events': [event], 'exporting': False}
         with patch.dict(os.environ, FM_DIAGNOSTICS_HOME=str(self.root / 'diagnostics'), CD_WEB_USAGE_WEEKS='2'):
             folder = bridge.diagnostics.root('deck')
-            folder.mkdir(parents=True)
+            (folder / 'usage').mkdir(parents=True)
             old = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(weeks=3)
             stale = {'t': old.isoformat(), 'c': 'deck', 'e': 'ui.use', 'v': '0.7.0', 'r': 'unknown', 'action': 'view', 'target': 'history', 'age': 0}
-            (folder / 'events.1.jsonl').write_text(json.dumps(stale) + '\n')
-            self.assertEqual(self.req('/api/diagnostics/trace', body)[0], 200)
+            (folder / 'usage' / 'events.jsonl').write_text(json.dumps(stale) + '\n')
+            # Busy diagnostics rotate by size; usage must not share that file.
+            with patch.object(bridge.diagnostics, 'LIMIT', 600):
+                self.assertEqual(self.req('/api/diagnostics/trace', body)[0], 200)
+                for _ in range(10):
+                    bridge.diagnostic('board.heartbeat')
             status, result = self.req('/api/diagnostics/preview')
             self.assertEqual((status, result['weeks']), (200, 2))
-            self.assertIn('1 eventos', result['preview'])
-            self.assertNotIn(b'history', (folder / 'events.1.jsonl').read_bytes())
+            self.assertIn('ui.use: 1,', result['preview'])
+            self.assertNotIn(b'history', (folder / 'usage' / 'events.jsonl').read_bytes())
             status, result = self.req('/api/diagnostics/clear', {})
             self.assertEqual((status, result['cleared']), (200, True))
             self.assertFalse(any(folder.glob('events*.jsonl')))
             self.assertEqual(self.req('/api/diagnostics/trace', body)[0], 200)
-            with patch.dict(os.environ, HOME=str(self.root)):
+            real_export = bridge.diagnostics.export
+            def export_while_writing(*args, **kwargs):
+                path = real_export(*args, **kwargs)
+                bridge.diagnostic('board.heartbeat')  # written after the ZIP was read
+                return path
+            with patch.dict(os.environ, HOME=str(self.root)), patch.object(bridge.diagnostics, 'export', export_while_writing):
                 status, result = self.req('/api/diagnostics/export', {})
             self.assertEqual(status, 200)
             import zipfile
             with zipfile.ZipFile(result['file']) as archive:
                 self.assertEqual(len(archive.read('events.jsonl').splitlines()), 1)
-            self.assertFalse(any(folder.glob('events*.jsonl')))
+            self.assertFalse((folder / 'usage' / 'events.jsonl').read_bytes())
+            self.assertIn(b'board.heartbeat', (folder / 'events.jsonl').read_bytes())

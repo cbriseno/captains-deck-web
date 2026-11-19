@@ -132,24 +132,37 @@ class Logger:
             prune(self.directory, self.weeks)
 
 def prune(directory, weeks):
-    """Drop events older than `weeks`. Files are append-only, oldest first, so a
-    fresh first line means nothing later is expired and the file is not rewritten."""
+    """Drop events older than `weeks` from a component and its usage folder.
+    A file is rewritten only when its first line is a day past the cutoff, so
+    frequent writes do not rewrite it each time."""
     cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(weeks=weeks)
-    def fresh(line):
-        try: return datetime.datetime.fromisoformat(json.loads(line)["t"].replace("Z", "+00:00")) >= cutoff
-        except (ValueError, KeyError, TypeError, AttributeError): return False
-    for name in ("events.1.jsonl", "events.jsonl"):
-        path = Path(directory) / name
-        if not path.is_file(): continue
-        with path.open("rb") as f:
-            if fresh(f.readline()): return
-        lines = path.read_bytes().splitlines(keepends=True)
-        path.write_bytes(b"".join(line for line in lines if fresh(line)))
+    _drop_before(directory, cutoff, cutoff - datetime.timedelta(days=1))
 
-def clear(directory):
-    """Delete the retained event files of one component."""
-    for name in ("events.1.jsonl", "events.jsonl"):
-        (Path(directory) / name).unlink(missing_ok=True)
+def clear(directory, before=None):
+    """Delete a component's retained events, or only those stamped before `before`."""
+    if before is not None:
+        return _drop_before(directory, before, before)
+    for path in _files(directory):
+        path.unlink(missing_ok=True)
+
+def _drop_before(directory, cutoff, trigger):
+    # Files are append-only, oldest first: a recent first line means nothing to drop.
+    def since(line, limit):
+        try: return datetime.datetime.fromisoformat(json.loads(line)["t"].replace("Z", "+00:00")) >= limit
+        except (ValueError, KeyError, TypeError, AttributeError): return False
+    for path in _files(directory):
+        with path.open("rb") as f:
+            first = f.readline()
+        if not first or since(first, trigger): continue
+        lines = path.read_bytes().splitlines(keepends=True)
+        path.write_bytes(b"".join(line for line in lines if since(line, cutoff)))
+
+def _files(directory):
+    """Event files of a component, oldest first. UI usage lives in `usage/` so the
+    size rotation of busy diagnostics does not evict it before its retention."""
+    directory = Path(directory)
+    return [folder / name for folder in (directory, directory / "usage")
+            for name in ("events.1.jsonl", "events.jsonl") if (folder / name).is_file()]
 
 def _version(x): return x if isinstance(x, str) and re.fullmatch(r"[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:[-+][A-Za-z0-9.-]{1,16})?", x) else "unknown"
 def _revision(x): return x if isinstance(x, str) and re.fullmatch(r"[0-9a-f]{7,40}", x) else "unknown"
@@ -170,10 +183,7 @@ def export(components, downloads=None, preview=False, include_revision=False):
     """Collect only known component event files; remap live ids with fresh salt."""
     salt, records, sources = secrets.token_bytes(32), [], []
     for component in components:
-        directory = root(component).resolve()
-        for name in ("events.1.jsonl", "events.jsonl"):
-            path = directory / name
-            if not path.is_file(): continue
+        for path in _files(root(component).resolve()):
             sources.append(path)
             for line in path.read_text(encoding="utf-8").splitlines():
                 try: item = json.loads(line)
@@ -181,6 +191,7 @@ def export(components, downloads=None, preview=False, include_revision=False):
                 if item.get("c") != component: continue
                 cleaned = _export_record(item, salt, include_revision)
                 if cleaned is not None: records.append(cleaned)
+    records.sort(key=lambda r: r.get("t", ""))
     size = sum(p.stat().st_size for p in sources)
     stamps = [r.get("t", "") for r in records]
     result = f"{size} bytes, {min(stamps) if stamps else '-'}..{max(stamps) if stamps else '-'}, {len(records)} eventos, verificador: {'ok' if _verify(records) else 'falló'}"
